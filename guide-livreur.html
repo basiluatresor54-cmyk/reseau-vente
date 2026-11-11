@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide du livreur — BASILUA TECH · Réseau & Vente</title>
+<meta name="description" content="Guide du livreur : installer l'application, marquer Livré, Livré en partie, Pas livré, verser l'argent, voir son stock et sa commission.">
+<meta property="og:title" content="Guide du livreur — BASILUA TECH · Réseau & Vente">
+<meta property="og:description" content="Comment le livreur utilise l'application, pas à pas.">
+<style>
+  :root{--b:#0F766E;--bs:#e6f4f2}
+  body{margin:0;background:#f4f5f7;color:#16181d;font:15.5px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{background:var(--b);color:#fff;padding:28px 18px 64px}
+  header h1{margin:0;font-size:25px} header p{margin:4px 0 0;opacity:.92}
+  .w{max-width:780px;margin:-44px auto 0;padding:0 14px 48px}
+  .card{background:#fff;border-radius:16px;padding:18px 18px 8px;box-shadow:0 1px 3px rgba(16,24,40,.08);margin-bottom:14px}
+  .part{margin:26px 4px 10px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--b)}
+  h2{font-size:17.5px;margin:0 0 8px;display:flex;gap:10px;align-items:center}
+  h2 span{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 4px;border-radius:8px;background:var(--bs);color:var(--b);font-size:14px;flex:none}
+  h3{font-size:15.5px;margin:12px 0 4px}
+  ol,ul{padding-left:20px;margin:6px 0 12px} li{margin:4px 0}
+  .tip{background:#fdf2e1;color:#7c4a03;border-radius:10px;padding:9px 12px;font-size:14px;margin:6px 0 12px}
+  .ok{background:var(--bs);color:#0b4f49;border-radius:10px;padding:9px 12px;font-size:14px;margin:6px 0 12px}
+  .toc{columns:2;column-gap:18px;margin:6px 0 12px;padding-left:18px;font-size:14.5px} .toc li{break-inside:avoid}
+  a{color:var(--b)} .muted{color:#6b7280;font-size:13px}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
+  .btn{display:inline-block;background:var(--b);color:#fff;text-decoration:none;font-weight:700;padding:11px 16px;border-radius:12px;border:0;font:inherit;font-weight:700;cursor:pointer}
+  .btn.alt{background:#eef0f3;color:#16181d}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 12px} td,th{border-bottom:1px solid #eef0f3;padding:7px 6px;text-align:left;vertical-align:top} th{color:#6b7280;font-weight:600}
+  kbd{background:#eef0f3;border-radius:6px;padding:1px 6px;font:inherit;font-weight:700}
+  @media(max-width:560px){.toc{columns:1}}
+  @media print{
+    body{background:#fff;font-size:12.5px} header{padding:18px 0 10px;background:#fff;color:#16181d;border-bottom:3px solid var(--b)} header h1{color:var(--b)}
+    .w{margin:10px auto 0;max-width:none;padding:0} .card{box-shadow:none;border:1px solid #e5e7eb;break-inside:avoid;page-break-inside:avoid}
+    .noprint{display:none!important} a{color:#16181d;text-decoration:none} .part{break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<header><h1>🛵 Guide du livreur</h1><p>BASILUA TECH · Réseau &amp; Vente — vos livraisons, votre stock, votre commission et vos versements, dans votre téléphone</p></header>
+<div class="w">
+
+<div class="card">
+  <div class="btns noprint"><a class="btn" href="./">Ouvrir l'application</a><a class="btn alt" href="Guide_Livreur_Stock_et_Livreurs.pdf" download>📄 Télécharger en PDF</a></div>
+  <b>Sommaire</b>
+  <ol class="toc">
+    <li><a href="#journee">Votre journée en 1 minute</a></li>
+    <li><a href="#installer">Installer l'application</a></li>
+    <li><a href="#compte">Créer votre compte</a></li>
+    <li><a href="#ecran">Ce que vous voyez</a></li>
+    <li><a href="#jours">📅 Date, heure et calendrier</a></li>
+    <li><a href="#route">🛵 En route</a></li>
+    <li><a href="#livre">✅ Livré</a></li>
+    <li><a href="#partie">🔢 Livré en partie</a></li>
+    <li><a href="#pack">🔁 Partie du pack</a></li>
+    <li><a href="#pas">❌ Pas livré</a></li>
+    <li><a href="#date">Changer la date</a></li>
+    <li><a href="#argent">💸 Verser l'argent</a></li>
+    <li><a href="#stock">Mon stock</a></li>
+    <li><a href="#releve">Commission et relevé</a></li>
+    <li><a href="#notif">🔔 Notifications</a></li>
+    <li><a href="#regles">Les bonnes règles</a></li>
+    <li><a href="#faq">Questions fréquentes</a></li>
+  </ol>
+</div>
+
+<div class="card" id="journee"><h2><span>⏱</span>Votre journée en 1 minute</h2>
+<ol>
+<li><b>Le matin</b> : ouvrez l'application → la liste <b>« À livrer »</b> montre vos commandes du jour, avec le client, le téléphone, l'adresse et l'argent à encaisser.</li>
+<li><b>Vous partez</b> : touchez <kbd>🛵 En route</kbd>. Le bouton <kbd>Client</kbd> envoie un message WhatsApp au client : « J'arrive avec votre commande ».</li>
+<li><b>Chez le client</b> : touchez <kbd>✅ Livré</kbd>. Si le client prend moins, ou une seule partie du pack, ou ne prend rien : utilisez les boutons prévus (voir plus bas). Ne laissez jamais une commande sans réponse.</li>
+<li><b>Le soir</b> : touchez <kbd>💸 J'ai envoyé l'argent</kbd> après avoir envoyé l'argent au patron, avec la capture du message Mobile Money.</li>
+</ol>
+<div class="ok">C'est vous qui gérez la journée sur votre téléphone. Le patron voit tout de son côté, en direct et dans le point du soir.</div>
+</div>
+
+<div class="card" id="installer"><h2><span>1</span>Installer l'application</h2>
+<p>Le patron vous envoie le lien par WhatsApp. Ouvrez-le, puis :</p>
+<ul>
+<li><b>Android</b> : ouvrez le lien dans <b>Chrome</b> → menu ⋮ → <b>« Installer l'application »</b> ou <b>« Ajouter à l'écran d'accueil »</b>.</li>
+<li><b>iPhone</b> : ouvrez le lien dans <b>Safari</b> → bouton Partager □↑ → <b>« Sur l'écran d'accueil »</b>.</li>
+<li><b>Lien ouvert dans WhatsApp, Facebook ou TikTok ?</b> Touchez ⋮ / ⋯ → <b>« Ouvrir dans Chrome »</b> (Android) ou <b>« Ouvrir dans Safari »</b> (iPhone), puis installez.</li>
+</ul>
+<p>Ensuite, ouvrez toujours l'application depuis son <b>icône</b> sur l'écran d'accueil, comme une application normale.</p>
+</div>
+
+<div class="card" id="compte"><h2><span>2</span>Créer votre compte</h2>
+<ol>
+<li>Ouvrez <b>le lien reçu du patron</b> (dans le message d'invitation).</li>
+<li>Votre <b>numéro est déjà rempli</b>. Choisissez seulement un <b>mot de passe</b> (6 caractères minimum).</li>
+<li>Touchez <b>« Créer mon compte »</b>. Vous arrivez directement sur <b>« Mes livraisons »</b>.</li>
+</ol>
+<p>Vous n'avez rien d'autre à remplir : pas de nom de boutique, pas de couleur, pas de taux.</p>
+<div class="tip">Vous voyez « Créez votre boutique » ? Ne remplissez pas ce formulaire : touchez <b>« Vous êtes livreur ou gérant ? »</b> en haut. Puis touchez <b>« Envoyer mon numéro au patron »</b>, attendez qu'il vous invite avec ce numéro, et touchez <b>« Vérifier mon invitation »</b>.</div>
+<p>Vous avez déjà un compte ? Touchez <b>« Se connecter »</b> avec votre numéro et votre mot de passe. Mot de passe oublié : demandez au patron, qui contacte BASILUA TECH.</p>
+</div>
+
+<div class="card" id="ecran"><h2><span>3</span>Ce que vous voyez</h2>
+<table>
+<tr><th>Case</th><th>Ce que ça veut dire</th></tr>
+<tr><td><b>À livrer</b></td><td>Le nombre de commandes qui vous attendent.</td></tr>
+<tr><td><b>Commission semaine</b></td><td>Ce que vous avez gagné cette semaine sur les commandes livrées.</td></tr>
+<tr><td><b>Argent à verser</b></td><td>L'argent encaissé chez les clients que vous devez encore envoyer à la boutique.</td></tr>
+<tr><td><b>Stock en main</b></td><td>Le nombre de pièces que vous avez avec vous et qui ne sont pas encore réservées.</td></tr>
+</table>
+<p>Chaque commande montre : le produit et la quantité, le client, son <b>téléphone</b> (touchez pour appeler), l'<b>adresse</b>, la date et l'heure, <b>l'argent à encaisser</b> et <b>votre commission</b>.</p>
+<ul>
+<li><b>« ✅ Rien — déjà payé »</b> : le client a déjà payé par Mobile Money. N'encaissez rien.</li>
+<li><b>« 🚚 À expédier »</b> : la commande part par une agence (Molykap…) vers une autre ville. L'agence, la ville et les frais sont écrits.</li>
+<li><b>📝</b> : une note du patron (couleur, taille, repère de l'adresse…).</li>
+</ul>
+<div class="ok">Vous voyez seulement <b>vos</b> livraisons, <b>votre</b> stock et <b>votre</b> commission. Vous ne voyez pas les prix d'achat, le bénéfice de la boutique ni les autres livreurs.</div>
+</div>
+
+<div class="card" id="jours"><h2><span>📅</span>Date, heure et calendrier</h2>
+<ul>
+<li>En haut : la <b>date du jour et l'heure</b>, puis <b>« 🔔 Vos prochaines livraisons »</b> : aujourd'hui, demain et les jours suivants, avec le nombre de commandes et le nom des clients. Touchez un jour pour voir ses commandes.</li>
+<li><b>« Mes livraisons par jour »</b> : touchez <kbd>Tout</kbd>, <kbd>⚠️ En retard</kbd>, <kbd>Aujourd'hui</kbd> ou <kbd>Demain</kbd>, ou choisissez une date dans le <b>calendrier</b>.</li>
+<li>Pour un jour choisi : vos pièces livrées, l'argent encaissé et votre commission de ce jour-là.</li>
+<li>Chaque commande montre le <b>jour et l'heure de livraison</b> (en rouge si elle est en retard) et l'heure où elle a été <b>commandée</b>.</li>
+</ul></div>
+
+<div class="card" id="route"><h2><span>4</span>🛵 En route</h2>
+<p>Quand vous partez avec une commande, touchez <kbd>🛵 En route</kbd>. Le patron voit que la commande est en chemin.</p>
+<p>Le bouton <kbd>Client</kbd> apparaît alors : il ouvre WhatsApp avec un message prêt pour prévenir le client que vous arrivez.</p>
+</div>
+
+<div class="card" id="livre"><h2><span>5</span>✅ Livré</h2>
+<ol>
+<li>Le client a reçu et payé : touchez <kbd>✅ Livré</kbd>.</li>
+<li>Choisissez la <b>date de livraison</b> (aujourd'hui par défaut) et confirmez.</li>
+</ol>
+<p>Le stock sort à ce moment-là, et votre commission est comptée. Si l'application dit que votre stock ne suffit pas, vérifiez avec le patron avant de confirmer : il vous a peut-être donné la marchandise sans l'enregistrer.</p>
+<p>Une commande de plusieurs produits pour le même client passe à « Livré » en une seule fois.</p>
+</div>
+
+<div class="card" id="partie"><h2><span>6</span>🔢 Livré en partie — le client a pris moins</h2>
+<p>Exemple : le client avait commandé <b>5 sacs</b>, il en prend seulement <b>2</b>.</p>
+<ol>
+<li>Sur la commande, touchez <kbd>🔢 Livré en partie (le client a pris moins)</kbd>.</li>
+<li>Tapez la quantité <b>vraiment livrée</b> : 2.</li>
+<li>Confirmez. L'argent à encaisser et votre commission sont recalculés pour 2 sacs.</li>
+</ol>
+<p>Les 3 sacs restants restent dans votre stock. Le patron voit « Livré en partie : 2 sur 5 ».</p>
+</div>
+
+<div class="card" id="pack"><h2><span>7</span>🔁 Le client a pris seulement une partie du pack</h2>
+<p>Exemple : promo <b>huile + pommade à 15 $</b>, mais le client prend seulement <b>la pommade</b>.</p>
+<ol>
+<li>Sur la commande du pack, touchez <kbd>🔁 Le client a pris seulement une partie du pack</kbd>.</li>
+<li>Choisissez le produit pris (la pommade) et la quantité.</li>
+<li>Confirmez. Le prix devient celui de la pommade seule (ex. 10 $), et la commission est recalculée.</li>
+</ol>
+<p>L'huile reste dans votre stock. Le patron voit la commande d'origine et ce qui a vraiment été livré.</p>
+</div>
+
+<div class="card" id="pas"><h2><span>8</span>❌ Pas livré : reporter ou annuler</h2>
+<p>Le client n'a pas pris la commande ? Touchez <kbd>❌ Pas livré : annulé ou reporté</kbd>.</p>
+<ol>
+<li>Choisissez la <b>raison</b> : client injoignable / absent, client a refusé, client n'a pas l'argent, mauvaise adresse, client a demandé de reporter — ou écrivez une autre raison.</li>
+<li>Puis choisissez :
+  <ul>
+  <li><b>📅 Reporter</b> : choisissez la nouvelle date. La commande revient dans « À livrer » ce jour-là.</li>
+  <li><b>Annuler</b> : la commande est annulée. Le produit reste dans votre stock.</li>
+  </ul>
+</li>
+</ol>
+<div class="tip">La raison est obligatoire : le patron la voit et peut relancer le client plus tard. Soyez honnête et précis.</div>
+</div>
+
+<div class="card" id="date"><h2><span>9</span>Changer la date d'une livraison</h2>
+<p>Vous avez oublié de marquer « Livré » hier ? Dans <b>« Livrées récemment »</b>, touchez la commande → <b>changer la date</b>, et mettez le vrai jour de livraison. Ainsi, l'argent et la commission tombent sur le bon jour.</p>
+</div>
+
+<div class="card" id="argent"><h2><span>10</span>💸 J'ai envoyé l'argent</h2>
+<ol>
+<li>Envoyez l'argent au patron (M-Pesa, Orange Money, Airtel Money ou en main propre).</li>
+<li>Touchez <kbd>💸 J'ai envoyé l'argent</kbd>. Le montant <b>reste à verser</b> est déjà rempli.</li>
+<li>Choisissez la devise ($ ou FC) et le moyen, écrivez la <b>référence de la transaction</b>.</li>
+<li>Touchez <b>📷 Ajouter la capture</b> et choisissez la photo du message Mobile Money.</li>
+<li>Touchez <b>« Déclarer ce versement »</b>.</li>
+</ol>
+<p>Le versement reste <b>« en attente »</b> jusqu'à ce que le patron le confirme. Vous le voyez dans <b>« Mes versements »</b>, et vous recevez une notification quand il est confirmé.</p>
+</div>
+
+<div class="card" id="stock"><h2><span>11</span>Mon stock</h2>
+<table>
+<tr><th>Colonne</th><th>Ce que ça veut dire</th></tr>
+<tr><td><b>Disponible</b></td><td>Les pièces avec vous, libres pour de nouvelles commandes.</td></tr>
+<tr><td><b>Réservé</b></td><td>Les pièces avec vous déjà promises à des commandes pas encore livrées.</td></tr>
+</table>
+<p>Plus bas, l'historique montre la marchandise reçue de la boutique, rendue, et livrée. Si un chiffre ne correspond pas à ce que vous avez en main, prévenez le patron tout de suite.</p>
+</div>
+
+<div class="card" id="releve"><h2><span>12</span>Commission et relevé</h2>
+<p>Touchez <kbd>📄 Mon relevé de la semaine</kbd> : chaque livraison de la semaine, avec votre commission, et le total. Les boutons en haut (« Semaine dernière », « Il y a 2 semaines »…) montrent les semaines passées.</p>
+<p>Votre commission est comptée seulement sur ce qui est <b>livré</b> (une livraison en partie compte pour la quantité livrée).</p>
+</div>
+
+<div class="card" id="notif"><h2><span>13</span>🔔 Notifications</h2>
+<p>En bas de l'écran, touchez <kbd>🔔 Activer les notifications</kbd> et acceptez. Vous recevrez :</p>
+<ul>
+<li>chaque <b>nouvelle livraison</b> que le patron vous donne ;</li>
+<li>à <b>8h</b> : vos livraisons <b>du jour</b> (et celles en retard), avec le nom des clients ;</li>
+<li>à <b>19h</b> : vos livraisons <b>de demain</b>, avec le nom des clients ;</li>
+<li>un <b>rappel 1 h avant</b> chaque livraison ;</li>
+<li>la <b>confirmation</b> de vos versements.</li>
+</ul>
+<div class="tip">iPhone : les notifications marchent seulement si l'application est installée sur l'écran d'accueil et ouverte depuis son icône.</div>
+</div>
+
+<div class="card" id="regles"><h2><span>✔</span>Les bonnes règles</h2>
+<ul>
+<li>Marquez chaque commande <b>le jour même</b> : Livré, Livré en partie, partie du pack, reporté ou annulé.</li>
+<li>N'encaissez rien quand c'est écrit <b>« déjà payé »</b>.</li>
+<li>Envoyez l'argent et déclarez-le <b>chaque soir</b>, avec la capture.</li>
+<li>Ne donnez jamais votre mot de passe. Ne partagez pas le numéro des clients.</li>
+<li>Pas de connexion ? Touchez <kbd>↻ Actualiser</kbd> dès que le réseau revient.</li>
+</ul>
+</div>
+
+<div class="card" id="faq"><h2><span>?</span>Questions fréquentes</h2>
+<h3>Une commande n'apparaît pas.</h3><p>Touchez <kbd>↻ Actualiser</kbd>. Si elle n'apparaît toujours pas, le patron ne vous l'a peut-être pas encore attribuée.</p>
+<h3>Je me suis trompé : j'ai mis « Livré » trop tôt.</h3><p>Prévenez le patron : il peut corriger la commande de son côté.</p>
+<h3>Le client veut un autre produit que celui commandé.</h3><p>S'il prend une partie du pack, utilisez 🔁. Pour un produit différent, appelez le patron avant de livrer.</p>
+<h3>Je ne vois pas le bouton « Livré en partie ».</h3><p>Il apparaît seulement quand la commande a plus d'une pièce. Le bouton 🔁 apparaît seulement pour un pack / une promo.</p>
+<h3>Je ne peux pas modifier les prix ni ajouter de produits.</h3><p>C'est normal : le compte livreur sert à livrer. Les prix et les produits sont gérés par le patron.</p>
+<h3>Je change de téléphone.</h3><p>Installez l'application sur le nouveau téléphone et connectez-vous avec le même numéro et le même mot de passe. Tout est en ligne, rien n'est perdu.</p>
+</div>
+
+<p class="muted" style="text-align:center">BASILUA TECH · Réseau &amp; Vente · Kinshasa — <a href="guide.html">Guide complet du propriétaire</a></p>
+</div>
+</body>
+</html>

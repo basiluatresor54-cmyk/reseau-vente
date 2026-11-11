@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BASILUA TECH · Réseau & Vente — l'application des vendeurs en ligne qui travaillent avec des livreurs</title>
+<meta name="description" content="Stock chez chaque livreur, commandes WhatsApp, reçus, commissions, versements Mobile Money et vrai bénéfice. Essai gratuit 7 jours. Par BASILUA TECH.">
+<meta property="og:title" content="BASILUA TECH · Réseau & Vente — sachez enfin où est votre stock et votre argent">
+<meta property="og:description" content="Stock, livreurs, commandes WhatsApp, factures avec votre logo, boutique en ligne et vrai bénéfice. Essai gratuit 7 jours, puis 2,9 $/mois.">
+<meta property="og:image" content="https://basiluatresor54-cmyk.github.io/reseau-vente/vente/img/partage.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://basiluatresor54-cmyk.github.io/reseau-vente/vente/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="BASILUA TECH">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://basiluatresor54-cmyk.github.io/reseau-vente/vente/img/partage.jpg">
+<meta name="theme-color" content="#0F766E">
+<link rel="icon" type="image/png" href="../icon-192.png">
+<style>
+  :root{--b:#0F766E;--b2:#0b5c56;--soft:#e6f4f2;--ink:#14161a;--muted:#5b6472;--bg:#f6f7f9;--wa:#1fa855;--amber:#f59e0b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:#fff;-webkit-text-size-adjust:100%}
+  a{color:inherit}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;border-radius:14px;font-weight:700;text-decoration:none;font-size:16px;transition:transform .15s}
+  .btn:active{transform:scale(.98)}
+  .btn.p{background:#fff;color:var(--b)}
+  .btn.w{background:var(--wa);color:#fff}
+  .btn.d{background:var(--b);color:#fff}
+  .btn.o{background:transparent;color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.6)}
+  svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  /* nav */
+  nav{position:sticky;top:0;z-index:10;background:rgba(15,118,110,.97);backdrop-filter:blur(8px);color:#fff}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;text-decoration:none}
+  .logo span{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#fff;color:var(--b)}
+  .logo small{display:block;font-weight:600;font-size:11px;opacity:.8;line-height:1}
+  nav .btn{padding:9px 14px;font-size:14px;border-radius:11px}
+  /* hero */
+  .hero{background:linear-gradient(160deg,var(--b) 0%,var(--b2) 100%);color:#fff;overflow:hidden}
+  .hero .wrap{display:grid;grid-template-columns:1fr;gap:28px;padding-top:40px;padding-bottom:0}
+  .tag{display:inline-block;background:rgba(255,255,255,.15);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;margin-bottom:14px}
+  h1{font-size:34px;line-height:1.15;letter-spacing:-.02em}
+  .hero p.lead{font-size:18px;opacity:.92;margin:14px 0 22px}
+  .ctas{display:flex;flex-wrap:wrap;gap:10px}
+  .trust{font-size:13.5px;opacity:.85;margin-top:14px}
+  .phone{width:260px;margin:0 auto;border-radius:34px;background:#0c1117;padding:10px;box-shadow:0 30px 60px rgba(0,0,0,.35)}
+  .phone img{display:block;width:100%;border-radius:26px}
+  .hero .phone{transform:translateY(40px);margin-bottom:0}
+  /* sections */
+  section{padding:64px 0}
+  h2{font-size:28px;line-height:1.2;letter-spacing:-.01em;margin-bottom:10px}
+  .sub{color:var(--muted);font-size:17px;max-width:640px}
+  .center{text-align:center} .center .sub{margin:0 auto}
+  .pains{display:grid;gap:12px;margin-top:26px}
+  .pain{background:var(--bg);border-radius:16px;padding:16px 18px;display:flex;gap:12px;align-items:flex-start}
+  .pain > b{font-size:22px;line-height:1}
+  .feat{display:grid;gap:26px;align-items:center;margin-top:46px}
+  .feat h3{font-size:22px;margin-bottom:8px}
+  .feat ul{list-style:none;margin-top:12px}
+  .feat li{padding:6px 0 6px 28px;position:relative;color:#2b313b}
+  .feat li:before{content:"";position:absolute;left:0;top:11px;width:16px;height:16px;border-radius:50%;background:var(--soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230F766E' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center/10px no-repeat}
+  .kicker{color:var(--b);font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:28px}
+  .tile{background:#fff;border-radius:16px;padding:16px;box-shadow:0 1px 3px rgba(16,24,40,.08)}
+  .tile b{display:block;margin:8px 0 2px}
+  .tile p{color:var(--muted);font-size:14px;line-height:1.45}
+  .tile .ic{width:40px;height:40px;border-radius:12px;background:var(--soft);color:var(--b);display:grid;place-items:center}
+  .alt{background:var(--bg)}
+  .steps{display:grid;gap:14px;margin-top:28px;counter-reset:s}
+  .step{background:#fff;border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(16,24,40,.08);position:relative;padding-left:66px}
+  .step:before{counter-increment:s;content:counter(s);position:absolute;left:18px;top:18px;width:34px;height:34px;border-radius:10px;background:var(--b);color:#fff;font-weight:800;display:grid;place-items:center}
+  .price{max-width:460px;margin:30px auto 0;background:#fff;border-radius:22px;padding:26px;box-shadow:0 12px 32px rgba(16,24,40,.12);text-align:left;border:2px solid var(--b)}
+  .price .big{font-size:34px;font-weight:800;color:var(--b)}
+  .price ul{list-style:none;margin:14px 0 20px}
+  .price li{padding:5px 0 5px 26px;position:relative}
+  .price li:before{content:"✓";position:absolute;left:0;color:var(--b);font-weight:800}
+  .faq details{background:#fff;border-radius:14px;padding:14px 16px;margin-top:10px;box-shadow:0 1px 3px rgba(16,24,40,.08)}
+  .faq summary{font-weight:700;cursor:pointer}
+  .faq p{color:var(--muted);margin-top:8px}
+  .final{background:linear-gradient(160deg,var(--b),var(--b2));color:#fff;text-align:center}
+  .final .ctas{justify-content:center;margin-top:20px}
+  footer{background:#0c1117;color:#cbd2dc;font-size:14px;padding:26px 0}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between}
+  .sticky-wa{position:fixed;right:16px;bottom:16px;z-index:20;width:56px;height:56px;border-radius:50%;background:var(--wa);color:#fff;display:grid;place-items:center;box-shadow:0 8px 20px rgba(0,0,0,.25)}
+  .sticky-wa svg{width:28px;height:28px}
+  @media (min-width:860px){
+    h1{font-size:48px}
+    .hero .wrap{grid-template-columns:1.15fr .85fr;align-items:center;padding-top:64px}
+    .hero .phone{width:300px}
+    .pains{grid-template-columns:1fr 1fr}
+    .feat{grid-template-columns:1fr 1fr;gap:56px}
+    .feat.rev .ph{order:2}
+    .grid{grid-template-columns:repeat(4,1fr)}
+    .steps{grid-template-columns:repeat(3,1fr)}
+    h2{font-size:34px}
+  }
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="logo" href="#"><span><svg class="i" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></span><div>BASILUA TECH<small>Réseau &amp; Vente</small></div></a>
+  <a class="btn p" href="../?essai">Essai gratuit</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div>
+    <span class="tag">🚚 Livraison, boutique… ou les deux</span>
+    <h1>Sachez enfin où est votre stock… et votre argent.</h1>
+    <p class="lead">Stock chez chaque livreur, commandes WhatsApp, factures avec votre logo, boutique en ligne, commissions, versements Mobile Money et vrai bénéfice — tout dans une application sur votre téléphone.</p>
+    <div class="ctas">
+      <a class="btn p" href="../?essai">Essayer 7 jours gratuits</a>
+      <a class="btn w" href="https://wa.me/243851507510?text=Bonjour%20BASILUA%20TECH%2C%20je%20veux%20en%20savoir%20plus%20sur%20Stock%20%26%20Livreurs" target="_blank" rel="noopener"><svg class="i" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/></svg>Parler sur WhatsApp</a>
+    </div>
+    <p class="trust">✓ iPhone, Android et ordinateur &nbsp; ✓ Francs et dollars &nbsp; ✓ Fonctionne sans internet</p>
+  </div>
+  <div class="phone"><img src="img/accueil.jpg" alt="Tableau de bord : bénéfice net, argent chez les livreurs, commissions"></div>
+</div></header>
+
+<section><div class="wrap center">
+  <h2>Vous vous reconnaissez ?</h2>
+  <p class="sub">Quand on vend en ligne avec des livreurs dans plusieurs villes, on finit vite par ne plus rien maîtriser.</p>
+  <div class="pains" style="text-align:left">
+    <div class="pain"><b>😩</b><div>Vous ne savez plus <b>combien de produits</b> chaque livreur a encore en main.</div></div>
+    <div class="pain"><b>💸</b><div>Vous ne savez pas exactement <b>combien chaque livreur doit vous verser</b> ce soir.</div></div>
+    <div class="pain"><b>🧮</b><div>Le calcul des <b>commissions de la semaine</b> vous prend des heures (et crée des disputes).</div></div>
+    <div class="pain"><b>📉</b><div>Vous vendez beaucoup… mais vous ne savez pas votre <b>vrai bénéfice</b> après transport et publicité.</div></div>
+  </div>
+</div></section>
+
+<section class="alt"><div class="wrap">
+  <div class="feat">
+    <div class="ph"><div class="phone"><img src="img/livreurs.jpg" alt="Livreurs par ville avec stock en main et argent à verser" loading="lazy"></div></div>
+    <div>
+      <div class="kicker">Livreurs</div>
+      <h3>Chaque livreur, chaque ville, en un coup d'œil</h3>
+      <p class="sub">Vous confiez du stock à vos livreurs de Kinshasa, Lubumbashi, Kolwezi… L'application suit tout.</p>
+      <ul><li>Stock en main de chaque livreur, produit par produit</li><li>Ce qui est livré, en route, à livrer</li><li>Argent encaissé et reste à verser</li><li>Commission de la semaine calculée toute seule</li></ul>
+    </div>
+  </div>
+  <div class="feat rev">
+    <div class="ph"><div class="phone"><img src="img/recus.jpg" alt="Vente enregistrée avec envoi des reçus WhatsApp" loading="lazy"></div></div>
+    <div>
+      <div class="kicker">Commandes WhatsApp</div>
+      <h3>Collez la commande, les reçus partent tout seuls</h3>
+      <p class="sub">Copiez le message du client depuis WhatsApp : nom, téléphone, adresse, produit, quantité et heure se remplissent automatiquement.</p>
+      <ul><li>Bon de livraison envoyé au livreur en 1 clic</li><li>Reçu envoyé au client en 1 clic</li><li>Livraisons classées par jour et par heure</li></ul>
+    </div>
+  </div>
+  <div class="feat">
+    <div class="ph"><div class="phone"><img src="img/livreur.jpg" alt="Écran du livreur : mes livraisons" loading="lazy"></div></div>
+    <div>
+      <div class="kicker">Accès livreur</div>
+      <h3>Vos livreurs ont leur propre écran</h3>
+      <p class="sub">Invitez-les par WhatsApp : ils voient uniquement leurs livraisons, leur stock et leur commission.</p>
+      <ul><li>« En route » puis « Livré » : vous le voyez en direct</li><li>« J'ai envoyé l'argent » avec la capture Mobile Money</li><li>Vous confirmez quand l'argent est arrivé</li></ul>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap center">
+  <h2>Et aussi…</h2>
+  <div class="grid" style="text-align:left">
+    <div class="tile"><div class="ic">🧾</div><b>Factures professionnelles</b><p>Votre logo, adresse, RCCM, N° de facture, cachet « PAYÉE » — envoyées sur WhatsApp.</p></div>
+    <div class="tile"><div class="ic">🛍️</div><b>Votre boutique en ligne</b><p>Un lien à partager : photos, prix, promos ; les commandes arrivent sur votre WhatsApp.</p></div>
+    <div class="tile"><div class="ic">🔔</div><b>Notifications</b><p>Livraison faite, argent envoyé, rappel 1 h avant chaque livraison.</p></div>
+    <div class="tile"><div class="ic">⚡</div><b>Vente en boutique</b><p>Vente rapide en 3 secondes, cash ou Mobile Money, rapport du jour.</p></div>
+    <div class="tile"><div class="ic">📋</div><b>Contrôle de stock</b><p>Comptez chez le livreur : les manquants apparaissent tout de suite.</p></div>
+    <div class="tile"><div class="ic">🌙</div><b>Point du soir</b><p>Ce que chaque livreur a livré et doit envoyer, message WhatsApp prêt.</p></div>
+    <div class="tile"><div class="ic">🚢</div><b>Import sur commande</b><p>Chine, Dubaï… : acomptes, étapes jusqu'à l'arrivée, reçus clients, marge privée.</p></div>
+    <div class="tile"><div class="ic">💰</div><b>Vrai bénéfice</b><p>Ventes − coût − commissions − dépenses : où va votre argent.</p></div>
+    <div class="tile"><div class="ic">🏙️</div><b>Commission par ville</b><p>Montant fixe, %, différent selon la ville, ou salaire.</p></div>
+    <div class="tile"><div class="ic">📦</div><b>Packs et stock</b><p>Les packs sortent automatiquement les bons produits.</p></div>
+    <div class="tile"><div class="ic">👥</div><b>Clients et relance</b><p>Historique d'achat et relance WhatsApp en 1 clic.</p></div>
+    <div class="tile"><div class="ic">📊</div><b>Rapport de la semaine</b><p>Résumé à envoyer par WhatsApp ou en PDF.</p></div>
+    <div class="tile"><div class="ic">⚠️</div><b>Alertes</b><p>Stock bas, livraisons en retard, versements en attente.</p></div>
+    <div class="tile"><div class="ic">💱</div><b>Francs et dollars</b><p>FC, CFA… et $ avec votre taux du jour.</p></div>
+    <div class="tile"><div class="ic">☁️</div><b>En ligne et hors ligne</b><p>Changez de téléphone sans rien perdre.</p></div>
+  </div>
+</div></section>
+
+<section class="alt"><div class="wrap center">
+  <h2>Prêt en 5 minutes</h2>
+  <div class="steps" style="text-align:left">
+    <div class="step"><b>Créez votre compte</b><p class="sub" style="font-size:15px">Avec votre numéro de téléphone. Aucun SMS, aucune carte bancaire.</p></div>
+    <div class="step"><b>Ajoutez produits et livreurs</b><p class="sub" style="font-size:15px">Prix, commissions, villes. Envoyez du stock à vos livreurs.</p></div>
+    <div class="step"><b>Vendez, suivez, encaissez</b><p class="sub" style="font-size:15px">Collez vos commandes WhatsApp et regardez votre bénéfice.</p></div>
+  </div>
+</div></section>
+
+<section id="installer"><div class="wrap center">
+  <h2>S'installe comme une vraie application</h2>
+  <p class="sub">Pas besoin de Play Store ni d'App Store. 30 secondes, moins de 1 Mo.</p>
+  <div class="steps" style="text-align:left">
+    <div class="step"><b>📱 iPhone (Safari)</b><p class="sub" style="font-size:15px">Ouvrez le lien dans <b>Safari</b> → bouton Partager ⬆️ → <b>« Sur l'écran d'accueil »</b> → Ajouter.</p></div>
+    <div class="step"><b>🤖 Android (Chrome)</b><p class="sub" style="font-size:15px">Ouvrez le lien dans <b>Chrome</b> → menu ⋮ → <b>« Installer l'application »</b> ou « Ajouter à l'écran d'accueil ».</p></div>
+    <div class="step"><b>💻 Ordinateur</b><p class="sub" style="font-size:15px">Chrome ou Edge → icône <b>Installer</b> ⊕ dans la barre d'adresse. Même compte que sur le téléphone.</p></div>
+  </div>
+  <p class="sub" style="font-size:14px;margin-top:14px">Vous venez de Facebook ? Touchez ⋯ → « Ouvrir dans le navigateur » avant d'installer. L'application vous guide aussi pas à pas.</p>
+</div></section>
+
+<section id="prix"><div class="wrap center">
+  <h2>Un prix simple</h2>
+  <p class="sub">Testez gratuitement, puis payez seulement si l'application vous fait gagner du temps et de l'argent.</p>
+  <div class="price">
+    <div class="kicker">Prix de lancement</div>
+    <div class="big">2,9 $ <span style="font-size:.45em;font-weight:600">/ mois</span></div>
+    <p class="sub" style="font-size:15px"><b>7 jours d'essai gratuit</b>, sans engagement.<br>Ensuite, paiement par Mobile Money. Prix réservé aux premiers utilisateurs.</p>
+    <ul><li>Livreurs et produits illimités</li><li>Accès pour vos livreurs et un gérant</li><li>Données en ligne et sauvegardées</li><li>Assistance WhatsApp BASILUA TECH</li></ul>
+    <a class="btn d" style="width:100%" href="../?essai">Commencer l'essai gratuit</a>
+    <a class="btn w" style="width:100%;margin-top:8px" href="https://wa.me/243851507510?text=Bonjour%20BASILUA%20TECH%2C%20je%20veux%20l'abonnement%20Stock%20%26%20Livreurs%20%C3%A0%202%2C9%20%24%20par%20mois." target="_blank" rel="noopener">Payer / poser une question sur WhatsApp</a>
+  </div>
+</div></section>
+
+<section class="alt faq"><div class="wrap" style="max-width:760px">
+  <h2 class="center">Questions fréquentes</h2>
+  <details><summary>Comment commencer l'essai gratuit ?</summary><p>Touchez « Essayer 7 jours gratuits », choisissez votre pays, entrez votre numéro de téléphone et un mot de passe, puis le nom de votre boutique. C'est tout : pas de SMS, pas de carte bancaire. Après 7 jours, vous payez 2,9 $ / mois par Mobile Money si l'application vous plaît.</p></details>
+  <details><summary>Faut-il installer quelque chose ?</summary><p>Non. Ouvrez le lien sur votre téléphone, puis « Ajouter à l'écran d'accueil » : l'icône s'ouvre comme une vraie application, sur iPhone comme sur Android.</p></details>
+  <details><summary>Et si je change de téléphone ?</summary><p>Vos données sont en ligne : connectez-vous avec votre numéro et votre mot de passe, tout revient.</p></details>
+  <details><summary>Ça marche sans internet ?</summary><p>Oui. Vous continuez à travailler, et tout s'envoie automatiquement au retour du réseau.</p></details>
+  <details><summary>Mes livreurs doivent-ils avoir l'application ?</summary><p>Ce n'est pas obligatoire : vous pouvez tout gérer seul. Mais en leur donnant l'accès, ils marquent eux-mêmes leurs livraisons et leurs versements.</p></details>
+  <details><summary>Mes données sont-elles en sécurité ?</summary><p>Chaque boutique ne voit que ses propres données, protégées par mot de passe. Vos livreurs ne voient que leurs livraisons. <a href="../conditions.html">Conditions d'utilisation</a>.</p></details>
+  <details><summary>Dans quels pays ?</summary><p>RDC, Cameroun, Côte d'Ivoire, Sénégal, Congo, Gabon, Mali, Bénin, Togo, Burkina, Guinée, Burundi, Rwanda, Madagascar, Maroc… avec votre monnaie et votre taux.</p></details>
+</div></section>
+
+<section class="final"><div class="wrap">
+  <h2>Reprenez le contrôle de votre business</h2>
+  <p class="sub" style="color:#e0f2ef;margin:0 auto">7 jours gratuits. Sans engagement.</p>
+  <div class="ctas"><a class="btn p" href="../?essai">Essayer gratuitement</a><a class="btn o" href="../guide.html">Voir le guide</a></div>
+</div></section>
+
+<footer><div class="wrap">
+  <div><b style="color:#fff">BASILUA TECH · Réseau &amp; Vente</b></div>
+  <div><a href="https://wa.me/243851507510">WhatsApp +243 851 507 510</a> · <a href="../conditions.html">Conditions</a></div>
+</div></footer>
+
+<a class="sticky-wa" href="https://wa.me/243851507510?text=Bonjour%20BASILUA%20TECH%2C%20je%20veux%20en%20savoir%20plus%20sur%20Stock%20%26%20Livreurs" target="_blank" rel="noopener" aria-label="WhatsApp"><svg class="i" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-1.8-1.8l.8-1-1-2z"/></svg></a>
+</body>
+</html>
