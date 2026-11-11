@@ -4133,6 +4133,7 @@ async function syncNow(){
   if(navigator.onLine === false){ SYNC.state = 'offline'; paintSync(); return; }
   SYNC.busy = true; SYNC.state = 'sync'; paintSync();
   try{
+    if(ONLINE.role === 'livreur') await lqFlush();
     let changed = await refreshShop();
     if(shopWritable()) await pushDirty();
     if(await pull()) changed = true;
@@ -4301,6 +4302,49 @@ livSheet = function(id){
 
 /* ---------- Écran du livreur ---------- */
 let MOI_REL = false, MOI_DAY = '';
+// Itinéraire : lien Maps collé dans l'adresse, sinon recherche Google Maps (adresse + ville)
+const mapsUrl = (addr, city) => { const a = String(addr || '').trim(); const u = a.match(/https?:\/\/\S+/); if(u) return u[0];
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(a + (city && !norm0(a).includes(norm0(city)) ? ', ' + city : '')); };
+// Montant dans les deux monnaies
+const rtOf = m => num(m.rate) || rate();
+const both = (a, cur, rt) => cur === 'FC' ? `${amt(a, 'FC')} <span class="note">(≈ ${money(a / rt)})</span>` : `${amt(a, cur)} <span class="note">(≈ ${amt(Math.round(a * rt), 'FC')})</span>`;
+const bothTxt = (a, cur, rt) => cur === 'FC' ? `${amt(a, 'FC')} (≈ ${money(a / rt)})` : `${amt(a, cur)} (≈ ${amt(Math.round(a * rt), 'FC')})`;
+A.livchange = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m) return;
+  const rt = rtOf(m), due = m.qty * m.price, dueFC = m.cur === 'FC' ? due : due * rt;
+  sheet('💵 Monnaie à rendre', `<p class="note" style="margin-bottom:10px">${esc(pname(m.pid))} × ${m.qty}${m.client ? ' · ' + esc(m.client) : ''}</p>
+    <div class="card" style="margin-bottom:12px"><div class="dl strong"><span>À encaisser</span><span class="num">${both(due, m.cur, rt)}</span></div><div class="dl"><span>Taux</span><span>1 $ = ${fmt(rt)} ${esc(LC())}</span></div></div>
+    <div class="row2">${field('Le client donne', `<input id="chG" type="number" inputmode="decimal" min="0" step="any" placeholder="Ex : 50000">`)}${field('Monnaie', `<select id="chC"><option value="FC" ${m.cur === 'FC' ? 'selected' : ''}>${esc(LC())}</option><option value="$" ${m.cur !== 'FC' ? 'selected' : ''}>$</option></select>`)}</div>
+    <div class="card" id="chOut" style="text-align:center;font-size:18px;font-weight:800">Tapez le montant donné par le client</div>`);
+  const upd = () => { const g = num($('#chG').value), gFC = $('#chC').value === 'FC' ? g : g * rt, d = gFC - dueFC, o = $('#chOut');
+    if(!g){ o.innerHTML = 'Tapez le montant donné par le client'; o.style.color = ''; return; }
+    if(Math.abs(d) < 1){ o.innerHTML = '✅ Compte juste, rien à rendre'; o.style.color = 'var(--ok)'; return; }
+    o.innerHTML = d > 0 ? `À rendre au client :<br><span class="num">${amt(Math.round(d), 'FC')}</span><br><span class="note">(≈ ${money(d / rt)})</span>` : `⚠️ Il manque :<br><span class="num">${amt(Math.round(-d), 'FC')}</span><br><span class="note">(≈ ${money(-d / rt)})</span>`;
+    o.style.color = d > 0 ? 'var(--ok)' : 'var(--bad,#dc2626)'; };
+  $('#chG').oninput = upd; $('#chC').onchange = upd; setTimeout(() => $('#chG').focus(), 100);
+};
+// Mon point du jour : ce que le livreur a fait aujourd'hui, à envoyer au patron
+A.livpoint = () => { const lid = ONLINE.shop && ONLINE.shop.livreur_id, L = liv(lid); if(!lid) return; const T = today(), s = livStats(lid);
+  const mine = S.moves.filter(m => m.type === 'vente' && m.liv === lid);
+  const dl = sortMoves(mine.filter(m => m.status === 'livre' && mday(m) === T)), an = mine.filter(m => m.status === 'annule' && m.cancelAt === T);
+  const left = mine.filter(m => (m.status === 'attente' || m.status === 'encours') && (m.ddate || m.date) <= T);
+  const pcs = dl.reduce((t, m) => t + m.qty, 0), cash = dl.reduce((t, m) => t + livCash(m), 0), com = dl.reduce((t, m) => t + m.qty*num(m.commU), 0), rt = rate();
+  const pend = lqGet().length;
+  const txt = `*Point du jour — ${L ? L.name : 'Livreur'}*\n${dAbs(T, 1)}\n\n*Livré : ${dl.length} commande(s), ${pcs} pièce(s)*\n${dl.map(m => `• ${m.client || 'Client'} — ${pname(m.pid)} × ${m.qty} — ${m.pre ? 'déjà payé' : amt(m.qty*m.price, m.cur)}${m.partial ? ' (en partie)' : ''}`).join('\n') || '• aucune livraison'}\n\nEncaissé aujourd'hui : ${bothTxt(cash, '$', rt)}${an.length ? `\nAnnulée(s) : ${an.length} (${an.map(m => m.client || pname(m.pid)).join(', ')})` : ''}${left.length ? `\nEncore à livrer : ${left.length}` : ''}\n*Argent à verser à la boutique : ${money(s.toRemit)}*\nMa commission du jour : ${money(com)}`;
+  sheet('🌙 Mon point du jour', `
+    <div class="kv"><div><b class="num">${pcs}</b><span>Pièces livrées</span></div><div><b class="num">${money(cash)}</b><span>Encaissé</span></div><div><b class="num">${money(com)}</b><span>Commission</span></div></div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="dl"><span>Livrées aujourd'hui</span><span class="num">${dl.length}</span></div>
+      <div class="dl"><span>Annulées aujourd'hui</span><span class="num">${an.length}</span></div>
+      <div class="dl"><span>Encore à livrer</span><span class="num">${left.length}</span></div>
+      <div class="dl strong"><span>Argent à verser à la boutique</span><span class="num ${s.toRemit > 0.009 ? 'red' : 'green'}">${money(s.toRemit)}</span></div>
+      ${pend ? `<p class="note" style="margin-top:6px;color:var(--bad,#dc2626)">📶 ${pend} action(s) pas encore envoyée(s) (pas de réseau).</p>` : ''}
+    </div>
+    ${dl.length ? `<div class="list" style="margin-bottom:12px">${dl.map(m => `<div class="it"><div class="ic c-in">${ico('cart')}</div><div class="m"><div class="t">${esc(pname(m.pid))} × ${m.qty}</div><div class="d">${esc(m.client || '')}</div></div><div class="r num">${m.pre ? 'payé' : amt(m.qty*m.price, m.cur)}</div></div>`).join('')}</div>` : ''}
+    <a class="btn wa block" href="${waLink(S.settings.wa || '', txt)}" target="_blank" rel="noopener">${ico('wa')} Envoyer mon point au patron</a>
+    <button class="btn primary block" style="margin-top:8px" data-a="decl">💸 J'ai envoyé l'argent</button>
+    <pre class="msg" style="margin-top:10px">${esc(txt)}</pre>`);
+};
+
 const livMsg = (m, L) => `Bonjour ${m.client || ''} 👋\nJe suis ${L ? L.name : 'votre livreur'}, livreur de ${S.settings.shop}. Je suis prêt(e) à venir vous livrer votre commande : ${pname(m.pid)} × ${m.qty}.\nÊtes-vous là ? Je peux passer ?` + (m.addr ? `\n📍 C'est bien votre adresse : ${m.addr} ?` : `\n📍 Envoyez-moi votre adresse de livraison, s'il vous plaît.`) + `\nMerci, à tout de suite 🙏`;
 A.moiday = (v, el) => { MOI_DAY = v === 'pick' ? (el && el.value || '') : v; render(); };
 document.addEventListener('change', e => { if(e.target && e.target.id === 'moiDayIn'){ MOI_DAY = e.target.value || ''; render(); } });
@@ -4343,11 +4387,13 @@ CUSTOM.moi = () => {
       ${m.phone ? `<div class="dl"><span>Téléphone</span><span><a href="tel:${esc(m.phone)}">${esc(m.phone)}</a></span></div>
       <div class="btns" style="margin:6px 0 4px"><a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} WhatsApp du client</a><a class="btn" href="tel:${esc(m.phone)}">📞 Appeler</a></div>` : ''}
       <div class="dl"><span>Adresse</span><span style="white-space:pre-line">${esc(m.addr || '—')}</span></div>
+      ${m.addr ? `<a class="btn block" style="text-decoration:none;text-align:center;margin:6px 0 4px" href="${esc(mapsUrl(m.addr, L && L.city))}" target="_blank" rel="noopener">📍 Itinéraire (Google Maps)</a>` : ''}
       <div class="dl strong"><span>📅 Livraison</span><span style="${dd(m) < T ? 'color:var(--bad,#dc2626)' : ''}">${moiLab(dd(m))}${m.dtime ? ' à ' + m.dtime.replace(':','h') : ''}${dd(m) < T ? ' (en retard)' : ''}</span></div>
       ${m.ts ? `<div class="dl"><span>🕐 Commandée</span><span>${fmtDate(m.date || T, true)} à ${hhmm(m.ts)}</span></div>` : ''}
       ${m.postponed ? `<div class="dl"><span>Reportée</span><span>${m.postponed} fois${m.postponeReason ? ' — ' + esc(m.postponeReason) : ''}</span></div>` : ''}
       ${(() => { const sh = shipOf(m); return sh ? `<div class="dl strong"><span>🚚 À expédier</span><span>${esc(shipLine(sh))}<br>Frais : ${amt(num(sh.fee), sh.cur)} (payés par le client)</span></div>` : ''; })()}
-      <div class="dl strong"><span>À encaisser</span><span class="num">${m.pre ? '✅ Rien — déjà payé' : amt(m.qty*m.price, m.cur)}</span></div>
+      <div class="dl strong"><span>À encaisser</span><span class="num">${m.pre ? '✅ Rien — déjà payé' : both(m.qty*m.price, m.cur, rtOf(m))}</span></div>
+      ${m.pre ? '' : `<button class="btn block" style="margin:6px 0 4px" data-a="livchange" data-id="${m.id}">💵 Monnaie à rendre</button>`}
       <div class="dl"><span>Votre commission</span><span class="num">${money(m.qty*num(m.commU))}</span></div>
       ${m.note ? `<p class="note" style="margin-top:6px">📝 ${esc(m.note)}</p>` : ''}
       <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livcancel" data-id="${m.id}">❌ Annuler la commande</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}</div>`;
@@ -4359,7 +4405,9 @@ CUSTOM.moi = () => {
     <div class="kpi"><div class="l">Argent à verser</div><div class="v num ${s.toRemit > 0.009 ? 'neg' : ''}">${money(s.toRemit)}</div><div class="s">${declPendingUSD(lid) > 0.009 ? money(declPendingUSD(lid)) + ' en attente de confirmation' : 'à la boutique'}</div></div>
     <div class="kpi"><div class="l">Stock en main</div><div class="v num">${s.hand}</div><div class="s">pièces disponibles</div></div>
   </div>
+  ${lqGet().length ? `<div class="warnbox" style="margin-top:12px">📶 ${lqGet().length} action(s) enregistrée(s) dans le téléphone, pas encore envoyée(s) : pas de réseau. Elles partiront toutes seules dès que la connexion revient. <button class="link" data-a="syncnow">Réessayer maintenant</button></div>` : ''}
   <button class="btn primary block" style="margin-top:12px" data-a="decl">💸 J'ai envoyé l'argent</button>
+  <button class="btn block" style="margin-top:8px" data-a="livpoint">🌙 Mon point du jour</button>
   <button class="btn block" style="margin-top:8px" data-a="moirel:1">📄 Mon relevé de la semaine (commissions)</button>
   <div class="sec"><h2>📅 Mes livraisons par jour</h2></div>
   <div class="chips" style="margin-bottom:8px">${chip('', 'Tout (' + todo.length + ')')}${late.length ? chip('late', '⚠️ En retard (' + late.length + ')') : ''}${chip(T, "Aujourd'hui (" + nT + ')')}${chip(addDays(T, 1), 'Demain (' + nD + ')')}</div>
@@ -4391,11 +4439,11 @@ A.livstat = async (st, el) => {
 A.livldate = (v, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(m) livreDatePick(m.id, d => livSetStatus(m, 'livre', d, true)); };
 // Livré en partie : le client prend moins que commandé (le livreur ne peut que diminuer)
 A.livpart = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m) return; partialSheet(m, async (q, d) => {
-  const {data, error} = await sb.rpc('livreur_partial', {p_shop:ONLINE.shop.id, p_move:m.id, p_qty:q, p_ldate:d});
-  if(error || !data){ toast(error ? rpcErr(error) : 'Impossible de modifier cette livraison'); return false; }
-  const asked = m.qtyAsked || m.qty; Object.assign(m, {qty:q, qtyAsked:asked, partial:true, status:'livre', ldate:d}); closeSheet(); rawSave(); render(); syncNow();
-  toast(`Livré en partie ✅ ${q} sur ${asked}`);
-  notifyShop('owners', `🔢 ${lname(m.liv)} : livré en partie`, `${pname(m.pid)} : ${q} sur ${asked}${m.client ? ' — ' + m.client : ''} · ${amt(q*m.price, m.cur)}`, {tag:'st-' + m.id});
+  const asked = m.qtyAsked || m.qty, note = {t:`🔢 ${lname(m.liv)} : livré en partie`, b:`${pname(m.pid)} : ${q} sur ${asked}${m.client ? ' — ' + m.client : ''} · ${amt(q*m.price, m.cur)}`, tag:'st-' + m.id};
+  const r = await livRpc('livreur_partial', {p_shop:ONLINE.shop.id, p_move:m.id, p_qty:q, p_ldate:d}, note);
+  if(!r.ok){ toast(r.error ? rpcErr(r.error) : 'Impossible de modifier cette livraison'); return false; }
+  Object.assign(m, {qty:q, qtyAsked:asked, partial:true, status:'livre', ldate:d}); closeSheet(); rawSave(); render();
+  if(!r.queued){ syncNow(); toast(`Livré en partie ✅ ${q} sur ${asked}`); notifyShop('owners', note.t, note.b, {tag:note.tag}); }
   return true; }); };
 // Pas livré : le livreur annule (client a refusé…) ou reporte à un autre jour, avec la raison
 const NOT_REASONS = ['Client injoignable / absent', 'Client a refusé', "Client n'a pas l'argent", 'Mauvaise adresse', 'Client a demandé de reporter'];
@@ -4410,10 +4458,11 @@ A.livnot = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(
   const go = async action => { const reason = $('#nrTx').value.trim(); if(!reason){ toast('Indiquez la raison'); $('#nrTx').focus(); return; }
     const dd = $('#nrDate').value; if(action === 'reporte' && !dd){ toast('Choisissez le jour'); return; }
     if(action === 'annule' && !await ask(`Annuler la commande de ${esc(m.client || 'ce client')} ? (${esc(reason)})`, 'Annuler la commande', true)) return;
-    const {data, error} = await sb.rpc('livreur_not_delivered', {p_shop:ONLINE.shop.id, p_move:m.id, p_action:action, p_reason:reason, p_ddate:action === 'reporte' ? dd : null});
-    if(error || !data){ toast(error ? rpcErr(error) : 'Impossible de modifier cette livraison'); return; }
+    const note = {t:action === 'annule' ? `❌ ${lname(m.liv)} : commande annulée` : `📅 ${lname(m.liv)} : livraison reportée au ${dAbs(dd)}`, b:`${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · Raison : ${reason}`, tag:'st-' + m.id};
+    const r = await livRpc('livreur_not_delivered', {p_shop:ONLINE.shop.id, p_move:m.id, p_action:action, p_reason:reason, p_ddate:action === 'reporte' ? dd : null}, note);
+    if(!r.ok){ toast(r.error ? rpcErr(r.error) : 'Impossible de modifier cette livraison'); return; }
     if(action === 'annule') Object.assign(m, {status:'annule', cancelBy:'livreur', cancelReason:reason, cancelAt:today()}); else Object.assign(m, {ddate:dd, status:'attente', postponed:(m.postponed || 0) + 1, postponeReason:reason});
-    delete m.ldate; closeSheet(); rawSave(); render(); syncNow();
+    delete m.ldate; closeSheet(); rawSave(); render(); if(r.queued) return; syncNow();
     toast(action === 'annule' ? 'Commande annulée — le vendeur est prévenu' : 'Livraison reportée au ' + dAbs(dd));
     notifyShop('owners', action === 'annule' ? `❌ ${lname(m.liv)} : commande annulée` : `📅 ${lname(m.liv)} : livraison reportée au ${dAbs(dd)}`, `${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · Raison : ${reason}`, {tag:'st-' + m.id}); };
   $('#nrPost').onclick = () => go('reporte'); $('#nrCancel').onclick = () => go('annule'); };
@@ -4428,27 +4477,59 @@ A.livcancel = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); 
   $('#lcPost').onclick = () => { close(); A.livnot(null, el); };
   $('#lcOk').onclick = async () => { const b = $('#lcOk'); b.disabled = true; b.textContent = 'Patientez…';
     const reason = "Le client n'a pas pris la commande";
-    const {data, error} = await sb.rpc('livreur_not_delivered', {p_shop:ONLINE.shop.id, p_move:m.id, p_action:'annule', p_reason:reason, p_ddate:null});
-    close(); if(error || !data){ toast(error ? rpcErr(error) : 'Impossible de modifier cette livraison'); return; }
-    Object.assign(m, {status:'annule', cancelBy:'livreur', cancelReason:reason, cancelAt:today()}); delete m.ldate; rawSave(); render(); syncNow();
+    const note = {t:`❌ ${lname(m.liv)} : commande annulée`, b:`${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · ${reason}`, tag:'st-' + m.id};
+    const r = await livRpc('livreur_not_delivered', {p_shop:ONLINE.shop.id, p_move:m.id, p_action:'annule', p_reason:reason, p_ddate:null}, note);
+    close(); if(!r.ok){ toast(r.error ? rpcErr(r.error) : 'Impossible de modifier cette livraison'); return; }
+    Object.assign(m, {status:'annule', cancelBy:'livreur', cancelReason:reason, cancelAt:today()}); delete m.ldate; rawSave(); render(); if(r.queued) return; syncNow();
     toast('Commande annulée — le vendeur est prévenu');
     notifyShop('owners', `❌ ${lname(m.liv)} : commande annulée`, `${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · ${reason}`, {tag:'st-' + m.id}); };
 };
 A.livswap = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m) return; swapSheet(m, async (pid, q, d) => {
-  const {data, error} = await sb.rpc('livreur_swap', {p_shop:ONLINE.shop.id, p_move:m.id, p_pid:pid, p_qty:q, p_ldate:d});
-  if(error || !data){ toast(error ? rpcErr(error) : 'Impossible de modifier cette livraison'); return false; }
-  const from = pname(m.pid), x = prod(pid);
+  const from = pname(m.pid), x = prod(pid), note = {t:`🔁 ${lname(m.liv)} : le client a pris une partie du pack`, b:`${from} → ${pname(pid)} × ${q}${m.client ? ' — ' + m.client : ''}`, tag:'st-' + m.id};
+  const r = await livRpc('livreur_swap', {p_shop:ONLINE.shop.id, p_move:m.id, p_pid:pid, p_qty:q, p_ldate:d}, note);
+  if(!r.ok){ toast(r.error ? rpcErr(r.error) : 'Impossible de modifier cette livraison'); return false; }
   Object.assign(m, {origPid:m.origPid || m.pid, origQty:m.origQty || m.qty, origPrice:m.origPrice ?? m.price, pid, qty:q, price:num(x && x.sell), cur:(x && x.cur) || m.cur, swapped:true, status:'livre', ldate:d});
-  closeSheet(); rawSave(); render(); syncNow(); toast(`Livré : ${pname(pid)} × ${q} ✅`);
+  closeSheet(); rawSave(); render(); if(r.queued) return true; syncNow(); toast(`Livré : ${pname(pid)} × ${q} ✅`);
   notifyShop('owners', `🔁 ${lname(m.liv)} : le client a pris une partie du pack`, `${from} → ${pname(pid)} × ${q}${m.client ? ' — ' + m.client : ''} · ${amt(q * m.price, m.cur)}`, {tag:'st-' + m.id});
   return true; }); };
+/* Actions du livreur sans réseau : gardées dans le téléphone, envoyées au retour de la connexion */
+const LQ_KEY = () => 'stock_livq_' + (ONLINE.shop ? ONLINE.shop.id : '');
+const lqGet = () => { try{ return JSON.parse(localStorage.getItem(LQ_KEY()) || '[]'); }catch(_){ return []; } };
+const lqSet = q => { try{ localStorage.setItem(LQ_KEY(), JSON.stringify(q)); }catch(_){} };
+const isNetErr = e => navigator.onLine === false || /fetch|network|load failed|timeout|offline/i.test(String(e && (e.message || e.error_description || e)));
+let LQ_BUSY = false;
+async function livRpc(fn, params, note){
+  const queue = () => { const q = lqGet(); q.push({fn, params, note, at:Date.now()}); lqSet(q); toast('📶 Pas de réseau : c\'est enregistré dans le téléphone, envoi automatique dès que la connexion revient'); return {ok:true, queued:true}; };
+  if(navigator.onLine === false) return queue();
+  try{ const {data, error} = await sb.rpc(fn, params);
+    if(error) return isNetErr(error) ? queue() : {ok:false, error};
+    return data ? {ok:true} : {ok:false};
+  }catch(e){ return isNetErr(e) ? queue() : {ok:false, error:e}; }
+}
+async function lqFlush(){
+  if(LQ_BUSY || navigator.onLine === false || !ONLINE.shop) return; const q = lqGet(); if(!q.length) return;
+  LQ_BUSY = true; let sent = 0, failed = 0; const rest = [];
+  try{
+    for(let i = 0; i < q.length; i++){ const it = q[i];
+      try{ const {data, error} = await sb.rpc(it.fn, it.params);
+        if(error && isNetErr(error)){ rest.push(...q.slice(i)); break; }
+        if(error || !data){ failed++; continue; }
+        sent++; if(it.note) notifyShop('owners', it.note.t, it.note.b, {tag:it.note.tag});
+      }catch(e){ if(isNetErr(e)){ rest.push(...q.slice(i)); break; } failed++; }
+    }
+  } finally { lqSet(rest); LQ_BUSY = false; }
+  if(sent) toast(`✅ ${sent} action(s) envoyée(s) au vendeur`);
+  if(failed) toast(`⚠️ ${failed} action(s) refusée(s) (commande déjà modifiée par le vendeur ?)`);
+  if(view === 'moi') render();
+}
+window.addEventListener('online', () => { lqFlush().then(() => syncNow()); });
 async function livSetStatus(m, st, ld, onlyDate){
   const id = m.id;
-  const {data, error} = await sb.rpc('livreur_set_status', {p_shop:ONLINE.shop.id, p_move:id, p_status:st, p_ldate:ld || today()});
-  if(error || !data){ toast(error ? rpcErr(error) : 'Impossible de modifier cette livraison'); return; }
-  m.status = st; if(st === 'livre') m.ldate = ld || today(); else delete m.ldate; closeSheet(); rawSave(); render(); toast(onlyDate ? 'Date de livraison : ' + dAbs(m.ldate, 1) : st === 'livre' ? 'Livraison confirmée ✅' : 'En route 🛵'); syncNow();
-  if(onlyDate) return;
-  notifyShop('owners', st === 'livre' ? `✅ ${lname(m.liv)} a livré` : `🛵 ${lname(m.liv)} est en route`, `${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · ${amt(m.qty*m.price, m.cur)}`, {tag:'st-' + m.id});
+  const note = onlyDate ? null : {t:st === 'livre' ? `✅ ${lname(m.liv)} a livré` : `🛵 ${lname(m.liv)} est en route`, b:`${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · ${amt(m.qty*m.price, m.cur)}`, tag:'st-' + m.id};
+  const r = await livRpc('livreur_set_status', {p_shop:ONLINE.shop.id, p_move:id, p_status:st, p_ldate:ld || today()}, note);
+  if(!r.ok){ toast(r.error ? rpcErr(r.error) : 'Impossible de modifier cette livraison'); return; }
+  m.status = st; if(st === 'livre') m.ldate = ld || today(); else delete m.ldate; closeSheet(); rawSave(); render(); if(!r.queued){ toast(onlyDate ? 'Date de livraison : ' + dAbs(m.ldate, 1) : st === 'livre' ? 'Livraison confirmée ✅' : 'En route 🛵'); syncNow(); }
+  if(note && !r.queued) notifyShop('owners', note.t, note.b, {tag:note.tag});
 };
 
 /* ---------- Espace BASILUA TECH (administration) ---------- */
