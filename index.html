@@ -4386,8 +4386,7 @@ CUSTOM.moi = () => {
       <div class="dl"><span>Client</span><span>${esc(m.client || '—')}</span></div>
       ${m.phone ? `<div class="dl"><span>Téléphone</span><span><a href="tel:${esc(m.phone)}">${esc(m.phone)}</a></span></div>
       <div class="btns" style="margin:6px 0 4px"><a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} WhatsApp du client</a><a class="btn" href="tel:${esc(m.phone)}">📞 Appeler</a></div>` : ''}
-      <div class="dl"><span>Adresse</span><span style="white-space:pre-line">${esc(m.addr || '—')}</span></div>
-      ${m.addr ? `<a class="btn block" style="text-decoration:none;text-align:center;margin:6px 0 4px" href="${esc(mapsUrl(m.addr, L && L.city))}" target="_blank" rel="noopener">📍 Itinéraire (Google Maps)</a>` : ''}
+      <div class="dl"><span>Adresse</span><span style="white-space:pre-line">${esc(m.addr || '—')}${m.addr ? ` <a href="${esc(mapsUrl(m.addr, L && L.city))}" target="_blank" rel="noopener" title="Itinéraire (Google Maps)" aria-label="Itinéraire Google Maps" style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--soft,#eef2f1);text-decoration:none;font-size:16px;vertical-align:middle;margin-left:4px">📍</a>` : ''}</span></div>
       <div class="dl strong"><span>📅 Livraison</span><span style="${dd(m) < T ? 'color:var(--bad,#dc2626)' : ''}">${moiLab(dd(m))}${m.dtime ? ' à ' + m.dtime.replace(':','h') : ''}${dd(m) < T ? ' (en retard)' : ''}</span></div>
       ${m.ts ? `<div class="dl"><span>🕐 Commandée</span><span>${fmtDate(m.date || T, true)} à ${hhmm(m.ts)}</span></div>` : ''}
       ${m.postponed ? `<div class="dl"><span>Reportée</span><span>${m.postponed} fois${m.postponeReason ? ' — ' + esc(m.postponeReason) : ''}</span></div>` : ''}
