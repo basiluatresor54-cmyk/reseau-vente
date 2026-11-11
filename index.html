@@ -4559,12 +4559,45 @@ CUSTOM.admin = () => {
   ${(() => { const last = (() => { try{ return localStorage.getItem('stock_last_backup') || ''; }catch(_){ return ''; } })(); const old = !last || daysSince(last) >= 7;
     return `<div class="card" style="margin-top:12px;${old ? 'border:2px solid var(--warn,#d97706)' : ''}"><b>💾 Sauvegarde de toutes les boutiques</b><p class="note" style="margin:4px 0 10px">${last ? 'Dernière sauvegarde : ' + dAbs(last, 1) + '.' : 'Aucune sauvegarde faite sur cet appareil.'} ${old ? '<b>À faire cette semaine</b> (le plan gratuit de Supabase ne sauvegarde pas).' : '✅ À jour.'} Gardez le fichier sur Google Drive.</p><button class="btn ${old ? 'primary' : ''} block" data-a="admexport">💾 Télécharger la sauvegarde maintenant</button></div>`; })()}
   <div class="card" style="margin-top:12px"><form id="trialf" style="display:flex;gap:8px;align-items:flex-end"><label class="f" style="flex:1;margin:0"><span>Essai gratuit des nouvelles boutiques (jours)</span><input name="days" type="number" min="0" max="365" value="${esc(ADM.trial ?? 7)}"></label><button class="btn">Enregistrer</button></form></div>
+  <div class="sec"><h2>🎯 Clients en essai à relancer</h2></div>
+  <p class="note" style="margin:-4px 2px 8px">Le bouton vert est le message conseillé aujourd'hui. Touchez-le : WhatsApp s'ouvre avec le message prêt. ✓ = déjà envoyé.</p>
+  <div id="fubox">${fuRows()}</div>
   <div class="sec"><h2>Clients</h2><button class="link" data-a="admreload">↻ Actualiser</button></div>
   <input class="search" type="search" placeholder="Rechercher un client, un numéro, un pays…" value="${esc(ADM.q)}" oninput="ADM.q=this.value;document.getElementById('admlist').innerHTML=admRows()">
   <div class="list" id="admlist">${admRows(list)}</div>
   <div class="sec"><h2>Sauvegarde</h2></div>
   <div class="card"><p class="note" style="margin-bottom:10px">Exporte les données de <b>toutes</b> les boutiques (le plan gratuit de Supabase ne fait pas de sauvegarde automatique). Gardez le fichier sur Google Drive, une fois par semaine.</p><button class="btn primary block" data-a="admexport">Exporter toutes les données</button></div>`;
 };
+/* ---------- Suivi des clients en essai (messages Jour 1 / Jour 3 / Jour 6 / Expiré) ---------- */
+const FU_STEPS = [['j1', '👋 Jour 1 · Bienvenue'], ['j3', '🤝 Jour 3 · Aide'], ['j6', '⏳ Fin d\'essai'], ['exp', '🔁 Essai terminé']];
+const fuKey = (id, st) => 'stock_fu_' + id + '_' + st;
+const fuSent = (id, st) => { try{ return localStorage.getItem(fuKey(id, st)) || ''; }catch(_){ return ''; } };
+window.admFuMark = (id, st) => { try{ localStorage.setItem(fuKey(id, st), today()); }catch(_){} setTimeout(() => { if(view === 'admin'){ const b = document.getElementById('fubox'); if(b) b.innerHTML = fuRows(); } }, 400); };
+function fuInfo(s){ const t = today(), start = String(s.created_at || '').slice(0, 10) || t, day = daysSince(start) + 1, end = s.paid_until || '', left = end ? Math.round((new Date(end + 'T12:00:00') - new Date(t + 'T12:00:00')) / 864e5) : 99;
+  const rec = end && end < t ? 'exp' : left <= 1 ? 'j6' : day >= 3 ? 'j3' : 'j1';
+  return {day, end, left, rec, active:!!s.last_activity}; }
+function fuMsg(s, st){
+  const f = fuInfo(s), who = s.owner_name ? ' ' + s.owner_name : '', shop = s.name || 'votre boutique', guide = new URL('guide.html', APP_LINK).href;
+  const pay = PAYINFO.length ? PAYINFO.map(p => `• ${p.op} : ${p.num}${p.name ? ' (' + p.name + ')' : ''}`).join('\n') : '• Mobile Money : +243 851 507 510';
+  const endTxt = f.end ? (f.left <= 0 ? "aujourd'hui" : f.left === 1 ? 'demain' : 'le ' + dAbs(f.end, 1)) : 'bientôt';
+  if(st === 'j1') return `Bonjour${who} 👋\nBienvenue sur *BASILUA TECH · Réseau & Vente* ! Votre boutique « ${shop} » est prête, avec votre essai gratuit${f.end ? ' jusqu\'au ' + dAbs(f.end, 1) : ''}.\n\nPour bien démarrer (10 minutes) :\n1️⃣ Ajoutez vos produits (prix d'achat et de vente)\n2️⃣ Ajoutez vos livreurs, puis invitez-les (Plus → Équipe)\n3️⃣ Enregistrez votre première commande : collez le message WhatsApp du client, tout se remplit\n\n📘 Guide pas à pas : ${guide}\n\nUne question ? Répondez simplement à ce message, je vous aide 🙏\nBASILUA TECH`;
+  if(st === 'j3') return f.active
+    ? `Bonjour${who} 👋\nComment se passe votre essai de *Réseau & Vente* pour « ${shop} » ? 😊\n\n3 astuces pour gagner du temps :\n• Invitez vos livreurs : ils marquent eux-mêmes « Livré » et vous voyez l'argent à recevoir\n• Le soir, ouvrez le « Point du soir » : qui doit verser combien\n• Fixez vos objectifs de ventes et de bénéfice sur l'accueil\n\nIl vous reste ${Math.max(0, f.left)} jour(s) d'essai. Besoin d'aide ? Répondez ici 🙏\nBASILUA TECH`
+    : `Bonjour${who} 👋\nJe vois que vous n'avez pas encore enregistré de produit ni de vente sur « ${shop} ».\n\nVoulez-vous que je vous aide à démarrer ? En 10 minutes (appel ou WhatsApp), on met ensemble vos produits et vos livreurs, et vous voyez tout de suite votre stock et votre bénéfice.\n\nIl vous reste ${Math.max(0, f.left)} jour(s) d'essai gratuit.\n📘 Guide : ${guide}\n\nDites-moi quand vous êtes disponible 🙏\nBASILUA TECH`;
+  if(st === 'j6') return `Bonjour${who} 👋\nVotre essai gratuit de *Réseau & Vente* pour « ${shop} » se termine ${endTxt}.\n\nPour continuer sans rien perdre (produits, ventes, livreurs, clients) : *${subPrice()}* seulement.\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, j'active votre abonnement tout de suite ✅\nMerci pour votre confiance 🙏 — BASILUA TECH`;
+  return `Bonjour${who} 👋\nVotre essai de *Réseau & Vente* pour « ${shop} » est terminé.\n\nBonne nouvelle : toutes vos données sont gardées (produits, ventes, livreurs, clients). Pour reprendre là où vous vous êtes arrêté : *${subPrice()}*.\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, je réactive votre boutique tout de suite ✅\nBASILUA TECH`;
+}
+function fuButtons(s){ const f = fuInfo(s);
+  return `<div class="btns" style="flex-wrap:wrap;gap:6px;margin-top:8px">${FU_STEPS.map(([st, lb]) => { const sent = fuSent(s.id, st), on = st === f.rec;
+    return `<a class="btn ${on ? 'wa' : ''}" style="text-decoration:none;flex:1 1 45%;font-size:13.5px;padding:9px 8px" href="${waLink('+' + (s.owner_phone || ''), fuMsg(s, st))}" target="_blank" rel="noopener" onclick="admFuMark('${s.id}','${st}')">${lb}${sent ? ' ✓' : ''}</a>`; }).join('')}</div>`; }
+function fuRows(){
+  const t = today(), L = (ADM.shops || []).filter(s => s.status === 'essai' && (!s.paid_until || daysSince(s.paid_until) <= 14));
+  if(!L.length) return '<div class="empty">Aucun client en essai pour le moment.</div>';
+  return L.sort((a, b) => String(a.paid_until || '').localeCompare(String(b.paid_until || ''))).map(s => { const f = fuInfo(s), lab = FU_STEPS.find(x => x[0] === f.rec)[1];
+    return `<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(s.name)}</b><br><span class="note">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}</span></div><span class="pill ${f.rec === 'exp' ? 'p-annule' : f.rec === 'j6' ? 'p-attente' : 'p-encours'}">${f.end && f.end < t ? 'Essai fini' : 'Jour ' + f.day}</span></div>
+      <p class="note" style="margin-top:6px">${f.end ? (f.end < t ? 'Essai terminé le ' + dAbs(f.end) : 'Fin d\'essai : ' + dAbs(f.end, 1) + (f.left <= 1 ? ' ⚠️' : '')) : ''} · ${f.active ? '✅ A commencé à utiliser l\'application' : '⚠️ Aucune opération enregistrée'}<br>Message conseillé aujourd'hui : <b>${lab}</b>${fuSent(s.id, f.rec) ? ' (déjà envoyé le ' + dAbs(fuSent(s.id, f.rec)) + ')' : ''}</p>
+      ${fuButtons(s)}</div>`; }).join('');
+}
 function admRows(list){
   if(!list){ const q = norm0(ADM.q); list = (ADM.shops || []).filter(s => !q || norm0([s.name, s.owner_name, s.owner_phone, s.country].join(' ')).includes(q)); }
   if(!list.length) return '<div class="empty">Aucun client</div>';
@@ -4592,6 +4625,7 @@ A.admshop = async (id) => {
       <div class="dl"><span>Dernière activité</span><span>${s.last_activity ? fmtDate(String(s.last_activity).slice(0,10), true) : '—'}</span></div>
       <div class="dl strong"><span>Abonnement</span><span>${esc(i.short)} · ${s.paid_until ? 'jusqu\'au ' + fmtDate(s.paid_until, true) : 'sans limite'}</span></div>
     </div>
+    ${s.status === 'essai' ? `<div class="sec" style="margin-top:4px"><h2>🎯 Messages de suivi d'essai</h2></div>${fuButtons(s)}<div style="height:8px"></div>` : ''}
     <div class="sec" style="margin-top:4px"><h2>Activer / prolonger</h2></div>
     <div class="btns" style="margin-bottom:8px">
       <button class="btn primary" data-a="admset" data-id="${id}" data-st="actif" data-d="${addMonths(base,1)}">+1 mois</button>
