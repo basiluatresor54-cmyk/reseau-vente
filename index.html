@@ -267,7 +267,7 @@ html.glass .kpi.hero::after{content:"";position:absolute;inset:0;background:line
 html.glass .kpi .v{font-weight:800;letter-spacing:-.02em}
 html.glass .sec h2{font-size:17px;font-weight:800;letter-spacing:-.015em}
 html.glass .btn{border-radius:14px}
-html.glass .btn:not(.primary):not(.wa):not(.ghost-bad){background:var(--gl2);border:1px solid var(--glb)}
+html.glass .btn:not(.primary):not(.wa):not(.ghost-bad):not(.danger){background:var(--gl2);border:1px solid var(--glb)}
 html.glass .btn.primary{box-shadow:0 8px 20px rgba(var(--brand-rgb),.28)}
 html.glass .f input,html.glass .f select,html.glass .f textarea,html.glass .search{border-radius:14px;background:var(--gl2)}
 html.glass .ov{background:rgba(10,12,18,.32);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -4350,7 +4350,7 @@ CUSTOM.moi = () => {
       <div class="dl strong"><span>À encaisser</span><span class="num">${m.pre ? '✅ Rien — déjà payé' : amt(m.qty*m.price, m.cur)}</span></div>
       <div class="dl"><span>Votre commission</span><span class="num">${money(m.qty*num(m.commU))}</span></div>
       ${m.note ? `<p class="note" style="margin-top:6px">📝 ${esc(m.note)}</p>` : ''}
-      <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livnot" data-id="${m.id}">❌ Pas livré : annulé ou reporté</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}</div>`;
+      <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livcancel" data-id="${m.id}">❌ Annuler la commande</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}</div>`;
   return `<div class="card" style="margin-bottom:12px"><b>${esc(L ? L.name : 'Livreur')}</b> · ${esc(L && L.city || '')}<br><span class="note">${esc(S.settings.shop)}</span><div id="moiClock" style="margin-top:6px;font-weight:650;font-size:14px">📅 ${esc(moiNow())}</div></div>
   ${nextDays ? `<div class="sec" style="margin-top:0"><h2>🔔 Vos prochaines livraisons</h2></div><div class="list" style="margin-bottom:12px">${nextDays}</div>` : ''}
   <div class="kpis">
@@ -4417,6 +4417,23 @@ A.livnot = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(
     toast(action === 'annule' ? 'Commande annulée — le vendeur est prévenu' : 'Livraison reportée au ' + dAbs(dd));
     notifyShop('owners', action === 'annule' ? `❌ ${lname(m.liv)} : commande annulée` : `📅 ${lname(m.liv)} : livraison reportée au ${dAbs(dd)}`, `${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · Raison : ${reason}`, {tag:'st-' + m.id}); };
   $('#nrPost').onclick = () => go('reporte'); $('#nrCancel').onclick = () => go('annule'); };
+// Annulation simple (1 geste) : le client n'a pas pris / n'a pas répondu
+A.livcancel = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m) return;
+  $('#dlg').innerHTML = `<div class="dlg"><div class="card"><p style="margin-bottom:6px"><b>Annuler cette commande ?</b></p>
+    <p class="note" style="margin-bottom:12px">${esc(pname(m.pid))} × ${m.qty}${m.client ? ' · ' + esc(m.client) : ''}<br>Le client n'a pas pris la commande ou n'a pas répondu. Elle sera retirée de votre liste et le vendeur sera prévenu. Le produit reste dans votre stock.</p>
+    <div class="btns"><button class="btn" id="lcNo">Non, retour</button><button class="btn danger" id="lcOk">❌ Oui, annuler</button></div>
+    <button class="link" id="lcPost" style="display:block;margin:12px auto 0">📅 Plutôt reporter à un autre jour</button></div></div>`;
+  const close = () => { $('#dlg').innerHTML = ''; };
+  $('#lcNo').onclick = close;
+  $('#lcPost').onclick = () => { close(); A.livnot(null, el); };
+  $('#lcOk').onclick = async () => { const b = $('#lcOk'); b.disabled = true; b.textContent = 'Patientez…';
+    const reason = "Le client n'a pas pris la commande";
+    const {data, error} = await sb.rpc('livreur_not_delivered', {p_shop:ONLINE.shop.id, p_move:m.id, p_action:'annule', p_reason:reason, p_ddate:null});
+    close(); if(error || !data){ toast(error ? rpcErr(error) : 'Impossible de modifier cette livraison'); return; }
+    Object.assign(m, {status:'annule', cancelBy:'livreur', cancelReason:reason, cancelAt:today()}); delete m.ldate; rawSave(); render(); syncNow();
+    toast('Commande annulée — le vendeur est prévenu');
+    notifyShop('owners', `❌ ${lname(m.liv)} : commande annulée`, `${pname(m.pid)} × ${m.qty}${m.client ? ' — ' + m.client : ''} · ${reason}`, {tag:'st-' + m.id}); };
+};
 A.livswap = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m) return; swapSheet(m, async (pid, q, d) => {
   const {data, error} = await sb.rpc('livreur_swap', {p_shop:ONLINE.shop.id, p_move:m.id, p_pid:pid, p_qty:q, p_ldate:d});
   if(error || !data){ toast(error ? rpcErr(error) : 'Impossible de modifier cette livraison'); return false; }
