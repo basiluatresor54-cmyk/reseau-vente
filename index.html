@@ -4323,10 +4323,36 @@ A.lnseen = () => { try{ localStorage.setItem(LN_KEY(), String(Date.now())); }cat
 function ntBell(){ if(ONLINE.shop && ONLINE.role === 'livreur'){ const n = livNotifs().filter(x => x.t > lnSeen()).length; return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
   if(!NT.on()) return ''; const n = ntUnread(); return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
 function ntRow(r){ const d = new Date(r.at), t = String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
-  return `<div class="it ntrow ${r.at > ntSeen() ? 'unread' : ''}"><div class="ic c-in" style="font-size:18px">${ntIcon(r)}</div><div class="m"><div class="t" style="white-space:normal">${esc(jrWho(r.actor).replace(/ \(.*\)$/, ''))} <span class="note">· ${iso10(d) === today() ? t : fmtDate(iso10(d)) + ' ' + t}</span></div><div class="d" style="white-space:normal">${ntText(r)}</div></div></div>`; }
+  const click = r.kind === 'move' && ((r.n || {}).type === 'vente') && r.action !== 'delete';
+  return `<${click ? 'button' : 'div'} class="it ntrow ${r.at > ntSeen() ? 'unread' : ''}"${click ? ` data-a="ntact" data-id="${esc(r.item_id)}" style="width:100%;text-align:left"` : ''}><div class="ic c-in" style="font-size:18px">${ntIcon(r)}</div><div class="m"><div class="t" style="white-space:normal">${esc(jrWho(r.actor).replace(/ \(.*\)$/, ''))} <span class="note">· ${iso10(d) === today() ? t : fmtDate(iso10(d)) + ' ' + t}</span></div><div class="d" style="white-space:normal">${ntText(r)}${click ? ' <span class="note">· toucher pour écrire au client ›</span>' : ''}</div></div></${click ? 'button' : 'div'}>`; }
 function ntCard(){ if(!NT.rows.length) return ''; const n = ntUnread(), L = NT.rows.slice(0, n ? Math.min(Math.max(n, 3), 6) : 3);
   return `<div id="ntcard"><div class="sec" style="margin-top:4px"><h2>🔔 Notifications${n ? ` <span class="pill p-attente">${n} nouvelle(s)</span>` : ''}</h2><button class="link" data-a="ntopen">Tout voir</button></div><div class="list" style="margin-bottom:12px">${L.map(ntRow).join('')}</div></div>`; }
 function ntPaint(){ const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('ntcard'); if(c && view === 'home'){ const h = ntCard(); if(h) c.outerHTML = h; } else if(!c && view === 'home' && NT.rows.length && !document.querySelector('#sheet.open, .sheet.open')){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', ntCard()); } }
+// Toucher une notification : écrire au client (merci, mode d'emploi, avis, pourquoi annulé, relance)
+A.ntact = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m){ toast('Commande introuvable (supprimée ?)'); return; }
+  const k = mkCtx(m.client, m.pid), p = prod(m.pid), P = pname(m.pid), hi = `Bonjour ${m.client || ''} 👋`.replace('  ', ' '), shop = S.settings.shop || 'notre boutique';
+  const usage = p && p.details ? p.details : "(écrivez ici le mode d'emploi : comment l'utiliser, combien de fois par jour, les précautions…)";
+  const T = [];
+  if(m.status === 'annule'){
+    T.push(['❓ Pourquoi annulé ?', `${hi}\n\nIci *${shop}*. Votre commande de *${P}* n'a pas pu être livrée${m.cancelReason ? ' (' + m.cancelReason.toLowerCase() + ')' : ''}.\nPouvons-nous savoir ce qui s'est passé ? 🙏\n\nNous pouvons vous livrer au moment qui vous arrange : il suffit de répondre à ce message avec le jour et l'heure.\nMerci beaucoup !`]);
+    relanceTpls('annule', k, '').forEach(t => T.push(t));
+  } else if(m.status === 'livre'){
+    T.push(['🙏 Merci', `${hi}\n\nMerci pour votre commande chez *${shop}* ! 🙏\nNous espérons que votre *${P}* vous plaît.\n\nVous avez une question ? Répondez simplement à ce message, nous sommes là pour vous.\nÀ très bientôt ! 😊`]);
+    T.push(["📖 Mode d'emploi", `${hi}\n\nVoici comment bien utiliser votre *${P}* :\n\n${usage}\n\nPour un bon résultat, suivez ces conseils chaque jour. Une question ? Écrivez-nous 🙏\n*${shop}*`]);
+    T.push(['⭐ Demander un avis', `${hi}\n\nMerci encore pour votre achat chez *${shop}* ! Êtes-vous satisfait(e) de votre *${P}* ?\nVotre avis nous aide beaucoup : une note de 1 à 5 ⭐ suffit 🙏`]);
+  } else {
+    T.push(['📅 Confirmer la livraison', `${hi}\n\nIci *${shop}*. Votre commande de *${P}* est prévue ${whenTxt(m)}. Serez-vous disponible ? 🙏`]);
+  }
+  sheet('💬 Écrire au client', `<div class="card" style="margin-bottom:12px"><b>${esc(m.client || 'Client')}</b>${m.phone ? ' · ' + esc(m.phone) : ' · <span class="red">pas de téléphone</span>'}<br><span class="note">${esc(P)} × ${m.qty} · ${esc(STATUS[m.status] || m.status)}${m.cancelReason ? ' — ' + esc(m.cancelReason) : ''}</span></div>
+    <div class="chips" style="flex-wrap:wrap;margin-bottom:8px">${T.map((t, i) => `<button type="button" class="chip ${i ? '' : 'on'}" data-t="${i}">${esc(t[0])}</button>`).join('')}</div>
+    ${field('Message (vous pouvez le modifier)', `<textarea id="ntMsg" style="min-height:200px">${esc(T[0][1])}</textarea>`)}
+    <a class="btn wa block" id="ntWa" style="margin-top:2px" target="_blank" rel="noopener">${ico('wa')} Envoyer sur WhatsApp</a>
+    ${m.status === 'annule' ? `<button class="btn block" style="margin-top:8px" data-a="promsale:${m.id}">🤝 Noter une promesse (le relancer plus tard)</button>` : ''}
+    <button class="btn block" style="margin-top:8px" data-a="sale:${m.id}">Voir la vente</button>`);
+  const tx = $('#ntMsg'), wa = $('#ntWa'), upd = () => { wa.href = waLink(m.phone || '', tx.value); };
+  upd(); tx.oninput = upd;
+  document.querySelectorAll('#shb .chip[data-t]').forEach(b => b.onclick = () => { document.querySelectorAll('#shb .chip[data-t]').forEach(x => x.classList.toggle('on', x === b)); tx.value = T[+b.dataset.t][1]; upd(); });
+};
 A.ntopen = () => { if(ONLINE.role === 'livreur'){ const L = livNotifs(), seen = lnSeen();
     sheet('🔔 Notifications', L.length ? `<div class="list">${L.map(x => `<div class="it ntrow ${x.t > seen ? 'unread' : ''}"><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}</div></div></div>`).join('')}</div>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
     try{ localStorage.setItem(LN_KEY(), String(Date.now())); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('lncard'); if(c) c.remove(); return; }
