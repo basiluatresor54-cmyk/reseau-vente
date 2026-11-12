@@ -535,11 +535,13 @@ function avail(st, loc, pid){ // quantité disponible (packs : nombre de packs p
 function totalOf(st, pid){ let t = 0; for(const loc in st) t += st[loc][pid]||0; return t; }
 function inHands(st, pid){ let t = 0; for(const loc in st) if(loc) t += st[loc][pid]||0; return t; }
 // Vérifie qu'aucun stock ne devient négatif après une modification
+// Bloque seulement si la modification CRÉE ou AGGRAVE un stock négatif.
+// (Un manque ancien chez un livreur ne doit pas empêcher d'ajouter du stock au dépôt.)
 function checkStock(newMoves, pids){
-  const st = stockAt(newMoves);
+  const st = stockAt(newMoves), before = stockAt(S.moves);
   const set = new Set(); pids.forEach(id => lines(id, 1).forEach(([p]) => set.add(p)));
-  for(const loc in st) for(const pid of set) if((st[loc][pid]||0) < 0)
-    return `Stock insuffisant : ${pname(pid)} ${locName(loc)} (il manque ${-st[loc][pid]})`;
+  for(const loc in st) for(const pid of set){ const q = st[loc][pid] || 0, q0 = qAt(before, loc, pid);
+    if(q < 0 && q < q0) return `Stock insuffisant : ${pname(pid)} ${locName(loc)} (il manque ${-q})`; }
   return '';
 }
 
@@ -4322,7 +4324,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '45c12317c4';
+const APP_BUILD = '77a58db313';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
