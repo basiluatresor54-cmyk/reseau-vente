@@ -4280,7 +4280,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '018bbb6b90';
+const APP_BUILD = '99b8b0b054';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -4309,7 +4309,7 @@ async function ntFetch(){
   try{
     if(!Object.keys(JR.mem).length){ const m = await sb.from('members').select('user_id,role,display_name,phone').eq('shop_id', ONLINE.shop.id); (m.data || []).forEach(x => JR.mem[x.user_id] = x); }
     const since = new Date(Date.now() - 3 * 864e5).toISOString(), me = ONLINE.user && ONLINE.user.id;
-    let q = sb.from('item_log').select('id,kind,action,actor,at,o,n').eq('shop_id', ONLINE.shop.id).gte('at', since).order('at', {ascending:false}).limit(60);
+    let q = sb.from('item_log').select('id,item_id,kind,action,actor,at,o,n').eq('shop_id', ONLINE.shop.id).gte('at', since).order('at', {ascending:false}).limit(60);
     const {data, error} = await q; if(error) return;
     if((data || []).some(r => r.actor && !JR.mem[r.actor])){ const m = await sb.from('members').select('user_id,role,display_name,phone').eq('shop_id', ONLINE.shop.id); (m.data || []).forEach(x => JR.mem[x.user_id] = x); }
     const rows = (data || []).filter(r => r.actor && r.actor !== me && (r.kind === 'move' ? !['plan','promesse','annonce'].includes((r.n || {}).type) : true));
