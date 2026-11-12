@@ -4271,6 +4271,19 @@ async function pull(){
   saveMeta();
   return changed;
 }
+// Livreur : on garde seulement les commandes qui existent encore en ligne (supprimées par le patron = retirées ici)
+let RECON_AT = 0;
+async function livReconcile(force){
+  if(ONLINE.role !== 'livreur' || (!force && Date.now() - RECON_AT < 15000) || lqGet().length) return false;
+  const ids = new Set(); let from = 0;
+  for(let page = 0; page < 20; page++){
+    const {data, error} = await sb.from('items').select('id').eq('shop_id', ONLINE.shop.id).eq('kind', 'move').eq('deleted', false).range(from, from + 999);
+    if(error) return false; data.forEach(r => ids.add(String(r.id))); if(data.length < 1000) break; from += 1000;
+  }
+  RECON_AT = Date.now(); const before = S.moves.length;
+  S.moves = S.moves.filter(m => ids.has(String(m.id)));
+  return S.moves.length !== before;
+}
 async function refreshShop(){
   const {data, error} = await sb.from('shops').select('id,name,settings,status,paid_until').eq('id', ONLINE.shop.id);
   if(error || !data || !data[0]) return false;
@@ -4293,6 +4306,7 @@ async function syncNow(){
     let changed = await refreshShop();
     if(shopWritable()) await pushDirty();
     if(await pull()) changed = true;
+    if(await livReconcile()) changed = true;
     if(changed){ rawSave(); render(); }
     SYNC.pending = shopWritable() ? computeDirty().length : 0;
     SYNC.state = SYNC.pending ? 'pending' : 'ok'; SYNC.err = ''; ONLINE.offline = false;
