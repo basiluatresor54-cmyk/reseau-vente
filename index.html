@@ -4318,7 +4318,7 @@ function livNotifs(){
 }
 function lnRow(x, unread){ const tag = x.id ? 'button' : 'div';
   return `<${tag} class="it ntrow ${unread ? 'unread' : ''}"${x.id ? ` data-a="lnact" data-id="${esc(x.id)}" style="width:100%;text-align:left"` : ''}><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}${x.id ? '<br><span class="note">Toucher pour contacter le client ›</span>' : ''}</div></div></${tag}>`; }
-A.lnact = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m){ toast('Commande introuvable'); return; }
+A.lnact = (_, el) => { const m = S.moves.find(x => String(x.id) === String(el.dataset.id)); if(!m){ toast('Commande pas encore chargée : touchez « En ligne » pour actualiser'); syncNow(); return; }
   const L = liv(m.liv);
   sheet('🛵 ' + (m.client || 'Client'), `<div class="card" style="margin-bottom:12px">
       <div class="dl"><span>Produit</span><span><b>${esc(pname(m.pid))} × ${m.qty}</b></span></div>
@@ -4347,7 +4347,14 @@ function ntCard(){ if(!NT.rows.length) return ''; const n = ntUnread(), L = NT.r
   return `<div id="ntcard"><div class="sec" style="margin-top:4px"><h2>🔔 Notifications${n ? ` <span class="pill p-attente">${n} nouvelle(s)</span>` : ''}</h2><button class="link" data-a="ntopen">Tout voir</button></div><div class="list" style="margin-bottom:12px">${L.map(ntRow).join('')}</div></div>`; }
 function ntPaint(){ const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('ntcard'); if(c && view === 'home'){ const h = ntCard(); if(h) c.outerHTML = h; } else if(!c && view === 'home' && NT.rows.length && !document.querySelector('#sheet.open, .sheet.open')){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', ntCard()); } }
 // Toucher une notification : écrire au client (merci, mode d'emploi, avis, pourquoi annulé, relance)
-A.ntact = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m){ toast('Commande introuvable (supprimée ?)'); return; }
+A.ntact = async (_, el) => { const id = el.dataset.id; let m = S.moves.find(x => String(x.id) === String(id));
+  if(!m){ // pas encore sur ce téléphone : on la cherche en ligne
+    try{ const {data} = await sb.from('items').select('data,deleted').eq('shop_id', ONLINE.shop.id).eq('kind', 'move').eq('id', id).maybeSingle();
+      if(data && !data.deleted && data.data){ m = Object.assign({}, data.data, {id}); if(!S.moves.some(x => String(x.id) === String(id))){ S.moves.push(m); rawSave(); } syncNow(); }
+      else if(data && data.deleted){ toast('Cette commande a été supprimée'); return; }
+    }catch(_){}
+    if(!m){ toast('Commande pas encore chargée : touchez « En ligne » pour actualiser, puis réessayez'); syncNow(); return; }
+  }
   const k = mkCtx(m.client, m.pid), p = prod(m.pid), P = pname(m.pid), hi = `Bonjour ${m.client || ''} 👋`.replace('  ', ' '), shop = S.settings.shop || 'notre boutique';
   const usage = p && p.details ? p.details : "(écrivez ici le mode d'emploi : comment l'utiliser, combien de fois par jour, les précautions…)";
   const T = [];
