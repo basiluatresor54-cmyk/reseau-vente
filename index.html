@@ -4279,6 +4279,24 @@ async function pull(){
   saveMeta();
   return changed;
 }
+/* ---------- Mise à jour automatique de l'application ---------- */
+const APP_BUILD = '018bbb6b90';
+let UPD_SHOWN = false;
+async function checkUpdate(){
+  if(navigator.onLine === false || UPD_SHOWN) return;
+  try{ const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if(!r.ok) return; const j = await r.json();
+    if(!j.v || j.v === APP_BUILD) return;
+    // une seule tentative automatique par version, puis un bouton
+    const k = 'stock_upd_' + j.v; let tried = false; try{ tried = sessionStorage.getItem(k) === '1'; }catch(_){}
+    const busy = (document.getElementById('ov') && !document.getElementById('ov').hidden) || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
+    if(!tried && !busy){ try{ sessionStorage.setItem(k, '1'); }catch(_){} location.reload(); return; }
+    UPD_SHOWN = true;
+    document.body.insertAdjacentHTML('beforeend', `<div id="updbar" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;background:#111827;color:#fff;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3)"><span style="flex:1;font-size:14px;font-weight:650">🔄 Nouvelle version de l'application disponible</span><button class="btn sm primary" onclick="location.reload()">Mettre à jour</button></div>`);
+  }catch(_){}
+}
+setTimeout(checkUpdate, 4000);
+setInterval(() => { if(document.visibilityState !== 'hidden') checkUpdate(); }, 5 * 60000);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkUpdate(); });
 /* ---------- Notifications dans l'application (cloche + accueil) ---------- */
 const NT = {rows:[], loaded:false, busy:false, lastPop:'', on:() => !!ONLINE.shop && ['proprietaire','gerant'].includes(ONLINE.role)};
 const ntKey = () => 'stock_nt_seen_' + (ONLINE.shop ? ONLINE.shop.id : '');

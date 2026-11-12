@@ -1,5 +1,5 @@
 /* Stock & Livreurs — service worker : ouverture instantanée et hors connexion */
-const VERSION = '7274ecf680';
+const VERSION = '1699f7c254';
 const CACHE = 'stock-livreurs-' + VERSION;
 const CORE = ['./', 'index.html', 'supabase.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'guide.html', 'conditions.html'];
 self.addEventListener('install', e => {
@@ -12,10 +12,11 @@ const timeout = (p, ms) => new Promise((res, rej) => { const t = setTimeout(() =
 self.addEventListener('fetch', e => {
   const req = e.request, url = new URL(req.url);
   if(req.method !== 'GET' || url.origin !== location.origin) return;           // Supabase et WhatsApp : jamais en cache
+  if(url.pathname.endsWith('version.json')){ e.respondWith(fetch(req, {cache:'no-store'}).catch(() => new Response('{}', {headers:{'Content-Type':'application/json'}}))); return; }
   const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html');
   if(isPage){
     // Page : réseau d'abord (mises à jour), sinon la copie gardée (hors connexion ou réseau trop lent)
-    e.respondWith(timeout(fetch(req), 3500).then(r => { if(r && r.ok){ const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); } return r; })
+    e.respondWith(timeout(fetch(req.url, {cache:'no-store', credentials:'same-origin'}), 6000).then(r => { if(r && r.ok){ const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); } return r; })
       .catch(() => caches.match('index.html').then(r => r || caches.match('./'))));
     return;
   }
