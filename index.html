@@ -4172,6 +4172,10 @@ render = function(){
   rawRender();
   if(!ONLINE.shop) return;
   const pend = declsOf().filter(d => d.status === 'attente');
+  if(view === 'home' && ['off','install'].includes(pushState()) && (() => { try{ return localStorage.getItem('stock_notif_later') !== today(); }catch(_){ return true; } })()){
+    const st = pushState();
+    $('#main').insertAdjacentHTML('afterbegin', `<div class="subban warn" style="display:block;text-align:left">🔔 <b>Notifications pas activées sur ce téléphone</b> : vous ne serez pas prévenu quand un livreur livre, annule ou verse l'argent.<div class="btns" style="margin-top:8px">${st === 'install' ? `<button class="btn sm primary" data-a="install">📲 Installer l'application (obligatoire sur iPhone)</button>` : `<button class="btn sm primary" data-a="pushon">🔔 Activer maintenant</button>`}<button class="btn sm" data-a="notiflater">Plus tard</button></div></div>`);
+  }
   if(pend.length && (view === 'home' || view === 'livreurs') && !['livreur','vendeur'].includes(ONLINE.role)){
     $('#main').insertAdjacentHTML('afterbegin', `<button class="subban warn" style="display:block;width:100%;text-align:left" data-a="decllist">💸 ${pend.length} versement(s) déclaré(s) par vos livreurs, à confirmer (${money(pend.reduce((t,d) => t + declUSD(d), 0))}) — touchez pour vérifier</button>`);
   }
@@ -4653,6 +4657,7 @@ CUSTOM.moi = () => {
       ${m.note ? `<p class="note" style="margin-top:6px">📝 ${esc(m.note)}</p>` : ''}
       <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livcancel" data-id="${m.id}">❌ Annuler la commande</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}</div>`;
   return `<div class="card" style="margin-bottom:12px"><b>${esc(L ? L.name : 'Livreur')}</b> · ${esc(L && L.city || '')}<br><span class="note">${esc(S.settings.shop)}</span><div id="moiClock" style="margin-top:6px;font-weight:650;font-size:14px">📅 ${esc(moiNow())}</div></div>
+  ${pushState() !== 'on' ? notifCard() : ''}
   ${(() => { const seen = (() => { try{ return JSON.parse(localStorage.getItem('stock_ann_seen') || '[]'); }catch(_){ return []; } })();
     const an = S.moves.filter(m => m.type === 'annonce' && m.liv === lid && !seen.includes(m.id) && (m.date || '') >= addDays(T, -14)).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 3);
     return an.map(m => `<div class="card" style="margin-bottom:10px;border:2px solid var(--brand)"><b>📢 Message du patron</b> <span class="note">· ${esc(fmtDate(m.date))}</span><p style="margin:6px 0 8px;white-space:pre-line">${esc(m.text)}</p><button class="btn sm" data-a="annseen" data-id="${m.id}">👍 OK, j'ai lu</button></div>`).join(''); })()}
@@ -4674,7 +4679,7 @@ CUSTOM.moi = () => {
   <div class="sec"><h2>À livrer${MOI_DAY === 'late' ? ' — en retard' : MOI_DAY ? ' — ' + esc(moiLab(MOI_DAY)) : ''}</h2></div>
   ${shown.length ? groups.map(g => `<p style="font-weight:800;margin:10px 2px 6px;${g.k === 'late' ? 'color:var(--bad,#dc2626)' : ''}">${gHead(g)}</p>` + g.items.map(card).join('')).join('') : `<div class="card empty">${MOI_DAY ? 'Aucune livraison à faire ce jour-là 👍' : 'Aucune livraison en attente 👍'}</div>`}
   ${stock.length ? `<div class="sec"><h2>Mon stock</h2></div><div class="card"><table class="tb"><tr><th>Produit</th><th class="rt">Disponible</th><th class="rt">Réservé</th></tr>${stock.map(([pid,q,p]) => `<tr><td>${esc(pname(pid))}</td><td class="rt num"><b>${q}</b></td><td class="rt num">${p}</td></tr>`).join('')}</table></div>` : ''}
-  ${notifCard()}
+  ${pushState() === 'on' ? notifCard() : ''}
   ${flowHTML(lid, 15)}
   ${invHistHTML(lid)}
   ${declsOf(lid).length ? `<div class="sec"><h2>Mes versements</h2></div><div class="list">${declsOf(lid).slice(0, 8).map(d => declRow(d, false)).join('')}</div>` : ''}
@@ -5106,6 +5111,7 @@ async function pushDisable(){
   PUSH_ON = false; render(); toast('Notifications désactivées');
 }
 A.pushon = () => pushEnable();
+A.notiflater = () => { try{ localStorage.setItem('stock_notif_later', today()); }catch(_){} render(); };
 A.pushoff = () => pushDisable();
 A.pushtest = () => { sb.functions.invoke('push', {body:{mode:'selftest'}}).then(() => toast('Notification de test envoyée')).catch(() => toast('Hors ligne')); };
 function notifCard(){
@@ -5113,7 +5119,7 @@ function notifCard(){
   const what = liv ? 'vos nouvelles livraisons, un rappel 1 h avant chaque livraison et la confirmation de vos versements' : 'les versements déclarés, les livraisons faites, un rappel 1 h avant chaque livraison, le résumé du matin et le point du soir (19 h)';
   const body = st === 'on' ? `<p class="note" style="margin-bottom:10px">✅ Activées sur cet appareil : ${what}.</p><div class="btns"><button class="btn" data-a="pushtest">Envoyer un test</button><button class="btn ghost-bad" data-a="pushoff">Désactiver</button></div>`
     : st === 'install' ? `<p class="note">Sur iPhone, les notifications marchent seulement quand l'application est <b>installée sur l'écran d'accueil</b> : Safari → Partager → « Sur l'écran d'accueil », puis ouvrez-la depuis l'icône et revenez ici.</p><button class="btn block" style="margin-top:8px" data-a="install">📲 Voir comment installer</button>`
-    : st === 'denied' ? `<p class="note">Les notifications sont bloquées. Autorisez-les dans les réglages du téléphone (Réglages → Notifications → Stock), puis revenez ici.</p>`
+    : st === 'denied' ? `<p class="note">Les notifications sont bloquées. Autorisez-les dans les réglages du téléphone (Réglages → Notifications → Réseau Vente), puis revenez ici.</p>`
     : st === 'unsupported' ? `<p class="note">Ce navigateur ne permet pas les notifications. Utilisez Chrome (Android) ou l'application installée sur iPhone.</p>`
     : `<p class="note" style="margin-bottom:10px">Recevez sur ce téléphone : ${what}.</p><button class="btn primary block" data-a="pushon">🔔 Activer les notifications</button>`;
   return `<div class="sec"><h2>🔔 Notifications</h2></div><div class="card" style="margin-bottom:12px">${body}</div>`;
