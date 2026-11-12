@@ -1275,6 +1275,7 @@ const modeField = st => field('Comment vendez-vous ?', `<select name="mode">${Ob
 function vReglages(){
   const st = S.settings;
   return `<div class="sec" style="margin-top:4px"><h2>Ma boutique</h2></div>
+  <button type="button" class="card" data-a="msgs" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin-bottom:12px"><span style="font-size:24px">💬</span><span style="flex:1"><b>Messages aux clients</b><br><span class="note">Merci, mode d'emploi, avis, pourquoi annulé… à personnaliser une fois pour toutes${S.settings.msgs && Object.keys(S.settings.msgs).length ? ' · ✅ personnalisés' : ''}</span></span><span class="note">›</span></button>
   <form class="card" id="setf">
     ${field('Nom de la boutique', `<input name="shop" value="${esc(st.shop)}" maxlength="40">`)}
     <div class="f"><span>Logo</span><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1702,6 +1703,44 @@ function relanceTpls(kind, k, offre){
     ['💛 Fidélité', `${hi}\n\nIci *${k.shop}* 😊 Merci encore pour votre confiance${k.p ? ` et votre achat de ${P}` : ''} !\nComment le trouvez-vous ? Votre avis compte beaucoup pour nous 🙏${offerLn(offre)}\n\nVotre produit arrive bientôt à sa fin ? Recommandez en *1 message* :\n${trust(k)}\n\n👉 Répondez *OUI* et on vous livre aujourd'hui ou demain.${sig(k)}`],
     ['🎁 Offre client fidèle', `${hi}\n\nVous faites partie de nos *meilleurs clients* chez *${k.shop}* ⭐ Alors on vous gâte :${offerLn(offre || 'une remise spéciale sur votre prochaine commande')}\n\n${trust(k)}\n\n⏳ Offre valable *cette semaine seulement*.\n👉 Répondez *JE PROFITE* pour en bénéficier.${sig(k)}`],
     ['🆕 Nouveautés', `${hi}\n\nDu nouveau chez *${k.shop}* ! 🎉 Nous venons de recevoir du stock${k.p ? ` (dont ${P} que vous aimez)` : ''}.${offerLn(offre)}\n\n${trust(k)}\n\n👉 Envoyez *CATALOGUE* et nous vous montrons tout en photos 📸${sig(k)}`]];
+}
+/* ---------- Messages aux clients personnalisables (Réglages → Messages aux clients) ---------- */
+const MSG_KEYS = ['confirme', 'merci', 'emploi', 'avis', 'annule'];
+const MSG_LBL = {confirme:'📅 Confirmer la livraison', merci:'🙏 Merci', emploi:"📖 Mode d'emploi", avis:'⭐ Demander un avis', annule:'❓ Pourquoi annulé ?'};
+const MSG_WHEN = {confirme:'commande en attente ou en route', merci:'après la livraison', emploi:'après la livraison', avis:'après la livraison', annule:'commande annulée'};
+const MSG_DEF = {
+  confirme:"Bonjour {client} 👋\n\nIci *{boutique}*. Votre commande de *{produit}* est prévue {quand}. Serez-vous disponible ? 🙏",
+  merci:"Bonjour {client} 👋\n\nMerci pour votre commande chez *{boutique}* ! 🙏\nNous espérons que votre *{produit}* vous plaît.\n\nVous avez une question ? Répondez simplement à ce message, nous sommes là pour vous.\nÀ très bientôt ! 😊",
+  emploi:"Bonjour {client} 👋\n\nVoici comment bien utiliser votre *{produit}* :\n\n{mode_emploi}\n\nPour un bon résultat, suivez ces conseils chaque jour. Une question ? Écrivez-nous 🙏\n*{boutique}*",
+  avis:"Bonjour {client} 👋\n\nMerci encore pour votre achat chez *{boutique}* ! Êtes-vous satisfait(e) de votre *{produit}* ?\nVotre avis nous aide beaucoup : une note de 1 à 5 ⭐ suffit 🙏",
+  annule:"Bonjour {client} 👋\n\nIci *{boutique}*. Votre commande de *{produit}* n'a pas pu être livrée{raison}.\nPouvons-nous savoir ce qui s'est passé ? 🙏\n\nNous pouvons vous livrer au moment qui vous arrange : il suffit de répondre à ce message avec le jour et l'heure.\nMerci beaucoup !"};
+const EMPLOI_VIDE = "(écrivez ici le mode d'emploi : comment l'utiliser, combien de fois par jour, les précautions…)";
+const msgTpl = k => { const c = (S.settings.msgs || {})[k]; return c && c.trim() ? c : MSG_DEF[k]; };
+function msgVars(m){ const p = prod(m.pid);
+  return {client:m.client || '', produit:pname(m.pid), boutique:S.settings.shop || 'notre boutique', quantite:String(m.qty || 1), quand:whenTxt(m),
+    raison:m.cancelReason ? ' (' + String(m.cancelReason).toLowerCase() + ')' : '', mode_emploi:p && p.usage ? p.usage : EMPLOI_VIDE}; }
+function msgFill(k, m){ const V = msgVars(m); return msgTpl(k).replace(/\{(\w+)\}/g, (a, x) => x in V ? V[x] : a).replace(/Bonjour  👋/, 'Bonjour 👋').replace(/[ \t]+\n/g, '\n'); }
+function msgsSheet(k, el){ if(el) window.MSGS_BACK = null; // ouvert depuis Réglages
+  const ex = S.moves.slice().reverse().find(m => m.type === 'vente' && m.client) || {client:'Mme Nsimba', pid:(S.products[0] || {}).id, qty:1, date:today(), ddate:today(), dtime:'14:00', cancelReason:"Le client n'a pas pris la commande"};
+  sheet('💬 Messages aux clients', `<p class="note" style="margin-bottom:10px">Écrivez vos messages <b>une fois pour toutes</b>. Ils seront prêts quand vous touchez une notification (Livré, Annulé…) : il suffit de toucher « Envoyer sur WhatsApp ». Vous pourrez encore les modifier avant chaque envoi.</p>
+    <div class="card" style="margin-bottom:12px"><b>Mots magiques</b> <span class="note">(remplacés automatiquement)</span><br><span class="note"><b>{client}</b> nom du client · <b>{produit}</b> · <b>{boutique}</b> · <b>{quand}</b> jour et heure de livraison · <b>{quantite}</b> · <b>{raison}</b> raison de l'annulation · <b>{mode_emploi}</b> le mode d'emploi du produit (écrit dans la fiche du produit)</span></div>
+    <form id="msgf">${MSG_KEYS.map(x => `<div class="card" style="margin-bottom:12px" id="mk-${x}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>${MSG_LBL[x]}</b><span class="note">${MSG_WHEN[x]}</span></div>
+      <div class="f" style="margin:8px 0 0"><textarea name="${x}" style="min-height:${x === 'emploi' || x === 'annule' || x === 'merci' ? 200 : 140}px">${esc(msgTpl(x))}</textarea></div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px"><button type="button" class="btn sm" data-a="msgprev:${x}">👁️ Aperçu</button><button type="button" class="btn sm" data-a="msgreset:${x}">↺ Message d'origine</button></div>
+      <div class="note" id="mp-${x}" style="white-space:pre-line;margin-top:6px"></div></div>`).join('')}
+    <button class="btn primary block">Enregistrer mes messages</button></form>`);
+  A.msgprev = x => { const t = document.querySelector(`#msgf [name=${x}]`), o = S.settings.msgs; S.settings.msgs = Object.assign({}, o, {[x]:t.value}); const v = msgFill(x, ex); S.settings.msgs = o; document.getElementById('mp-' + x).textContent = '— Aperçu —\n' + v; };
+  A.msgreset = x => { document.querySelector(`#msgf [name=${x}]`).value = MSG_DEF[x]; document.getElementById('mp-' + x).textContent = ''; };
+  document.getElementById('msgf').onsubmit = e => { e.preventDefault(); const E = e.target.elements, o = {};
+    MSG_KEYS.forEach(x => { const v = E[x].value.replace(/\r/g, '').trim(); if(v && v !== MSG_DEF[x]) o[x] = v; });
+    S.settings.msgs = o; save(); closeSheet(); toast('Messages enregistrés ✅'); render(); if(window.MSGS_BACK){ const f = window.MSGS_BACK; window.MSGS_BACK = null; f(); } };
+  if(k){ setTimeout(() => { const c = document.getElementById('mk-' + k); if(c) c.scrollIntoView({block:'start'}); }, 100); }
+}
+// Mode d'emploi d'un produit (une fois pour toutes, depuis « Écrire au client »)
+function usageEdit(pid){ const p = prod(pid); if(!p) return;
+  sheet("📖 Mode d'emploi : " + p.name, `<form id="usef">${field("Mode d'emploi (envoyé au client après la livraison)", `<textarea name="usage" style="min-height:200px" placeholder="Ex : Appliquer matin et soir sur la zone propre et sèche. Pendant 7 jours. Ne pas avaler. Garder au frais.">${esc(p.usage || '')}</textarea>`)}
+    <button class="btn primary block">Enregistrer</button></form>`);
+  document.getElementById('usef').onsubmit = e => { e.preventDefault(); p.usage = e.target.elements.usage.value.trim(); save(); closeSheet(); toast("Mode d'emploi enregistré ✅"); if(window.USAGE_BACK){ const f = window.USAGE_BACK; window.USAGE_BACK = null; f(); } };
 }
 const relKind = c => annToRelance(c) ? 'annule' : 'client';
 function relanceText(c){ return relanceTpls(relKind(c), mkCtx(c.name, annToRelance(c) ? c.annPid : c.lastPid))[0][1]; }
@@ -2474,6 +2513,7 @@ function productForm(id, opt = {}){
       <label class="btn sm" style="cursor:pointer">Choisir une photo<input type="file" accept="image/*" id="pfPhoto" hidden></label>
       <button type="button" class="btn sm" id="pfNoPhoto" ${p && p.photo ? '' : 'hidden'}>Retirer</button></div></div>
     ${field('Détails', `<textarea name="details" placeholder="Description, taille, couleur, contenance…">${esc(p?.details)}</textarea>`)}
+    ${field("📖 Mode d'emploi (optionnel)", `<textarea name="usage" placeholder="Comment l'utiliser, combien de fois par jour, les précautions… Il sera prêt à envoyer au client après la livraison.">${esc(p?.usage)}</textarea>`)}
     <div class="row2">${field('Catégorie', pickSel('cat', [...new Set(DEF_CATS.concat(cats))].sort(byFr), p?.cat || '', 'Choisir la catégorie…', '✏️ Autre catégorie…', 'Tapez la catégorie'))}
       ${field('Devise du prix', `<select name="cur"><option value="$" ${p?.cur!=='FC'?'selected':''}>Dollar ($)</option><option value="FC" ${p?.cur==='FC'?'selected':''}>Monnaie locale (${esc(LC())})</option></select>`)}</div>
     <div class="row2">${field('Prix de vente *', `<input name="sell" type="number" step="any" min="0" required value="${p ? p.sell : ''}" placeholder="0">`)}${field('Prix normal avant promo', `<input name="old" type="number" step="any" min="0" value="${p && num(p.old) ? p.old : ''}" placeholder="Optionnel">`, 'Si rempli et plus haut : promo affichée (prix barré)')}</div>
@@ -2537,7 +2577,7 @@ function productForm(id, opt = {}){
     if(p && S.moves.some(m => m.pid === p.id) && kitKey(kitv) !== kitKey(isKit(p) ? p.kit : null)){
       toast(isKit(p) ? 'Ce pack a déjà des ventes : sa composition ne peut plus changer' : 'Ce produit a déjà du stock : créez plutôt un nouveau pack'); return; }
     if(p && isKit(p) && kitv && kitKey(kitv) === kitKey(p.kit)) kitv = p.kit;
-    const data = {name, details:E.details.value.trim(), cat:E.cat.value.trim(), cur:E.cur.value, sell:num(E.sell.value), old:num(E.old.value) > num(E.sell.value) ? num(E.old.value) : 0, buy:num(E.buy.value), comm:num(E.comm.value), commMode:E.commMode.value, commCity:readCityComm(f), alert:Math.max(0, Math.round(num(E.alert.value))), kit:kitv, photo, hide:!E.show.checked};
+    const data = {name, details:E.details.value.trim(), usage:E.usage ? E.usage.value.trim() : (p && p.usage) || '', cat:E.cat.value.trim(), cur:E.cur.value, sell:num(E.sell.value), old:num(E.old.value) > num(E.sell.value) ? num(E.old.value) : 0, buy:num(E.buy.value), comm:num(E.comm.value), commMode:E.commMode.value, commCity:readCityComm(f), alert:Math.max(0, Math.round(num(E.alert.value))), kit:kitv, photo, hide:!E.show.checked};
     if(p){ Object.assign(p, data); toast('Produit modifié'); }
     else {
       const np = Object.assign({id:uid()}, data); S.products.push(np);
@@ -3763,6 +3803,7 @@ document.addEventListener('change', e => { if(e.target.id === 'shPid'){ shPid = 
 document.addEventListener('input', e => { if(e.target.id === 'impQ'){ impQ = e.target.value; const p = e.target.selectionStart; render(); const i = $('#impQ'); if(i){ i.focus(); try{ i.setSelectionRange(p, p); }catch(_){} } } });
 
 // les lignes « argent » du livre ouvrent le formulaire d'argent
+A.msgs = msgsSheet; A.usageedit = usageEdit;
 A.money = (t, el) => { if(['versement','paiecomm','depense'].includes(t)) moneyForm(t, {liv: el.dataset.liv, cat: el.dataset.cat}); else moneyForm(null, {id:t}); };
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-a]'); if(!el) return;
@@ -4281,7 +4322,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'd42fb6d0fc';
+const APP_BUILD = '988ea929a3';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -4380,28 +4421,32 @@ A.ntact = async (_, el) => { const id = el.dataset.id; let m = S.moves.find(x =>
     }catch(_){}
     if(!m){ toast('Commande pas encore chargée : touchez « En ligne » pour actualiser, puis réessayez'); syncNow(); return; }
   }
-  const k = mkCtx(m.client, m.pid), p = prod(m.pid), P = pname(m.pid), hi = `Bonjour ${m.client || ''} 👋`.replace('  ', ' '), shop = S.settings.shop || 'notre boutique';
-  const usage = p && p.details ? p.details : "(écrivez ici le mode d'emploi : comment l'utiliser, combien de fois par jour, les précautions…)";
+  const k = mkCtx(m.client, m.pid), p = prod(m.pid);
   const T = [];
   if(m.status === 'annule'){
-    T.push(['❓ Pourquoi annulé ?', `${hi}\n\nIci *${shop}*. Votre commande de *${P}* n'a pas pu être livrée${m.cancelReason ? ' (' + m.cancelReason.toLowerCase() + ')' : ''}.\nPouvons-nous savoir ce qui s'est passé ? 🙏\n\nNous pouvons vous livrer au moment qui vous arrange : il suffit de répondre à ce message avec le jour et l'heure.\nMerci beaucoup !`]);
+    T.push([MSG_LBL.annule, msgFill('annule', m), 'annule']);
     relanceTpls('annule', k, '').forEach(t => T.push(t));
   } else if(m.status === 'livre'){
-    T.push(['🙏 Merci', `${hi}\n\nMerci pour votre commande chez *${shop}* ! 🙏\nNous espérons que votre *${P}* vous plaît.\n\nVous avez une question ? Répondez simplement à ce message, nous sommes là pour vous.\nÀ très bientôt ! 😊`]);
-    T.push(["📖 Mode d'emploi", `${hi}\n\nVoici comment bien utiliser votre *${P}* :\n\n${usage}\n\nPour un bon résultat, suivez ces conseils chaque jour. Une question ? Écrivez-nous 🙏\n*${shop}*`]);
-    T.push(['⭐ Demander un avis', `${hi}\n\nMerci encore pour votre achat chez *${shop}* ! Êtes-vous satisfait(e) de votre *${P}* ?\nVotre avis nous aide beaucoup : une note de 1 à 5 ⭐ suffit 🙏`]);
+    ['merci', 'emploi', 'avis'].forEach(x => T.push([MSG_LBL[x], msgFill(x, m), x]));
   } else {
-    T.push(['📅 Confirmer la livraison', `${hi}\n\nIci *${shop}*. Votre commande de *${P}* est prévue ${whenTxt(m)}. Serez-vous disponible ? 🙏`]);
+    T.push([MSG_LBL.confirme, msgFill('confirme', m), 'confirme']);
   }
-  sheet('💬 Écrire au client', `<div class="card" style="margin-bottom:12px"><b>${esc(m.client || 'Client')}</b>${m.phone ? ' · ' + esc(m.phone) : ' · <span class="red">pas de téléphone</span>'}<br><span class="note">${esc(P)} × ${m.qty} · ${esc(STATUS[m.status] || m.status)}${m.cancelReason ? ' — ' + esc(m.cancelReason) : ''}</span></div>
-    <div class="chips" style="flex-wrap:wrap;margin-bottom:8px">${T.map((t, i) => `<button type="button" class="chip ${i ? '' : 'on'}" data-t="${i}">${esc(t[0])}</button>`).join('')}</div>
-    ${field('Message (vous pouvez le modifier)', `<textarea id="ntMsg" style="min-height:200px">${esc(T[0][1])}</textarea>`)}
+  const c0 = Math.max(0, T.findIndex(t => t[2] && t[2] === el.dataset.tab));
+  sheet('💬 Écrire au client', `<div class="card" style="margin-bottom:12px"><b>${esc(m.client || 'Client')}</b>${m.phone ? ' · ' + esc(m.phone) : ' · <span class="red">pas de téléphone</span>'}<br><span class="note">${esc(pname(m.pid))} × ${m.qty} · ${esc(STATUS[m.status] || m.status)}${m.cancelReason ? ' — ' + esc(m.cancelReason) : ''}</span></div>
+    <div class="chips" style="flex-wrap:wrap;margin-bottom:8px">${T.map((t, i) => `<button type="button" class="chip ${i === c0 ? 'on' : ''}" data-t="${i}">${esc(t[0])}</button>`).join('')}</div>
+    <div id="ntUse"></div>
+    ${field('Message (vous pouvez le modifier)', `<textarea id="ntMsg" style="min-height:200px">${esc(T[c0][1])}</textarea>`)}
     <a class="btn wa block" id="ntWa" style="margin-top:2px" target="_blank" rel="noopener">${ico('wa')} Envoyer sur WhatsApp</a>
     ${m.status === 'annule' ? `<button class="btn block" style="margin-top:8px" data-a="promsale:${m.id}">🤝 Noter une promesse (le relancer plus tard)</button>` : ''}
-    <button class="btn block" style="margin-top:8px" data-a="sale:${m.id}">Voir la vente</button>`);
+    <button class="btn block" style="margin-top:8px" data-a="sale:${m.id}">Voir la vente</button>
+    <button class="btn block" style="margin-top:8px" id="ntEdit">✏️ Personnaliser ces messages (une fois pour toutes)</button>`);
   const tx = $('#ntMsg'), wa = $('#ntWa'), upd = () => { wa.href = waLink(m.phone || '', tx.value); };
-  upd(); tx.oninput = upd;
-  document.querySelectorAll('#shb .chip[data-t]').forEach(b => b.onclick = () => { document.querySelectorAll('#shb .chip[data-t]').forEach(x => x.classList.toggle('on', x === b)); tx.value = T[+b.dataset.t][1]; upd(); });
+  let cur = c0; const back = () => { const b = document.createElement('div'); b.dataset.id = m.id; b.dataset.tab = T[cur][2] || ''; A.ntact('', b); };
+  const useBox = () => { const u = $('#ntUse'); if(!u) return; u.innerHTML = T[cur][2] === 'emploi' && p && !p.usage ? `<div class="card" style="margin-bottom:10px;border:1px dashed var(--brand)"><span class="note">Le mode d'emploi de <b>${esc(p.name)}</b> n'est pas encore écrit.</span><button type="button" class="btn sm primary" style="margin-top:6px" id="ntUseBtn">✏️ L'écrire une fois pour toutes</button></div>` : '';
+    const ub = $('#ntUseBtn'); if(ub) ub.onclick = () => { window.USAGE_BACK = back; A.usageedit(p.id); }; };
+  upd(); tx.oninput = upd; useBox();
+  $('#ntEdit').onclick = () => { window.MSGS_BACK = back; A.msgs(T[cur][2] && MSG_KEYS.includes(T[cur][2]) ? T[cur][2] : ''); };
+  document.querySelectorAll('#shb .chip[data-t]').forEach(b => b.onclick = () => { document.querySelectorAll('#shb .chip[data-t]').forEach(x => x.classList.toggle('on', x === b)); cur = +b.dataset.t; tx.value = T[cur][1]; upd(); useBox(); });
 };
 A.ntopen = () => { if(ONLINE.role === 'livreur'){ const L = livNotifs(), seen = lnSeen();
     sheet('🔔 Notifications', L.length ? `<p class="note" style="margin-bottom:8px">Touchez ✕ pour supprimer une notification.</p><div class="list">${L.map(x => lnRow(x, x.t > seen)).join('')}</div><button class="btn block danger" style="margin-top:12px" data-a="ntclear">🗑️ Tout effacer</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
