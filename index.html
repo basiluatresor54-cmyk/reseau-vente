@@ -230,6 +230,9 @@ body.authon .top, body.authon nav.nav, body.authon .fab, body.authon main{displa
 .syncpill{flex:none;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;background:rgba(255,255,255,.18);color:inherit;white-space:nowrap}
 .syncpill.s-off,.syncpill.s-wait{background:#fff3;box-shadow:inset 0 0 0 1.5px #fde68a}
 .syncpill.s-err{background:#fecaca;color:#7f1d1d}
+.ntbell{flex:none;position:relative;width:38px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.18);color:inherit;font-size:17px;margin-right:6px;cursor:pointer}
+.ntbell b{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#ef4444;color:#fff;font-size:11px;line-height:18px;font-weight:800}
+.ntrow.unread{background:color-mix(in srgb,var(--brand) 9%,transparent)}
 body.livmode nav.nav{display:none!important}
 body.livmode{padding-bottom:24px}
 @media (min-width:900px){body.livmode{padding-left:0}}
@@ -4164,7 +4167,7 @@ render = function(){
     $('#fab').style.display = 'none';
     document.body.classList.toggle('livmode', v === 'moi');
     $('#main').innerHTML = (v === 'moi' ? '' : `<button class="back" data-a="nav:plus">‹ Retour</button>`) + CUSTOM[v]();
-    $('#top').insertAdjacentHTML('beforeend', `<button class="syncpill" id="syncpill" data-a="syncnow"></button>`); paintSync();
+    $('#top').insertAdjacentHTML('beforeend', ntBell() + `<button class="syncpill" id="syncpill" data-a="syncnow"></button>`); paintSync();
     if(CUSTOM_AFTER[v]) CUSTOM_AFTER[v]();
     return;
   }
@@ -4172,6 +4175,7 @@ render = function(){
   rawRender();
   if(!ONLINE.shop) return;
   const pend = declsOf().filter(d => d.status === 'attente');
+  if(view === 'home' && NT.on()){ const c = ntCard(); if(c){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', c); else $('#main').insertAdjacentHTML('afterbegin', c); } }
   if(view === 'home' && ['off','install'].includes(pushState()) && (() => { try{ return localStorage.getItem('stock_notif_later') !== today(); }catch(_){ return true; } })()){
     const st = pushState();
     $('#main').insertAdjacentHTML('afterbegin', `<div class="subban warn" style="display:block;text-align:left">🔔 <b>Notifications pas activées sur ce téléphone</b> : vous ne serez pas prévenu quand un livreur livre, annule ou verse l'argent.<div class="btns" style="margin-top:8px">${st === 'install' ? `<button class="btn sm primary" data-a="install">📲 Installer l'application (obligatoire sur iPhone)</button>` : `<button class="btn sm primary" data-a="pushon">🔔 Activer maintenant</button>`}<button class="btn sm" data-a="notiflater">Plus tard</button></div></div>`);
@@ -4187,7 +4191,7 @@ render = function(){
     $('#main').insertAdjacentHTML('beforeend', `<div class="list menu" style="margin-top:12px"><a class="it" href="guide.html" target="_blank" rel="noopener" style="text-decoration:none"><div class="ic c-in">${ico('book')}</div><div class="m"><div class="t">Guide d'utilisation</div><div class="d">Comment utiliser l'application, pas à pas</div></div>${ico('chev')}</a><a class="it" href="guide-livreur.html" target="_blank" rel="noopener" style="text-decoration:none"><div class="ic c-send">${ico('book')}</div><div class="m"><div class="t">Guide du livreur</div><div class="d">À envoyer à vos livreurs</div></div>${ico('chev')}</a></div>`);
   }
   const si = subInfo(ONLINE.shop), main = $('#main');
-  $('#top').insertAdjacentHTML('beforeend', `<button class="syncpill" id="syncpill" data-a="syncnow"></button>`); paintSync();
+  $('#top').insertAdjacentHTML('beforeend', ntBell() + `<button class="syncpill" id="syncpill" data-a="syncnow"></button>`); paintSync();
   if(view === 'home' && !S.products.length && !S.moves.length && shopWritable()){
     const wb = localWB();
     if(wb) main.insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand)"><b>Données trouvées sur cet appareil</b><p class="note" style="margin:4px 0 10px">L'application « ${esc(wb.settings && wb.settings.shop || 'WB Stock')} » contient ${wb.products.length} produit(s), ${wb.livreurs.length} livreur(s) et ${wb.moves.length} opération(s). Voulez-vous les mettre en ligne dans cette boutique ?</p><button class="btn primary block" data-a="importwb">Importer ces données</button></div>`);
@@ -4275,6 +4279,38 @@ async function pull(){
   saveMeta();
   return changed;
 }
+/* ---------- Notifications dans l'application (cloche + accueil) ---------- */
+const NT = {rows:[], loaded:false, busy:false, lastPop:'', on:() => !!ONLINE.shop && ['proprietaire','gerant'].includes(ONLINE.role)};
+const ntKey = () => 'stock_nt_seen_' + (ONLINE.shop ? ONLINE.shop.id : '');
+const ntSeen = () => { try{ return localStorage.getItem(ntKey()) || ''; }catch(_){ return ''; } };
+const ntUnread = () => NT.rows.filter(r => r.at > ntSeen()).length;
+const ntText = r => jrText(r).replace(/ \(avant : [^)]*\)/, '').replace(/ · 🛵 [^·<]*$/, '');
+function ntIcon(r){ const n = r.n || {}, t = n.type; if(r.action === 'delete') return '🗑️'; if(r.action === 'status') return n.status === 'livre' ? '✅' : n.status === 'annule' ? '❌' : n.status === 'encours' ? '🛵' : '📅'; if(t === 'decl') return '💸'; if(t === 'vente') return '🛒'; return '✏️'; }
+async function ntFetch(){
+  if(!NT.on() || NT.busy || navigator.onLine === false) return; NT.busy = true;
+  try{
+    if(!Object.keys(JR.mem).length){ const m = await sb.from('members').select('user_id,role,display_name,phone').eq('shop_id', ONLINE.shop.id); (m.data || []).forEach(x => JR.mem[x.user_id] = x); }
+    const since = new Date(Date.now() - 3 * 864e5).toISOString(), me = ONLINE.user && ONLINE.user.id;
+    let q = sb.from('item_log').select('id,kind,action,actor,at,o,n').eq('shop_id', ONLINE.shop.id).gte('at', since).order('at', {ascending:false}).limit(60);
+    const {data, error} = await q; if(error) return;
+    if((data || []).some(r => r.actor && !JR.mem[r.actor])){ const m = await sb.from('members').select('user_id,role,display_name,phone').eq('shop_id', ONLINE.shop.id); (m.data || []).forEach(x => JR.mem[x.user_id] = x); }
+    const rows = (data || []).filter(r => r.actor && r.actor !== me && (r.kind === 'move' ? !['plan','promesse','annonce'].includes((r.n || {}).type) : true));
+    const fresh = NT.loaded ? rows.filter(r => r.at > (NT.lastPop || ntSeen())) : [];
+    NT.rows = rows; NT.loaded = true; if(rows[0]) NT.lastPop = rows[0].at > NT.lastPop ? rows[0].at : NT.lastPop;
+    if(fresh.length){ toast(`${ntIcon(fresh[0])} ${jrWho(fresh[0].actor).replace(/ \(.*\)$/, '')} ${ntText(fresh[0]).replace(/<[^>]+>/g, '')}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}`); try{ navigator.vibrate && navigator.vibrate(120); }catch(_){} }
+    ntPaint();
+  } finally { NT.busy = false; }
+}
+function ntBell(){ if(!NT.on()) return ''; const n = ntUnread(); return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
+function ntRow(r){ const d = new Date(r.at), t = String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
+  return `<div class="it ntrow ${r.at > ntSeen() ? 'unread' : ''}"><div class="ic c-in" style="font-size:18px">${ntIcon(r)}</div><div class="m"><div class="t" style="white-space:normal">${esc(jrWho(r.actor).replace(/ \(.*\)$/, ''))} <span class="note">· ${iso10(d) === today() ? t : fmtDate(iso10(d)) + ' ' + t}</span></div><div class="d" style="white-space:normal">${ntText(r)}</div></div></div>`; }
+function ntCard(){ if(!NT.rows.length) return ''; const n = ntUnread(), L = NT.rows.slice(0, n ? Math.min(Math.max(n, 3), 6) : 3);
+  return `<div id="ntcard"><div class="sec" style="margin-top:4px"><h2>🔔 Notifications${n ? ` <span class="pill p-attente">${n} nouvelle(s)</span>` : ''}</h2><button class="link" data-a="ntopen">Tout voir</button></div><div class="list" style="margin-bottom:12px">${L.map(ntRow).join('')}</div></div>`; }
+function ntPaint(){ const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('ntcard'); if(c && view === 'home'){ const h = ntCard(); if(h) c.outerHTML = h; } else if(!c && view === 'home' && NT.rows.length && !document.querySelector('#sheet.open, .sheet.open')){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', ntCard()); } }
+A.ntopen = () => { sheet('🔔 Notifications', NT.rows.length ? `<p class="note" style="margin-bottom:8px">Ce que votre équipe a fait ces 3 derniers jours (livré, annulé, versement, ventes, modifications).</p><div class="list">${NT.rows.map(ntRow).join('')}</div><button class="btn block" style="margin-top:12px" data-a="nav:journal">📋 Journal complet</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
+  try{ if(NT.rows[0]) localStorage.setItem(ntKey(), NT.rows[0].at); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); };
+setInterval(() => { if(document.visibilityState !== 'hidden') ntFetch(); }, 30000);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') ntFetch(); });
 // Livreur : on garde seulement les commandes qui existent encore en ligne (supprimées par le patron = retirées ici)
 let RECON_AT = 0;
 async function livReconcile(force){
@@ -4307,10 +4343,13 @@ async function syncNow(){
   SYNC.busy = true; SYNC.state = 'sync'; paintSync();
   try{
     if(ONLINE.role === 'livreur') await lqFlush();
+    const idsBefore = ONLINE.role === 'livreur' ? new Set(S.moves.map(m => m.id)) : null;
     let changed = await refreshShop();
     if(shopWritable()) await pushDirty();
     if(await pull()) changed = true;
     if(await livReconcile()) changed = true;
+    ntFetch();
+    if(idsBefore){ const nw = S.moves.filter(m => m.type === 'vente' && !idsBefore.has(m.id) && (m.status === 'attente' || m.status === 'encours')); if(nw.length && idsBefore.size){ toast(`🛵 Nouvelle livraison : ${pname(nw[0].pid)} × ${nw[0].qty}${nw[0].client ? ' — ' + nw[0].client : ''}${nw.length > 1 ? ' (+' + (nw.length - 1) + ')' : ''}`); try{ navigator.vibrate && navigator.vibrate([120, 60, 120]); }catch(_){} } }
     if(changed){ rawSave(); render(); }
     SYNC.pending = shopWritable() ? computeDirty().length : 0;
     SYNC.state = SYNC.pending ? 'pending' : 'ok'; SYNC.err = ''; ONLINE.offline = false;
