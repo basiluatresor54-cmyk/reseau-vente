@@ -4310,15 +4310,33 @@ function livNotifs(){
   const since = Date.now() - 7 * 864e5, out = [];
   S.moves.forEach(m => {
     if(m.liv !== lid) return;
-    if(m.type === 'vente' && m.ts > since && (m.status === 'attente' || m.status === 'encours')) out.push({t:m.ts, ic:'🛵', title:'Nouvelle livraison', body:`<b>${esc(pname(m.pid))} × ${m.qty}</b><br>👤 ${esc(m.client || 'Client')}${m.phone ? ' · ' + esc(m.phone) : ''}<br>📅 ${esc(whenFull(m))}${m.addr ? '<br>📍 ' + esc(m.addr) : ''}${m.ts ? '<br><span class="note">Commandée ' + (iso10(new Date(m.ts)) === today() ? "aujourd'hui" : 'le ' + esc(fmtDate(iso10(new Date(m.ts))))) + ' à ' + hhmm(m.ts) + '</span>' : ''}`});
+    if(m.type === 'vente' && m.ts > since && (m.status === 'attente' || m.status === 'encours')) out.push({t:m.ts, id:m.id, ic:'🛵', title:'Nouvelle livraison', body:`<b>${esc(pname(m.pid))} × ${m.qty}</b><br>👤 ${esc(m.client || 'Client')}${m.phone ? ' · ' + esc(m.phone) : ''}<br>📅 ${esc(whenFull(m))}${m.addr ? '<br>📍 ' + esc(m.addr) : ''}${m.ts ? '<br><span class="note">Commandée ' + (iso10(new Date(m.ts)) === today() ? "aujourd'hui" : 'le ' + esc(fmtDate(iso10(new Date(m.ts))))) + ' à ' + hhmm(m.ts) + '</span>' : ''}`});
     else if(m.type === 'annonce' && m.ts > since) out.push({t:m.ts, ic:'📢', title:'Message du patron', body:esc(m.text || '')});
     else if(m.type === 'decl' && m.status === 'confirme' && m.confirmed) out.push({t:new Date(m.confirmed + 'T12:00:00').getTime(), ic:'✅', title:'Versement confirmé', body:`${amt(num(m.amount), m.cur)} bien reçu par la boutique`});
   });
   return out.sort((a, b) => b.t - a.t);
 }
+function lnRow(x, unread){ const tag = x.id ? 'button' : 'div';
+  return `<${tag} class="it ntrow ${unread ? 'unread' : ''}"${x.id ? ` data-a="lnact" data-id="${esc(x.id)}" style="width:100%;text-align:left"` : ''}><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}${x.id ? '<br><span class="note">Toucher pour contacter le client ›</span>' : ''}</div></div></${tag}>`; }
+A.lnact = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m){ toast('Commande introuvable'); return; }
+  const L = liv(m.liv);
+  sheet('🛵 ' + (m.client || 'Client'), `<div class="card" style="margin-bottom:12px">
+      <div class="dl"><span>Produit</span><span><b>${esc(pname(m.pid))} × ${m.qty}</b></span></div>
+      <div class="dl"><span>Client</span><span>${esc(m.client || '—')}</span></div>
+      <div class="dl"><span>Téléphone</span><span>${m.phone ? `<a href="tel:${esc(m.phone)}">${esc(m.phone)}</a>` : '—'}</span></div>
+      <div class="dl"><span>Adresse</span><span style="white-space:pre-line">${esc(m.addr || '—')}</span></div>
+      <div class="dl strong"><span>📅 Livraison</span><span>${esc(whenFull(m))}</span></div>
+      <div class="dl strong"><span>À encaisser</span><span>${m.pre ? '✅ Rien — déjà payé' : m.credit ? (num(m.acompte) > 0 && m.creditMain ? amt(num(m.acompte), m.cur) + ' (acompte)' : '💳 Rien — vente à crédit') : amt(m.qty * m.price, m.cur)}</span></div>
+      ${m.note ? `<div class="dl"><span>📝 Note</span><span>${esc(m.note)}</span></div>` : ''}
+    </div>
+    ${m.phone ? `<div class="btns" style="margin-bottom:8px"><a class="btn wa" style="flex:1;text-decoration:none" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} WhatsApp du client</a><a class="btn" style="flex:1;text-decoration:none;text-align:center" href="tel:${esc(m.phone)}">📞 Appeler</a></div>` : '<p class="note" style="margin-bottom:8px">Pas de numéro pour ce client : demandez-le au patron.</p>'}
+    ${m.addr ? `<a class="btn block" style="text-decoration:none;text-align:center;margin-bottom:8px" href="${esc(mapsUrl(m.addr, L && L.city))}" target="_blank" rel="noopener">📍 Itinéraire (Google Maps)</a>` : ''}
+    <button class="btn primary block" data-a="lngo" data-id="${esc(m.id)}">Voir la commande (Livré, En route…)</button>`);
+};
+A.lngo = (_, el) => { const id = el.dataset.id; closeSheet(); MOI_DAY = ''; render(); setTimeout(() => { const c = document.getElementById('mv-' + id); if(c){ c.scrollIntoView({behavior:'smooth', block:'start'}); c.style.outline = '3px solid var(--brand)'; setTimeout(() => c.style.outline = '', 2500); } }, 150); };
 function lnCard(){ const L = livNotifs(), seen = lnSeen(), nw = L.filter(x => x.t > seen); if(!nw.length) return '';
   return `<div id="lncard" class="card" style="margin-bottom:12px;border:2px solid var(--brand)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>🔔 ${nw.length} nouveauté(s)</b><button class="btn sm" data-a="lnseen">👍 OK, vu</button></div>
-    <div class="list" style="margin-top:8px">${nw.slice(0, 5).map(x => `<div class="it ntrow unread"><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}</div></div></div>`).join('')}</div></div>`; }
+    <div class="list" style="margin-top:8px">${nw.slice(0, 5).map(x => lnRow(x, true)).join('')}</div></div>`; }
 A.lnseen = () => { try{ localStorage.setItem(LN_KEY(), String(Date.now())); }catch(_){} render(); };
 function ntBell(){ if(ONLINE.shop && ONLINE.role === 'livreur'){ const n = livNotifs().filter(x => x.t > lnSeen()).length; return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
   if(!NT.on()) return ''; const n = ntUnread(); return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
@@ -4354,7 +4372,7 @@ A.ntact = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!
   document.querySelectorAll('#shb .chip[data-t]').forEach(b => b.onclick = () => { document.querySelectorAll('#shb .chip[data-t]').forEach(x => x.classList.toggle('on', x === b)); tx.value = T[+b.dataset.t][1]; upd(); });
 };
 A.ntopen = () => { if(ONLINE.role === 'livreur'){ const L = livNotifs(), seen = lnSeen();
-    sheet('🔔 Notifications', L.length ? `<div class="list">${L.map(x => `<div class="it ntrow ${x.t > seen ? 'unread' : ''}"><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}</div></div></div>`).join('')}</div>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
+    sheet('🔔 Notifications', L.length ? `<div class="list">${L.map(x => lnRow(x, x.t > seen)).join('')}</div>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
     try{ localStorage.setItem(LN_KEY(), String(Date.now())); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('lncard'); if(c) c.remove(); return; }
   sheet('🔔 Notifications', NT.rows.length ? `<p class="note" style="margin-bottom:8px">Ce que votre équipe a fait ces 3 derniers jours (livré, annulé, versement, ventes, modifications).</p><div class="list">${NT.rows.map(ntRow).join('')}</div><button class="btn block" style="margin-top:12px" data-a="nav:journal">📋 Journal complet</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
   try{ if(NT.rows[0]) localStorage.setItem(ntKey(), NT.rows[0].at); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); };
@@ -4728,7 +4746,7 @@ CUSTOM.moi = () => {
     return Object.keys(by).sort().slice(0, 5).map(k => { const a = by[k], nl = a.filter(m => dd(m) < T).length;
       const who = [...new Set(a.map(m => m.client || pname(m.pid)))]; const lab = k === T ? "Aujourd'hui" : k === addDays(T, 1) ? 'Demain' : dAbs(k, 1).replace(/ \d{4}$/, '');
       return `<button class="it" data-a="moiday:${k}" style="width:100%"><div class="ic ${k === T ? 'c-brand' : 'c-in'}">${a.length}</div><div class="m"><div class="t" style="white-space:normal">${k === T ? '🛵' : '📅'} ${esc(lab.charAt(0).toUpperCase() + lab.slice(1))} : ${a.length} commande(s)${nl ? ` <span style="color:var(--bad,#dc2626)">· ${nl} en retard</span>` : ''}</div><div class="d">${esc(who.slice(0, 4).join(', '))}${who.length > 4 ? '…' : ''}</div></div>${ico('chev')}</button>`; }).join(''); })();
-  const card = m => `<div class="card" style="margin-bottom:10px">
+  const card = m => `<div class="card" id="mv-${m.id}" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="display:flex;gap:10px;align-items:center">${prod(m.pid) && prod(m.pid).photo ? pic(prod(m.pid)) : ''}<b>${esc(pname(m.pid))} × ${m.qty}</b></div><span class="pill p-${m.status}">${STATUS[m.status]}</span></div>
       <div class="dl"><span>Client</span><span>${esc(m.client || '—')}</span></div>
       ${m.phone ? `<div class="dl"><span>Téléphone</span><span><a href="tel:${esc(m.phone)}">${esc(m.phone)}</a></span></div>
