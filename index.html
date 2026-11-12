@@ -3950,20 +3950,38 @@ function subInfo(shop){
 let PRICE = (() => { try{ const v = parseFloat(localStorage.getItem('stock_online_price')); return isNaN(v) ? 2.9 : v; }catch(_){ return 2.9; } })();
 const subPrice = () => fmt(PRICE) + ' $ / mois';
 let PAYINFO = (() => { try{ return JSON.parse(localStorage.getItem('stock_online_pay') || '[]'); }catch(_){ return []; } })();
+/* ---------- Formules 1, 3, 6 et 12 mois (prix réglables dans l'espace BASILUA TECH) ---------- */
+let PLANS = (() => { try{ return Object.assign({m3:7.9, m6:14.9, m12:26, rate:2800}, JSON.parse(localStorage.getItem('stock_online_plans') || '{}')); }catch(_){ return {m3:7.9, m6:14.9, m12:26, rate:2800}; } })();
+async function loadPlans(){ try{ const r = await sb.rpc('get_plans'); if(r.data && typeof r.data === 'object'){ PLANS = Object.assign({m3:7.9, m6:14.9, m12:26, rate:2800}, r.data); localStorage.setItem('stock_online_plans', JSON.stringify(PLANS)); } }catch(_){} }
+const fcRound = v => v < 10000 ? Math.round(v / 100) * 100 : Math.round(v / 1000) * 1000;
+const subFc = usd => fcRound(usd * (+PLANS.rate || 2800)).toLocaleString('fr-FR') + ' FC';
+function planList(){ const m = +PRICE || 0; return [
+  {k:'m1', n:1, t:'1 mois', p:m},
+  {k:'m3', n:3, t:'3 mois', p:+PLANS.m3, tag:'Le plus choisi'},
+  {k:'m6', n:6, t:'6 mois', p:+PLANS.m6},
+  {k:'m12', n:12, t:'1 an', p:+PLANS.m12, tag:(m > 0 && +PLANS.m12 > 0 && Math.round(12 - PLANS.m12 / m) >= 1) ? Math.round(12 - PLANS.m12 / m) + ' mois offerts' : ''}]; }
+const planTxt = pl => `${pl.t} · ${fmt(pl.p)} $ (≈ ${subFc(pl.p)})`;
+const planLines = () => planList().map(pl => `• ${planTxt(pl)}${pl.tag ? ' — ' + pl.tag : ''}`).join('\n');
 async function loadPayInfo(){ try{ const r = await sb.rpc('get_pay_info'); if(Array.isArray(r.data)){ PAYINFO = r.data; localStorage.setItem('stock_online_pay', JSON.stringify(PAYINFO)); } }catch(_){} }
 const OPS = ['M-Pesa (Vodacom)', 'Airtel Money', 'Orange Money', 'Afrimoney', 'Autre'];
+let PAYPLAN = 'm3';
+function payMsg(){ const shop = ONLINE.shop || {}, pl = planList().find(x => x.k === PAYPLAN) || planList()[0];
+  return `Bonjour BASILUA TECH 👋\nJe viens de payer mon abonnement Réseau & Vente — formule *${planTxt(pl)}* — pour la boutique « ${shop.name || ''} ».\nVoici la capture du paiement 👇`; }
 function paySheet(){
   const shop = ONLINE.shop || {}, si = subInfo(shop) || {}, renew = si.cls === 'bad' || shop.status !== 'essai';
-  const msg = `Bonjour BASILUA TECH 👋\nJe viens de payer mon abonnement Réseau & Vente (${subPrice()}) pour la boutique « ${shop.name || ''} ».\nVoici la capture du paiement 👇`;
+  const msg = payMsg();
   sheet('💳 ' + (renew ? 'Renouveler' : 'Activer') + ' mon abonnement', `
-    <div class="card" style="margin-bottom:12px;text-align:center"><div class="note">Abonnement BASILUA TECH · Réseau &amp; Vente</div><div style="font-size:28px;font-weight:800" class="num">${subPrice()}</div><div class="note">Toutes les fonctions · téléphone et ordinateur · vos livreurs inclus</div></div>
+    <div class="note" style="text-align:center;margin-bottom:8px">Abonnement BASILUA TECH · Réseau &amp; Vente — toutes les fonctions, téléphone et ordinateur, vos livreurs inclus</div>
+    <div class="sec"><h2>Choisissez votre formule</h2></div>
+    <div id="plbox" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${planList().map(pl => `<button type="button" class="card plc${pl.k === PAYPLAN ? ' on' : ''}" data-a="pickplan" data-k="${pl.k}" style="position:relative;text-align:center;padding:12px 8px;cursor:pointer;border:2px solid ${pl.k === PAYPLAN ? 'var(--brand)' : 'transparent'};font:inherit;color:inherit">${pl.tag ? `<div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--brand);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px">${esc(pl.tag)}</div>` : ''}<div style="font-weight:700">${pl.t}</div><div class="num" style="font-size:22px;font-weight:800">${fmt(pl.p)} $</div><div class="note">≈ ${subFc(pl.p)}${pl.n > 1 && pl.p ? '<br>soit ' + fmt(Math.round(pl.p / pl.n * 100) / 100) + ' $ / mois' : ''}</div></button>`).join('')}</div>
     <div class="sec"><h2>1. Envoyez le paiement</h2></div>
     ${PAYINFO.length ? `<div class="list" style="margin-bottom:12px">${PAYINFO.map(p => `<div class="it" style="cursor:default"><div class="ic c-in">📱</div><div class="m" style="min-width:0"><div class="t" style="white-space:normal">${esc(p.op)}</div><div class="num" style="font-size:18px;font-weight:800">${esc(p.num)}</div><div class="d">${p.name ? 'Au nom de ' + esc(p.name) : ''}</div></div><button class="btn sm" data-a="copypay" data-v="${esc(p.num)}">Copier</button></div>`).join('')}</div>` : `<p class="note" style="margin-bottom:12px">Demandez le numéro Mobile Money à BASILUA TECH sur WhatsApp (bouton ci-dessous).</p>`}
     <div class="sec"><h2>2. Envoyez la capture sur WhatsApp</h2></div>
     <p class="note" style="margin-bottom:10px">Faites une capture d'écran du message de confirmation du paiement, puis touchez le bouton : BASILUA TECH active votre abonnement, en général dans l'heure.</p>
-    <a class="btn wa block" href="${supportLink(msg)}" target="_blank" rel="noopener">${ico('wa')} J'ai payé : envoyer la capture</a>`);
+    <a class="btn wa block" id="paywa" href="${supportLink(msg)}" target="_blank" rel="noopener">${ico('wa')} J'ai payé : envoyer la capture</a>`);
 }
-A.paysub = () => paySheet();
+A.paysub = () => { loadPlans().then(() => { if(document.getElementById('plbox')) A.pickplan(null, {dataset:{k:PAYPLAN}}); }); paySheet(); };
+A.pickplan = (_, el) => { PAYPLAN = el.dataset.k; document.querySelectorAll('#plbox .plc').forEach(b => { const on = b.dataset.k === PAYPLAN; b.classList.toggle('on', on); b.style.borderColor = on ? 'var(--brand)' : 'transparent'; }); const a = document.getElementById('paywa'); if(a) a.href = supportLink(payMsg()); };
 A.copypay = (_, el) => copyText(el.dataset.v);
 async function loadPrice(){ try{ const r = await sb.rpc('get_price'); if(r.data != null){ PRICE = +r.data; localStorage.setItem('stock_online_price', String(PRICE)); } }catch(_){} }
 function subDays(shop){ const end = shop && shop.paid_until; return end ? Math.round((new Date(end + 'T12:00:00') - new Date(today() + 'T12:00:00')) / 864e5) : null; }
@@ -3978,7 +3996,7 @@ function subBanner(compact){
   const btn = owner ? `<button class="btn sm primary" style="margin-top:8px" data-a="paysub">💳 ${renew ? 'Renouveler' : 'Activer'} mon abonnement · ${subPrice()}</button>` : '';
   let txt;
   if(si.cls === 'bad') txt = `⛔ ${esc(si.txt)}<br><b>Abonnement : ${subPrice()}</b>`;
-  else if(essai) txt = `🎁 <b>Essai gratuit</b> : ${d} jour${d>1?'s':''} restant${d>1?'s':''} (fin ${inDays(d) === "aujourd'hui" ? "aujourd'hui" : 'le ' + dAbs(shop.paid_until, 1)}).<br>Ensuite : <b>${subPrice()}</b>, payable par Mobile Money.`;
+  else if(essai) txt = `🎁 <b>Essai gratuit</b> : ${d} jour${d>1?'s':''} restant${d>1?'s':''} (fin ${inDays(d) === "aujourd'hui" ? "aujourd'hui" : 'le ' + dAbs(shop.paid_until, 1)}).<br>Ensuite : <b>${subPrice()}</b>, ou moins cher en 3, 6 ou 12 mois (dès ${fmt(Math.round(PLANS.m12 / 12 * 100) / 100)} $ / mois), payable par Mobile Money.`;
   else txt = `⚠️ <b>Votre abonnement se termine ${inDays(d)}</b> (${dAbs(shop.paid_until, 1)}).<br>Renouvelez pour ne pas passer en lecture seule : <b>${subPrice()}</b>.`;
   if(compact) return `<div class="subban ${si.cls} subsmall">${essai ? `🎁 Essai : ${d} j restant${d>1?'s':''} · ${subPrice()}` : si.cls === 'bad' ? '⛔ ' + esc(si.short) + ' · ' + subPrice() : `⚠️ Abonnement : fin ${inDays(d)}`}${owner ? ` · <button class="link" data-a="paysub">${renew ? 'Renouveler' : 'Activer'}</button>` : ''}</div>`;
   return `<div class="subban ${si.cls}">${txt}${ONLINE.offline ? '<br><b>Hors ligne</b>' : ''}${btn ? '<br>' + btn : ''}</div>`;
@@ -4075,7 +4093,7 @@ async function afterLogin(){
   authShell(`<p class="note">Chargement de vos boutiques…</p>`);
   try{ const inv = await sb.rpc('accept_invites'); if(inv.data > 0) toast('Invitation acceptée ✅'); }catch(_){}
   try{ const ad = await sb.rpc('am_i_admin'); ONLINE.admin = !!ad.data; }catch(_){ }
-  loadPrice(); loadPayInfo();
+  loadPrice(); loadPayInfo(); loadPlans();
   try{
     const [shops, mem] = await Promise.all([
       sb.from('shops').select('id,name,settings,status,paid_until'),
@@ -4324,7 +4342,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '77a58db313';
+const APP_BUILD = '763cf98d09';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5056,6 +5074,13 @@ CUSTOM.admin = () => {
     <div class="kpi"><div class="l">Expirées / bloquées</div><div class="v num neg">${cnt('bad')}</div><div class="s">à relancer</div></div>
   </div>
   <div class="card" style="margin-top:12px"><form id="pricef" style="display:flex;gap:8px;align-items:flex-end"><label class="f" style="flex:1;margin:0"><span>Prix de l'abonnement ($ par mois) — affiché aux clients</span><input name="p" type="number" step="0.01" min="0" value="${esc(PRICE)}"></label><button class="btn">Enregistrer</button></form></div>
+  <div class="card" style="margin-top:12px"><b>🗓️ Formules longues</b> <span class="note">(prix en $, affichés aux clients avec l'équivalent en francs)</span>
+    <form id="plansf" style="margin-top:10px"><div class="row2" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:6px">
+      <label class="f" style="margin:0 0 8px"><span>3 mois</span><input name="m3" type="number" step="0.01" min="0" value="${esc(PLANS.m3)}"></label>
+      <label class="f" style="margin:0 0 8px"><span>6 mois</span><input name="m6" type="number" step="0.01" min="0" value="${esc(PLANS.m6)}"></label>
+      <label class="f" style="margin:0 0 8px"><span>1 an</span><input name="m12" type="number" step="0.01" min="0" value="${esc(PLANS.m12)}"></label>
+      <label class="f" style="margin:0 0 8px"><span>Taux FC / $</span><input name="rate" type="number" step="1" min="1" value="${esc(PLANS.rate)}"></label></div>
+      <button class="btn block">Enregistrer les formules</button></form></div>
   <div class="card" style="margin-top:12px"><b>📱 Numéros pour payer l'abonnement</b> <span class="note">(affichés aux clients dans « Activer mon abonnement »)</span>
     <form id="payf" style="margin-top:10px">${[0,1,2].map(i => { const p = PAYINFO[i] || {}; return `<div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px"><label class="f" style="margin:0 0 8px"><select name="op${i}"><option value="">—</option>${OPS.map(o => `<option ${p.op === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label><label class="f" style="margin:0 0 8px"><input name="num${i}" value="${esc(p.num || '')}" placeholder="Numéro"></label><label class="f" style="margin:0 0 8px"><input name="name${i}" value="${esc(p.name || '')}" placeholder="Nom du compte"></label></div>`; }).join('')}<button class="btn block">Enregistrer les numéros</button></form></div>
   ${(() => { const last = (() => { try{ return localStorage.getItem('stock_last_backup') || ''; }catch(_){ return ''; } })(); const old = !last || daysSince(last) >= 7;
@@ -5086,8 +5111,8 @@ function fuMsg(s, st){
   if(st === 'j3') return f.active
     ? `Bonjour${who} 👋\nComment se passe votre essai de *Réseau & Vente* pour « ${shop} » ? 😊\n\n3 astuces pour gagner du temps :\n• Invitez vos livreurs : ils marquent eux-mêmes « Livré » et vous voyez l'argent à recevoir\n• Le soir, ouvrez le « Point du soir » : qui doit verser combien\n• Fixez vos objectifs de ventes et de bénéfice sur l'accueil\n\nIl vous reste ${Math.max(0, f.left)} jour(s) d'essai. Besoin d'aide ? Répondez ici 🙏\nBASILUA TECH`
     : `Bonjour${who} 👋\nJe vois que vous n'avez pas encore enregistré de produit ni de vente sur « ${shop} ».\n\nVoulez-vous que je vous aide à démarrer ? En 10 minutes (appel ou WhatsApp), on met ensemble vos produits et vos livreurs, et vous voyez tout de suite votre stock et votre bénéfice.\n\nIl vous reste ${Math.max(0, f.left)} jour(s) d'essai gratuit.\n📘 Guide : ${guide}\n\nDites-moi quand vous êtes disponible 🙏\nBASILUA TECH`;
-  if(st === 'j6') return `Bonjour${who} 👋\nVotre essai gratuit de *Réseau & Vente* pour « ${shop} » se termine ${endTxt}.\n\nPour continuer sans rien perdre (produits, ventes, livreurs, clients) : *${subPrice()}* seulement.\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, j'active votre abonnement tout de suite ✅\nMerci pour votre confiance 🙏 — BASILUA TECH`;
-  return `Bonjour${who} 👋\nVotre essai de *Réseau & Vente* pour « ${shop} » est terminé.\n\nBonne nouvelle : toutes vos données sont gardées (produits, ventes, livreurs, clients). Pour reprendre là où vous vous êtes arrêté : *${subPrice()}*.\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, je réactive votre boutique tout de suite ✅\nBASILUA TECH`;
+  if(st === 'j6') return `Bonjour${who} 👋\nVotre essai gratuit de *Réseau & Vente* pour « ${shop} » se termine ${endTxt}.\n\nPour continuer sans rien perdre (produits, ventes, livreurs, clients) : *${subPrice()}* seulement.\n\nOu payez en une fois, moins cher :\n${planLines()}\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, j'active votre abonnement tout de suite ✅\nMerci pour votre confiance 🙏 — BASILUA TECH`;
+  return `Bonjour${who} 👋\nVotre essai de *Réseau & Vente* pour « ${shop} » est terminé.\n\nBonne nouvelle : toutes vos données sont gardées (produits, ventes, livreurs, clients). Pour reprendre là où vous vous êtes arrêté : *${subPrice()}*.\n\nOu payez en une fois, moins cher :\n${planLines()}\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, je réactive votre boutique tout de suite ✅\nBASILUA TECH`;
 }
 function fuButtons(s){ const f = fuInfo(s);
   return `<div class="btns" style="flex-wrap:wrap;gap:6px;margin-top:8px">${FU_STEPS.map(([st, lb]) => { const sent = fuSent(s.id, st), on = st === f.rec;
@@ -5106,8 +5131,11 @@ function admRows(list){
   return list.map(s => { const i = shopState(s); return `<button class="it" data-a="admshop:${s.id}"><div class="ic c-brand">${esc(initials(s.name))}</div><div class="m"><div class="t">${esc(s.name)}</div><div class="d">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}${s.country ? ' · ' + esc(s.country) : ''}</div><div class="d">${s.last_activity ? 'Actif ' + fmtDate(String(s.last_activity).slice(0,10)) : 'Aucune donnée'} · ${s.nb_items} élément(s) · ${s.nb_members} membre(s)</div></div><div class="r"><span class="pill ${i.cls === 'bad' ? 'p-annule' : s.status === 'essai' ? 'p-attente' : 'p-livre'}" style="${i.cls === 'bad' ? 'background:var(--bad-soft);color:var(--bad)' : ''}">${esc(i.short)}</span><div class="sm">${s.paid_until ? fmtDate(s.paid_until) : '∞'}</div></div></button>`; }).join('');
 }
 CUSTOM_AFTER.admin = () => {
-  if(ADM.shops === null && !ADM.loading){ loadAdmin(); loadPrice(); }
+  if(ADM.shops === null && !ADM.loading){ loadAdmin(); loadPrice(); loadPlans().then(() => { const g = $('#plansf'); if(g){ const E = g.elements; E.m3.value = PLANS.m3; E.m6.value = PLANS.m6; E.m12.value = PLANS.m12; E.rate.value = PLANS.rate; } }); }
   const pf = $('#pricef'); if(pf) pf.onsubmit = async e => { e.preventDefault(); const v = parseFloat(String(e.target.elements.p.value).replace(',', '.')); if(isNaN(v)) return toast('Prix invalide'); const {error} = await sb.rpc('admin_set_price', {p_price:v}); if(error) return toast(rpcErr(error)); PRICE = v; try{ localStorage.setItem('stock_online_price', String(v)); }catch(_){} toast('Prix enregistré : ' + subPrice()); };
+  const plf = $('#plansf'); if(plf) plf.onsubmit = async e => { e.preventDefault(); const E = e.target.elements, num = n => parseFloat(String(E[n].value).replace(',', '.'));
+    const p = {m3:num('m3'), m6:num('m6'), m12:num('m12'), rate:num('rate')}; if(Object.values(p).some(v => isNaN(v) || v < 0) || !(p.rate > 0)) return toast('Valeurs invalides');
+    const {error} = await sb.rpc('admin_set_plans', {p_plans:p}); if(error) return toast(rpcErr(error)); PLANS = Object.assign(PLANS, p); try{ localStorage.setItem('stock_online_plans', JSON.stringify(PLANS)); }catch(_){} toast('Formules enregistrées ✅'); };
   const pyf = $('#payf'); if(pyf) pyf.onsubmit = async e => { e.preventDefault(); const E = e.target.elements;
     const info = [0,1,2].map(i => ({op:E['op' + i].value, num:E['num' + i].value.trim(), name:E['name' + i].value.trim()})).filter(x => x.op && x.num);
     const {error} = await sb.rpc('admin_set_pay_info', {p_info:info}); if(error) return toast(rpcErr(error)); PAYINFO = info; try{ localStorage.setItem('stock_online_pay', JSON.stringify(info)); }catch(_){} toast('Numéros de paiement enregistrés ✅'); };
@@ -5132,6 +5160,7 @@ A.admshop = async (id) => {
     <div class="btns" style="margin-bottom:8px">
       <button class="btn primary" data-a="admset" data-id="${id}" data-st="actif" data-d="${addMonths(base,1)}">+1 mois</button>
       <button class="btn primary" data-a="admset" data-id="${id}" data-st="actif" data-d="${addMonths(base,3)}">+3 mois</button>
+      <button class="btn primary" data-a="admset" data-id="${id}" data-st="actif" data-d="${addMonths(base,6)}">+6 mois</button>
       <button class="btn primary" data-a="admset" data-id="${id}" data-st="actif" data-d="${addMonths(base,12)}">+12 mois</button>
       <button class="btn" data-a="admset" data-id="${id}" data-st="essai" data-d="${addDays(base,7)}">+7 jours d'essai</button>
       <button class="btn" data-a="admset" data-id="${id}" data-st="actif" data-d="">Illimité</button>
@@ -5208,7 +5237,7 @@ A.decl = () => {
   const lid = ONLINE.shop && ONLINE.shop.livreur_id; if(!lid) return;
   const due = Math.max(0, livStats(lid).toRemit - declPendingUSD(lid));
   sheet("J'ai envoyé l'argent", `<form id="declf">
-    <div class="tot"><span>Reste à verser</span><b class="num">${money(due)}</b><small>≈ ${fcOf(due)} · après les versements déjà déclarés</small></div>
+    <div class="tot"><span>Reste à verser</span><b class="num">${money(due)}</b><small>≈ ${subFc(due)} · après les versements déjà déclarés</small></div>
     <div class="row2">${field('Montant envoyé *', `<input name="amount" type="number" step="any" min="0" required value="${due ? r2(due) : ''}">`)}${field('Devise', `<select name="cur"><option value="$">$</option><option value="FC">${esc(LC())}</option></select>`)}</div>
     ${field('Moyen', `<select name="method">${METHODS.map(m => `<option>${m}</option>`).join('')}</select>`)}
     ${field('Référence de la transaction', `<input name="ref" maxlength="80" placeholder="Ex : numéro du message M-Pesa">`, 'Le patron vérifiera avec ce numéro')}
