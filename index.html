@@ -310,6 +310,7 @@ html.glass .fab{border-radius:22px;box-shadow:0 10px 26px rgba(var(--brand-rgb),
 .goals .gv{font-size:13px;font-weight:700}
 .goalsx .goals .ring{width:80px;height:80px}
 .goalsx .gh{font-size:13px;font-weight:800;margin:2px 0 6px}
+html.role-vendeur .cost{display:none!important}
 .goalsx .gh + .goals{margin-bottom:12px}
 .goalsx .gsum{border-top:1px solid var(--line);padding-top:10px;font-size:13.5px;line-height:1.5}
 .goalsx .gadd{width:100%;text-align:left;background:var(--soft);border:0;border-radius:10px;padding:9px 12px;font:inherit;font-weight:650;color:var(--ink);cursor:pointer;margin-bottom:12px}
@@ -643,8 +644,8 @@ function navItems(){
   n.push(NAV[4]); return n;
 }
 const parentOf = v => v === 'import' && navItems().some(x => x[0] === 'import') ? '' : PARENT[v];
-const SUB = {stockhist:'Historique du stock', import:'Commandes import (sur commande)', home:'Tableau de bord', stock:'Stock par produit', ventes:'Ventes & livraisons', livreurs:'Livreurs par ville', plus:'Plus', depenses:'Dépenses', livre:'Le Livre — toutes les opérations', reglages:'Réglages', clients:'Clients', rapport:'Rapport de la semaine', releve:'Relevé du livreur', jour:'Rapport du jour'};
-const PARENT = {stockhist:'stock', import:'plus', depenses:'plus', livre:'plus', reglages:'plus', clients:'plus', rapport:'plus', releve:'livreurs', jour:'plus'};
+const SUB = {bilan:'Bilan du mois', credits:'Ventes à crédit — dettes clients', stockhist:'Historique du stock', import:'Commandes import (sur commande)', home:'Tableau de bord', stock:'Stock par produit', ventes:'Ventes & livraisons', livreurs:'Livreurs par ville', plus:'Plus', depenses:'Dépenses', livre:'Le Livre — toutes les opérations', reglages:'Réglages', clients:'Clients', rapport:'Rapport de la semaine', releve:'Relevé du livreur', jour:'Rapport du jour'};
+const PARENT = {bilan:'plus', credits:'plus', stockhist:'stock', import:'plus', depenses:'plus', livre:'plus', reglages:'plus', clients:'plus', rapport:'plus', releve:'livreurs', jour:'plus'};
 
 /* ---------- Apparence : clair / sombre / automatique (réglage propre à chaque appareil) ---------- */
 const THEMES = {auto:'Automatique (comme le téléphone)', clair:'☀️ Clair (jour)', sombre:'🌙 Sombre (nuit)'};
@@ -685,7 +686,8 @@ function render(){
     <div class="grow"><h1>${esc(st.shop || 'Ma Boutique')}</h1><p>${SUB[view]}</p></div>`;
   $('#nav').innerHTML = navItems().map(([k,l,i]) => `<button data-a="nav:${k}" class="${nv===k?'on':''}">${ico(i)}<span>${l}</span></button>`).join('');
   $('#fab').style.display = (view === 'reglages' || view === 'plus') ? 'none' : '';
-  const V = {home:vHome, stock:vStock, ventes:vVentes, livreurs:vLivreurs, plus:vPlus, depenses:vDepenses, livre:vLivre, reglages:vReglages, import:vImport, stockhist:vStockHist, clients:vClients, rapport:vRapport, releve:vReleve, jour:vJour};
+  if(isVendeur() && !VEND_VIEWS.includes(view)) view = 'home';
+  const V = {bilan:vBilan, credits:vCredits, home:vHome, stock:vStock, ventes:vVentes, livreurs:vLivreurs, plus:vPlus, depenses:vDepenses, livre:vLivre, reglages:vReglages, import:vImport, stockhist:vStockHist, clients:vClients, rapport:vRapport, releve:vReleve, jour:vJour};
   $('#main').innerHTML = (parentOf(view) ? `<button class="back noprint" data-a="nav:${parentOf(view)}">‹ Retour</button>` : '') + V[view]();
   const M = $('#main');
   if(view !== render.last){ M.classList.remove('enter'); void M.offsetWidth; M.classList.add('enter'); countUp(M); if(view === 'home') homeCheers(); }
@@ -757,7 +759,27 @@ function onbCard(){
     <div class="list">${steps.map(([ic, t, ok, a]) => `<button class="it" ${ok ? 'style="opacity:.6;cursor:default"' : `data-a="${a}"`}><div class="ic ${ok ? 'c-in' : 'c-brand'}">${ok ? '✅' : ic}</div><div class="m"><div class="t" style="white-space:normal;${ok ? 'text-decoration:line-through' : ''}">${t}</div>${!ok && next && next[1] === t ? '<div class="d"><b>👉 À faire maintenant</b></div>' : ''}</div>${ok ? '' : ico('chev')}</button>`).join('')}</div>
     <p class="note" style="margin-top:8px">5 minutes suffisent. Besoin d'aide ? <a href="guide.html" target="_blank" rel="noopener">Guide</a> ou WhatsApp BASILUA TECH.</p></div>`;
 }
+/* Rôle « Vendeur » (version en ligne) : enregistre les ventes, ne voit ni prix d'achat ni bénéfice */
+const isVendeur = () => window.APP_ROLE === 'vendeur';
+const VEND_VIEWS = ['home', 'ventes', 'stock', 'livreurs', 'plus', 'clients', 'credits', 'equipe'];
+function vHomeVendeur(){
+  const st = stockAt(), t = today(), td = S.moves.filter(m => m.type === 'vente' && m.status === 'livre' && mday(m) === t);
+  const pend = S.moves.filter(m => m.type === 'vente' && (m.status === 'attente' || m.status === 'encours'));
+  const low = S.products.filter(p => !isKit(p) && totalOf(st, p.id) - pendAll(p.id) <= (p.alert||0));
+  let units = 0; S.products.filter(p => !isKit(p)).forEach(p => units += Math.max(0, totalOf(st, p.id)));
+  const cv = S.settings.cover ? `<div class="cover" style="background-image:url('${S.settings.cover}')"></div>` : '';
+  return `${cv}${gsBar()}<div class="btns" style="margin-bottom:12px"><button class="btn primary" style="flex:1" data-a="new:vente">➕ Nouvelle commande</button>${modeOf() !== 'livraison' ? '<button class="btn" style="flex:1" data-a="quick">⚡ Vente rapide</button>' : ''}</div>
+  ${upcomingCard()}${alertsCard(st, low)}
+  <div class="kpis" style="margin-top:10px">
+    <button class="kpi hero" data-a="nav:ventes"><div class="l">Ventes livrées aujourd'hui</div><div class="v num">${td.length}</div><div class="s">${money(td.reduce((a, m) => a + saleUSD(m), 0))}</div></button>
+    <button class="kpi" data-a="nav:ventes"><div class="l">À livrer</div><div class="v num">${pend.length}</div><div class="s">commande(s) en attente</div></button>
+    <button class="kpi" data-a="nav:stock"><div class="l">Stock total</div><div class="v num">${fmt(units)}</div><div class="s">pièces</div></button>
+    <button class="kpi" data-a="nav:clients"><div class="l">Clients</div><div class="v num">${clientsList().length}</div><div class="s">historique et relance</div></button>
+  </div>
+  <p class="note" style="margin-top:12px">🧑‍💼 Compte <b>Vendeur</b> : vous enregistrez les commandes et les ventes. Les prix d'achat, le bénéfice et les rapports sont réservés au patron.</p>`;
+}
 function vHome(){
+  if(isVendeur()) return vHomeVendeur();
   if(!sells() && has('imp')){ const cvi = S.settings.cover ? `<div class="cover" style="background-image:url('${S.settings.cover}')"></div>` : ''; return `${cvi}${installCard()}${vImport()}`; }
   if(!S.products.length) return `${onbCard()}${installCard()}${impHomeCard()}<div class="card empty" style="margin-top:8px"><b>Bienvenue 👋</b>Ajoutez vos produits pour commencer.
     <div class="stack" style="margin-top:16px">${PRESET ? `<button class="btn primary block" data-a="preset">Charger le catalogue ${esc(PRESET.label)}</button>` : ''}
@@ -819,6 +841,7 @@ function vStock(){
     ${stockAsOf ? `<p class="note" style="margin:8px 0 0">⏪ Vous voyez le stock tel qu'il était <b>à la fin du ${esc(dAbs(stockAsOf, 1))}</b>. <button class="link" data-a="sasof" data-d="">Revenir au stock actuel</button> · <button class="link" data-a="shday" data-d="${stockAsOf}">Mouvements de ce jour ›</button></p>` : ''}</div>
   <input class="search" type="search" placeholder="Rechercher un produit…" value="${esc(stockQ)}" oninput="stockQ=this.value;refreshList('stock')">
   ${plansCard()}
+  ${stockAsOf ? '' : forecastCard()}
   <div id="lst">${stockRows()}</div>
   ${recentStockHTML()}
   <div class="btns" style="margin-top:12px"><button class="btn" data-a="new:entree">+ Entrée de stock</button><button class="btn" data-a="new:envoi">Envoyer à un livreur</button></div>
@@ -1137,17 +1160,20 @@ function vPlus(){
   const r = stats('mois');
   const items = [
     ['clients','c-out','user','Clients',"Historique d'achat de chaque client et relance par WhatsApp"],
+    ['credits','c-loss','receipt','💳 Ventes à crédit',(() => { const o = credits().filter(c => !c.done); return o.length ? o.length + ' client(s) vous doivent de l\'argent' : 'Clients qui paient plus tard : reste à payer, rappels'; })()],
     ['jour','c-in','receipt','Rapport du jour',"Les ventes d'un jour au choix (ex. mercredi), cash / Mobile Money, bénéfice"],
+    ['bilan','c-in','receipt','📅 Bilan du mois',"Ventes, bénéfice, meilleurs produits et livreurs, comparé au mois d'avant"],
     ['rapport','c-in','receipt','Rapport de la semaine',"Résumé lundi → samedi à envoyer par WhatsApp ou imprimer en PDF"],
     ['depenses','c-loss','receipt','Dépenses',`Transport, expédition, Facebook… · ce mois ${money(r.dep)}`],
     ['livre','c-brand','book','Le Livre',"Toutes les entrées, envois, ventes et sorties, jour par jour"],
     ['reglages','c-x','set','Réglages',"Boutique, logo, couleur, taux du dollar, sauvegarde"]
   ];
-  if(impOn()) items.unshift(['import','c-send','box','📦 Commandes import',"Commandes sur demande (Chine…) : acomptes, étapes, reçus, marge"]);
+  if(isVendeur()){ const keep = ['clients', 'credits']; for(let i = items.length - 1; i >= 0; i--) if(!keep.includes(items[i][0])) items.splice(i, 1); }
+  else if(impOn()) items.unshift(['import','c-send','box','📦 Commandes import',"Commandes sur demande (Chine…) : acomptes, étapes, reçus, marge"]);
   if(!isStandalone()) items.push(['__install','c-brand','set',"📲 Installer l'application","iPhone, Android ou ordinateur : une icône comme une vraie application"]);
   return `${gsBar()}<div class="list menu">${items.map(([v,c,i,t,d]) => `<button class="it" data-a="${v === '__install' ? 'install' : 'nav:' + v}"><div class="ic ${c}">${ico(i)}</div><div class="m"><div class="t">${t}</div><div class="d" style="white-space:normal">${d}</div></div>${ico('chev')}</button>`).join('')}</div>
-  <div class="sec"><h2>Raccourcis</h2></div>
-  <div class="btns"><button class="btn" data-a="money:depense">+ Dépense</button><button class="btn" data-a="money:versement">+ Versement livreur</button><button class="btn" data-a="new:perte">− Sortie / perte</button><button class="btn" data-a="backup">Sauvegarde</button><button class="btn" data-a="soir">🌙 Point du soir</button><button class="btn" data-a="style:${glassPref()==='verre'?'simple':'verre'}">${glassPref()==='verre' ? 'Style simple' : '✨ Style verre'}</button><button class="btn" data-a="themetoggle">${isDark() ? '☀️ Mode clair' : '🌗 Mode sombre'}</button></div>
+  <div class="sec cost"><h2>Raccourcis</h2></div>
+  <div class="btns cost"><button class="btn" data-a="money:depense">+ Dépense</button><button class="btn" data-a="money:versement">+ Versement livreur</button><button class="btn" data-a="new:perte">− Sortie / perte</button><button class="btn" data-a="backup">Sauvegarde</button><button class="btn" data-a="soir">🌙 Point du soir</button><button class="btn" data-a="style:${glassPref()==='verre'?'simple':'verre'}">${glassPref()==='verre' ? 'Style simple' : '✨ Style verre'}</button><button class="btn" data-a="themetoggle">${isDark() ? '☀️ Mode clair' : '🌗 Mode sombre'}</button></div>
   <div style="margin-top:8px"><button class="btn block" data-a="tpl">📋 Modèle de commande pour WhatsApp</button></div>`;
 }
 
@@ -1208,7 +1234,7 @@ function rowMove(m){
     case 'inventaire': { const L = m.lines || [], miss = L.reduce((t,x) => t + Math.max(0, x.exp - x.real), 0), plus = L.reduce((t,x) => t + Math.max(0, x.real - x.exp), 0);
       return R('inv', 'c-x', 'box', 'Contrôle de stock · ' + (m.loc ? esc(lname(m.loc)) : 'dépôt'), miss || plus ? `${miss ? miss + ' manquante(s)' : ''}${miss && plus ? ' · ' : ''}${plus ? plus + ' en trop' : ''}` : 'Tout est juste ✅', miss ? '−' + miss : '✓', miss ? 'var(--bad)' : 'var(--ok)', ''); }
     case 'cmd': return R('cmd', 'c-send', 'box', esc(m.title || 'Commande import'), `Commande import · ${esc(m.client||'Client')} · ${esc(stepOf(m.step)[1])}`, amtX(cmdCalc(m).total, m.cur), 'var(--brand-tx)', cmdNo(m));
-    case 'fourn': case 'trans': case 'plan': case 'promesse': return '';
+    case 'fourn': case 'trans': case 'plan': case 'promesse': case 'annonce': return '';
     case 'ajust': return R('inv', 'c-in', 'in', esc(pname(m.pid)), 'Écart inventaire (en trop) · ' + (m.loc ? esc(lname(m.loc)) : 'dépôt'), '+' + m.qty, 'var(--ok)', '');
     case 'depense': return R('money', 'c-loss', 'receipt', esc(m.cat||'Dépense'), (m.liv ? esc(lname(m.liv)) + ' · ' : '') + (m.note ? esc(m.note) : 'Dépense'), '−'+amt(m.amount, m.cur), 'var(--warn)', m.cur==='FC' ? money(moneyUSD(m)) : '');
   }
@@ -1398,14 +1424,14 @@ function receiptClient(m){
   const tot = {}; items.forEach(it => tot[it.cur] = (tot[it.cur] || 0) + it.qty*it.price);
   const lines = items.length > 1 ? items.map(it => `• ${pname(it.pid)} × ${it.qty} — ${amt(it.qty*it.price, it.cur)}`).join('\n') : `📦 Produit : ${pname(m.pid)}\n🔢 Quantité : ${m.qty}\n💵 Prix unitaire : ${amt(m.price, m.cur)}`;
   const head = [st.slogan, st.addr ? '📍 ' + st.addr : '', st.wa ? '📞 ' + st.wa + (st.tel2 ? ' · ' + st.tel2 : '') : '', st.email ? '✉️ ' + st.email : '', st.legal].filter(Boolean).join('\n');
-  return `*${st.shop}* 🧾${head ? '\n' + head : ''}\n\n*${done || m.pre ? 'FACTURE — PAYÉE' : 'FACTURE PRO FORMA'}*\nN° ${invNo(m)} · ${new Date((m.date || today()) + 'T12:00:00').toLocaleDateString('fr-FR')}\n\nBonjour ${m.client || ''} 👋\n${done ? 'Merci pour votre achat !' : 'Votre commande est bien enregistrée.'}\n\n${lines}\n${(() => { const sh = shipOf(m); if(!sh) return ''; return `\n🚚 Expédition vers ${shipLine(sh)} : ${amt(num(sh.fee), sh.cur)}`; })()}\n*${done || m.pre ? 'Total payé' : 'Total à payer'} : ${(() => { const sh = shipOf(m), t2 = Object.assign({}, tot); if(sh && num(sh.fee)) t2[sh.cur] = (t2[sh.cur] || 0) + num(sh.fee); return Object.entries(t2).map(([cu,v]) => amt(v, cu)).join(' + '); })()}*${m.pre ? '\n✅ Payé par Mobile Money' : ''}${fee && !shipOf(m) ? '\n🛵 Frais de livraison : ' + fee + ' (à remettre au livreur)' : ''}${(items.find(it => it.pay) || {}).pay && !m.pre ? '\n💳 Paiement : ' + items.find(it => it.pay).pay : ''}\n\n📅 ${shipOf(m) ? 'Expédition' : 'Livraison'} : ${whenTxt(m)}${shipOf(m) ? '\n🚚 Colis envoyé par ' + (shipOf(m).co || 'l\'agence') + ' vers ' + (shipOf(m).city || '') + ' : retirez-le à l\'agence' : ''}\n📍 Adresse : ${m.addr || '-'}${L ? '\n🛵 Livreur : ' + L.name + (L.phone ? ' — ' + L.phone : '') : ''}${st.invNote ? '\n\n_' + st.invNote + '_' : ''}\n\nMerci pour votre confiance 🙏\n${st.shop}${st.wa ? ' · ' + st.wa : ''}`;
+  return `*${st.shop}* 🧾${head ? '\n' + head : ''}\n\n*${done || m.pre ? 'FACTURE — PAYÉE' : 'FACTURE PRO FORMA'}*\nN° ${invNo(m)} · ${new Date((m.date || today()) + 'T12:00:00').toLocaleDateString('fr-FR')}\n\nBonjour ${m.client || ''} 👋\n${done ? 'Merci pour votre achat !' : 'Votre commande est bien enregistrée.'}\n\n${lines}\n${(() => { const sh = shipOf(m); if(!sh) return ''; return `\n🚚 Expédition vers ${shipLine(sh)} : ${amt(num(sh.fee), sh.cur)}`; })()}\n*${done || m.pre ? 'Total payé' : 'Total à payer'} : ${(() => { const sh = shipOf(m), t2 = Object.assign({}, tot); if(sh && num(sh.fee)) t2[sh.cur] = (t2[sh.cur] || 0) + num(sh.fee); return Object.entries(t2).map(([cu,v]) => amt(v, cu)).join(' + '); })()}*${m.pre ? '\n✅ Payé par Mobile Money' : ''}${items.some(it => it.credit) ? (() => { const c = creditInfo(m); return `\n💳 Vente à crédit — déjà payé : ${amt(c.paid, c.cur)} · *reste à payer : ${amt(c.reste, c.cur)}*${c.due ? ' avant le ' + dAbs(c.due) : ''}`; })() : ''}${fee && !shipOf(m) ? '\n🛵 Frais de livraison : ' + fee + ' (à remettre au livreur)' : ''}${(items.find(it => it.pay) || {}).pay && !m.pre ? '\n💳 Paiement : ' + items.find(it => it.pay).pay : ''}\n\n📅 ${shipOf(m) ? 'Expédition' : 'Livraison'} : ${whenTxt(m)}${shipOf(m) ? '\n🚚 Colis envoyé par ' + (shipOf(m).co || 'l\'agence') + ' vers ' + (shipOf(m).city || '') + ' : retirez-le à l\'agence' : ''}\n📍 Adresse : ${m.addr || '-'}${L ? '\n🛵 Livreur : ' + L.name + (L.phone ? ' — ' + L.phone : '') : ''}${st.invNote ? '\n\n_' + st.invNote + '_' : ''}\n\nMerci pour votre confiance 🙏\n${st.shop}${st.wa ? ' · ' + st.wa : ''}`;
 }
 function receiptLivreur(m){
   const st = S.settings, fee = feeTxt(m), its = orderLines(m).filter(x => (x.liv || '') === (m.liv || '')), items = its.length ? its : [m];
   const tot = {}; items.forEach(it => tot[it.cur] = (tot[it.cur] || 0) + it.qty*it.price);
   const com = items.reduce((t, it) => t + it.qty*num(it.commU), 0);
   const prodTxt = items.length > 1 ? '📦 Produits :\n' + items.map(it => `• ${pname(it.pid)} × ${it.qty} — ${amt(it.qty*it.price, it.cur)}`).join('\n') : `📦 Produit : ${pname(m.pid)} × ${m.qty}`;
-  return `*BON DE LIVRAISON — ${st.shop}* 🛵\n\n📅 ${whenTxt(m)}\n👤 Client : ${m.client || '-'}\n📞 Téléphone : ${m.phone || '-'}\n📍 Adresse : ${m.addr || '-'}\n\n${prodTxt}${(() => { const sh = shipOf(m); return sh ? `\n\n🚚 *À EXPÉDIER vers ${shipLine(sh)}*\nFrais d'expédition : ${amt(num(sh.fee), sh.cur)} (payés par le client)` : ''; })()}\n${items.every(it => it.pre) ? '*✅ Déjà payé par le client — rien à encaisser*' : `*💵 Montant à encaisser : ${Object.entries(tot).map(([cu, v]) => amt(v, cu)).join(' + ')}*`}${fee && !shipOf(m) ? '\n🛵 Frais de livraison (pour vous) : ' + fee : ''}${m.note ? '\n📝 Note : ' + m.note : ''}\n\n${shipOf(m) ? "Merci de déposer le colis à l'agence, puis d'envoyer la photo du bordereau et de marquer « Livré » 🙏" : '⏰ Merci de respecter le rendez-vous de livraison avec le client 🙏'}`;
+  return `*BON DE LIVRAISON — ${st.shop}* 🛵\n\n📅 ${whenTxt(m)}\n👤 Client : ${m.client || '-'}\n📞 Téléphone : ${m.phone || '-'}\n📍 Adresse : ${m.addr || '-'}\n\n${prodTxt}${(() => { const sh = shipOf(m); return sh ? `\n\n🚚 *À EXPÉDIER vers ${shipLine(sh)}*\nFrais d'expédition : ${amt(num(sh.fee), sh.cur)} (payés par le client)` : ''; })()}\n${items.every(it => it.pre) ? '*✅ Déjà payé par le client — rien à encaisser*' : items.some(it => it.credit) ? (() => { const c = creditInfo(m), a = num(c.M.acompte); return (a > 0 ? `*💵 Montant à encaisser (acompte) : ${amt(a, c.cur)}*` : '*💳 Vente à crédit — rien à encaisser*') + `\n💳 Le reste (${amt(c.total - a, c.cur)}) sera payé plus tard au vendeur`; })() : `*💵 Montant à encaisser : ${Object.entries(tot).map(([cu, v]) => amt(v, cu)).join(' + ')}*`}${fee && !shipOf(m) ? '\n🛵 Frais de livraison (pour vous) : ' + fee : ''}${m.note ? '\n📝 Note : ' + m.note : ''}\n\n${shipOf(m) ? "Merci de déposer le colis à l'agence, puis d'envoyer la photo du bordereau et de marquer « Livré » 🙏" : '⏰ Merci de respecter le rendez-vous de livraison avec le client 🙏'}`;
 }
 
 /* ---------- Reçu en image (logo, couleurs, détail) ---------- */
@@ -1414,7 +1440,45 @@ function wrapText(x, txt, maxW){ const words = String(txt).split(' '), out = [];
 const invNo = m => 'FAC-' + String(m.date || today()).replace(/-/g,'') + '-' + String(m.ord || m.id).slice(-4).toUpperCase();
 const shipOf = m => m.ship || (m.ord ? (S.moves.find(x => x.type === 'vente' && x.ord === m.ord && x.ship && x.status !== 'annule') || {}).ship : null) || null;
 const shipLine = sh => sh ? `${sh.city || 'autre ville'}${sh.co ? ' par ' + sh.co : ''}` : '';
-const livCash = m => m.pre ? 0 : saleUSD(m); // argent que le livreur encaisse (0 si le client a déjà payé le vendeur)
+const livCash = m => m.pre ? 0 : m.credit ? (m.creditMain ? toUSD(num(m.acompte), m.cur, m.rate) : 0) : saleUSD(m); // argent que le livreur encaisse (0 si déjà payé ; acompte seulement si vente à crédit)
+/* ---------- Ventes à crédit (dettes clients) ---------- */
+const creditMainOf = m => { const ol = orderLines(m); return ol.find(x => x.creditMain) || m; };
+function creditInfo(m){ const M = creditMainOf(m), ol = orderLines(M).filter(x => x.status !== 'annule'), rt = num(M.rate) || rate();
+  const inMain = (a, cur, r) => M.cur === 'FC' ? (cur === 'FC' ? a : a * (num(r) || rt)) : toUSD(a, cur, r || rt);
+  const total = ol.reduce((t, x) => t + inMain(x.qty * x.price, x.cur, x.rate), 0);
+  const paid = num(M.acompte) + (M.cpays || []).reduce((t, p) => t + inMain(num(p.amt), p.cur || M.cur, p.rate), 0);
+  const reste = Math.max(0, total - paid);
+  return {M, total, paid, reste, cur:M.cur, due:M.dueDate || '', late:!!(M.dueDate && M.dueDate < today() && reste > 0.009), done:reste <= 0.009}; }
+const credits = () => { const seen = {}; return S.moves.filter(m => m.type === 'vente' && m.credit && m.creditMain && m.status !== 'annule').filter(m => { const k = m.ord || m.id; if(seen[k]) return false; return seen[k] = true; }).map(creditInfo); };
+let credTab = 'open';
+function vCredits(){
+  const all = credits(), open = all.filter(c => !c.done), done = all.filter(c => c.done), late = open.filter(c => c.late);
+  const tot = open.reduce((t, c) => t + (c.cur === 'FC' ? c.reste / (num(c.M.rate) || rate()) : c.reste), 0);
+  const L = credTab === 'done' ? done : credTab === 'late' ? late : open;
+  return `${gsBar()}<div class="kpis"><div class="kpi hero"><div class="l">Les clients vous doivent</div><div class="v num">${money(tot)}</div><div class="s">${open.length} crédit(s) en cours${late.length ? ' · ' + late.length + ' en retard' : ''}</div></div></div>
+  <div class="chips" style="margin:10px 0">${[['open', 'En cours (' + open.length + ')'], ['late', '⚠️ En retard (' + late.length + ')'], ['done', '✅ Réglés (' + done.length + ')']].map(([k, l]) => `<button class="chip ${credTab === k ? 'on' : ''}" data-a="credtab:${k}">${l}</button>`).join('')}</div>
+  ${L.length ? `<div class="list">${L.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999')).map(c => `<button class="it" data-a="credsheet:${c.M.id}"><div class="ic ${c.done ? 'c-in' : c.late ? 'c-loss' : 'c-out'}">💳</div><div class="m"><div class="t">${esc(c.M.client || 'Client')}${c.M.phone ? ' · ' + esc(c.M.phone) : ''}</div><div class="d">${esc(orderLines(c.M).map(x => pname(x.pid) + ' × ' + x.qty).join(', '))} · ${fmtDate(c.M.date)}${c.due ? ' · promis le ' + fmtDate(c.due) : ''}${c.late ? ' <b class="red">· en retard</b>' : ''}</div></div><div class="r"><b class="num ${c.done ? 'green' : 'red'}">${c.done ? 'Réglé' : amt(c.reste, c.cur)}</b><div class="note">sur ${amt(c.total, c.cur)}</div></div></button>`).join('')}</div>` : `<div class="card empty">${credTab === 'done' ? 'Aucun crédit réglé.' : 'Aucun client ne vous doit de l\'argent 👍'}</div>`}
+  <p class="note" style="margin-top:10px">Pour vendre à crédit : dans la vente, cochez « 💳 Vente à crédit » et notez l'acompte et la date promise.</p>`;
+}
+const credMsg = c => `Bonjour ${c.M.client || ''} 👋\nPetit rappel de *${S.settings.shop}* pour votre achat du ${dAbs(c.M.date)} : ${orderLines(c.M).map(x => pname(x.pid) + ' × ' + x.qty).join(', ')}.\n\nTotal : ${amt(c.total, c.cur)}\nDéjà payé : ${amt(c.paid, c.cur)}\n*Reste à payer : ${amt(c.reste, c.cur)}*${c.due ? '\nDate prévue : ' + dAbs(c.due, 1) : ''}\n\nVous pouvez payer par Mobile Money ou en cash. Merci beaucoup pour votre confiance 🙏`;
+function credSheet(id){ const m = S.moves.find(x => x.id === id); if(!m) return; const c = creditInfo(m), M = c.M;
+  sheet('💳 Vente à crédit', `<div class="card" style="margin-bottom:12px">
+      <div class="dl"><span>Client</span><span>${esc(M.client || '—')}</span></div>
+      <div class="dl"><span>Produits</span><span>${esc(orderLines(M).map(x => pname(x.pid) + ' × ' + x.qty).join(', '))}</span></div>
+      <div class="dl"><span>Total</span><span class="num">${amt(c.total, c.cur)}</span></div>
+      <div class="dl"><span>Acompte</span><span class="num">${amt(num(M.acompte), c.cur)}</span></div>
+      ${(M.cpays || []).map(p => `<div class="dl"><span>Payé le ${fmtDate(p.date)}</span><span class="num">${amt(num(p.amt), p.cur || c.cur)} <button class="link" data-a="creddel" data-id="${M.id}" data-p="${p.id}" title="Supprimer">✕</button></span></div>`).join('')}
+      <div class="dl strong"><span>Reste à payer</span><span class="num ${c.done ? 'green' : 'red'}">${c.done ? '✅ Réglé' : amt(c.reste, c.cur)}</span></div>
+      ${c.due ? `<div class="dl"><span>Date promise</span><span class="${c.late ? 'red' : ''}">${dAbs(c.due, 1)}${c.late ? ' (en retard)' : ''}</span></div>` : ''}
+    </div>
+    ${c.done ? '' : `<form id="cpf" class="card" style="margin-bottom:12px"><b>💵 Le client a payé</b><div class="row3" style="margin-top:8px">${field('Montant *', `<input name="amt" type="number" step="any" min="0" required value="${r2(c.reste)}">`)}${field('Devise', `<select name="cur">${curOpts(c.cur, [['$','$'],['FC',LC()]])}</select>`)}${field('Date', `<input name="date" type="date" value="${today()}">`)}</div><button class="btn primary block">Enregistrer le paiement</button></form>
+    <a class="btn wa block" href="${waLink(M.phone, credMsg(c))}" target="_blank" rel="noopener">${ico('wa')} Rappel de paiement → ${esc(M.client || 'client')}</a>`}
+    <button class="btn block" style="margin-top:8px" data-a="sale:${M.id}">Voir la vente</button>`);
+  const f = $('#cpf'); if(f) f.onsubmit = e => { e.preventDefault(); const E = f.elements, a = num(E.amt.value); if(!(a > 0)) return toast('Montant invalide');
+    M.cpays = (M.cpays || []).concat([{id:uid(), date:E.date.value || today(), amt:a, cur:E.cur.value, rate:rate()}]); M.ts = M.ts || Date.now(); save(); const c2 = creditInfo(M);
+    toast(c2.done ? 'Crédit réglé ✅' : 'Paiement enregistré · reste ' + amt(c2.reste, c2.cur)); if(c2.done) cheer && cheer('💳 Crédit réglé !', 80); credSheet(M.id); render(); };
+}
+
 const orderLines = m => m.ord ? S.moves.filter(x => x.type === 'vente' && x.ord === m.ord && x.status !== 'annule').sort((a,b) => (a.ts||0) - (b.ts||0)) : [m];
 async function receiptImage(m){
   const st = S.settings, L = liv(m.liv), items = orderLines(m), done = items.every(x => x.status === 'livre');
@@ -1543,6 +1607,8 @@ function alertsCard(st, low){
     if(oldSale) out.push([`liv:${l.id}`, `💰 ${esc(l.name)} n'a pas versé ${money(s.toRemit)} (ventes d'avant aujourd'hui)`]);
   });
   if(low.length) out.push(['nav:stock', `📦 ${low.length} produit(s) en stock bas ou en rupture`]);
+  { const fs = forecast().soon.filter(x => !low.some(p => p.id === x.p.id)); if(fs.length) out.push(['nav:stock', `⏳ ${fs.length} produit(s) vont bientôt finir : ${fs.slice(0, 3).map(x => esc(x.p.name) + ' (' + fDays(x.days) + ')').join(', ')}`]); }
+  { const cl = credits().filter(c => c.late); if(cl.length) out.push(['nav:credits', `💳 ${cl.length} client(s) en retard de paiement (crédit) : ${cl.slice(0, 3).map(c => esc(c.M.client || 'client')).join(', ')}`]); }
   const hh = String(new Date().getHours()).padStart(2, '0');
   const rems = S.moves.filter(m => m.type === 'vente' && (m.status === 'attente' || m.status === 'encours') && m.rem && m.rem.slice(0, 10) === t && m.rem.slice(11, 13) <= hh);
   rems.forEach(m => out.push([`sale:${m.id}`, `🔔 Rappel : ${esc(pname(m.pid))} × ${m.qty} pour ${esc(m.client || 'un client')} — livraison ${esc(whenTxt(m))}`]));
@@ -1743,6 +1809,60 @@ function vRapport(){
   <div class="stack noprint" style="margin-top:14px">
     <a class="btn wa block" href="${waLink('', txt)}" target="_blank" rel="noopener">${ico('wa')} Envoyer le rapport par WhatsApp</a>
     <div class="btns"><button class="btn" data-a="rcopy">Copier le texte</button><button class="btn" data-a="rprint">Imprimer / PDF</button></div>
+  </div>`;
+}
+
+/* ---------- Bilan du mois ---------- */
+let bilMonth = 0;
+function monthRange(k){ const d = new Date(today() + 'T12:00:00'); d.setDate(1); d.setMonth(d.getMonth() - k);
+  const a = iso10(d), e = new Date(d); e.setMonth(e.getMonth() + 1); e.setDate(0); const end = iso10(e); return [a, k === 0 && end > today() ? today() : end, end]; }
+function bilanData(k){
+  const [a, b] = monthRange(k), r = weekReport(a, b), days = Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
+  const [pa] = monthRange(k + 1), pb = addDays(pa, days), [, , pEnd] = monthRange(k + 1), q = weekReport(pa, pb < pEnd ? pb : pEnd);
+  const inR = d => d >= a && d <= b, sales = S.moves.filter(m => m.type === 'vente');
+  r.ann = sales.filter(m => m.status === 'annule' && inR(m.cancelAt || m.ddate || m.date)).length;
+  r.pcs = sales.filter(m => m.status === 'livre' && inR(mday(m))).reduce((t, m) => t + m.qty, 0);
+  const firstBuy = {}; sales.filter(m => m.status === 'livre').forEach(m => { const k2 = String(m.phone || m.client || '').replace(/\D/g, '') || norm0(m.client); if(!k2) return; const d = mday(m); if(!firstBuy[k2] || d < firstBuy[k2]) firstBuy[k2] = d; });
+  r.newCli = Object.values(firstBuy).filter(inR).length;
+  r.rate = r.nv + r.ann ? Math.round(r.nv / (r.nv + r.ann) * 100) : 0;
+  r.panier = r.nv ? r.ca / r.nv : 0;
+  r.credit = credits().filter(c => !c.done && inR(c.M.date)).reduce((t, c) => t + (c.cur === 'FC' ? c.reste / (num(c.M.rate) || rate()) : c.reste), 0);
+  return {a, b, r, q, label:new Date(a + 'T12:00:00').toLocaleDateString('fr-FR', {month:'long', year:'numeric'})};
+}
+const evo = (x, y) => { if(!y) return x ? '<span class="green">nouveau</span>' : ''; const v = Math.round((x - y) / Math.abs(y) * 100); return `<span class="${v >= 0 ? 'green' : 'red'}">${v >= 0 ? '▲ +' : '▼ '}${v} %</span>`; };
+const evoT = (x, y) => { if(!y) return ''; const v = Math.round((x - y) / Math.abs(y) * 100); return ` (${v >= 0 ? '+' : ''}${v} % vs mois dernier)`; };
+function bilanText(B){ const {r, q, label} = B;
+  const P = Object.entries(r.byProd).sort((x, y) => y[1].a - x[1].a).slice(0, 5).map(([id, v]) => `• ${pname(id)} : ${v.q} pièce(s), ${money(v.a)}`).join('\n');
+  const L = Object.entries(r.byLiv).sort((x, y) => y[1].n - x[1].n).map(([id, v]) => `• ${lname(id)} : ${v.n} livrée(s), commission ${money(v.c)}`).join('\n');
+  return `*${S.settings.shop} — Bilan de ${label}*\nDu ${dAbs(B.a)} au ${dAbs(B.b, 1)}\n\n*Bénéfice net : ${money(r.net)}*${evoT(r.net, q.net)}\nVentes livrées : ${r.nv} — ${money(r.ca)}${evoT(r.ca, q.ca)}\nPièces vendues : ${r.pcs}\nPanier moyen : ${money(r.panier)}\nCommandes annulées : ${r.ann} (réussite ${r.rate} %)\nNouveaux clients : ${r.newCli}\n\nCoût des produits : ${money(r.cost)}\nCommissions livreurs : ${money(r.comm)}\nDépenses : ${money(r.dep)}${r.loss ? '\nPertes : ' + money(r.loss) : ''}${r.credit ? '\nCrédits clients encore dus : ' + money(r.credit) : ''}${P ? '\n\n*Meilleurs produits*\n' + P : ''}${L ? '\n\n*Livreurs*\n' + L : ''}`;
+}
+function vBilan(){
+  const B = bilanData(bilMonth), {r, q} = B, txt = bilanText(B);
+  return `<div class="chips noprint">${[0, 1, 2, 3].map(k => `<button class="chip ${bilMonth === k ? 'on' : ''}" data-a="bmonth:${k}">${k === 0 ? 'Ce mois' : k === 1 ? 'Mois dernier' : monthRange(k)[0].slice(0, 7).split('-').reverse().join('/')}</button>`).join('')}</div>
+  <div class="card" style="margin-top:10px"><b>${esc(S.settings.shop)} — Bilan de ${esc(B.label)}</b><br><span class="note">Du ${dAbs(B.a)} au ${dAbs(B.b, 1)} · comparé aux mêmes jours du mois d'avant</span></div>
+  <div class="kpis" style="margin-top:10px">
+    <div class="kpi hero"><div class="l">Bénéfice net</div><div class="v num ${r.net < 0 ? 'neg' : ''}">${money(r.net)}</div><div class="s">${evo(r.net, q.net)}</div></div>
+    <div class="kpi"><div class="l">Ventes livrées</div><div class="v num">${money(r.ca)}</div><div class="s">${r.nv} vente(s) · ${evo(r.ca, q.ca)}</div></div>
+    <div class="kpi"><div class="l">Pièces vendues</div><div class="v num">${r.pcs}</div><div class="s">panier moyen ${money(r.panier)}</div></div>
+    <div class="kpi"><div class="l">Réussite livraisons</div><div class="v num">${r.rate} %</div><div class="s">${r.ann} annulée(s)</div></div>
+    <div class="kpi"><div class="l">Nouveaux clients</div><div class="v num">${r.newCli}</div><div class="s">premier achat ce mois</div></div>
+    <div class="kpi"><div class="l">Dépenses</div><div class="v num">${money(r.dep)}</div><div class="s">${evo(r.dep, q.dep)}</div></div>
+  </div>
+  <div class="card" style="margin-top:10px">
+    <div class="dl"><span>Ventes livrées</span><span class="num">${money(r.ca)}</span></div>
+    <div class="dl"><span>− Coût des produits</span><span class="num">${money(r.cost)}</span></div>
+    <div class="dl"><span>− Commissions livreurs</span><span class="num">${money(r.comm)}</span></div>
+    <div class="dl"><span>− Dépenses</span><span class="num">${money(r.dep)}</span></div>
+    ${r.loss ? `<div class="dl"><span>− Pertes</span><span class="num">${money(r.loss)}</span></div>` : ''}
+    <div class="dl strong"><span>= Bénéfice net</span><span class="num ${r.net < 0 ? 'red' : 'green'}">${money(r.net)}</span></div>
+    ${r.credit ? `<div class="dl"><span>💳 Crédits clients encore dus</span><span class="num red">${money(r.credit)}</span></div>` : ''}
+  </div>
+  <div class="sec"><h2>Meilleurs produits</h2></div>
+  <div class="card">${Object.entries(r.byProd).sort((x, y) => y[1].a - x[1].a).slice(0, 8).map(([id, v]) => `<div class="dl"><span>${esc(pname(id))}</span><span class="num">${v.q} · ${money(v.a)}</span></div>`).join('') || '<p class="note">Aucune vente livrée ce mois.</p>'}</div>
+  ${Object.keys(r.byLiv).length ? `<div class="sec"><h2>Livreurs</h2></div><div class="card tbw"><table class="tb"><tr><th>Livreur</th><th class="rt">Livrées</th><th class="rt">Encaissé</th><th class="rt">Commission</th></tr>${Object.entries(r.byLiv).sort((x, y) => y[1].n - x[1].n).map(([id, v]) => `<tr><td>${esc(lname(id))}</td><td class="rt">${v.n}</td><td class="rt">${money(v.a)}</td><td class="rt">${money(v.c)}</td></tr>`).join('')}</table></div>` : ''}
+  <div class="stack noprint" style="margin-top:14px">
+    <a class="btn wa block" href="${waLink('', txt)}" target="_blank" rel="noopener">${ico('wa')} Envoyer le bilan par WhatsApp</a>
+    <div class="btns"><button class="btn" data-a="bcopy">Copier le texte</button><button class="btn" data-a="rprint">Imprimer / PDF</button></div>
   </div>`;
 }
 
@@ -2450,10 +2570,10 @@ function prodSheet(id){
     ${locs.length ? `<div class="card" style="margin-bottom:12px">${locs.map(([l,q]) => `<div class="dl"><span>${esc(l.name)} · ${esc(l.city||'')}</span><span class="num">${q}</span></div>`).join('')}</div>` : ''}
     <div class="card" style="margin-bottom:12px">
       <div class="dl"><span>Prix de vente</span><span class="num">${priceTxt(p)}${p.cur==='FC' ? ' ≈ ' + money(su) : ''}</span></div>
-      <div class="dl"><span>Prix d'achat</span><span class="num">${num(p.buy)>0 ? amt(p.buy, p.cur) : (kit && cu ? '≈ ' + money(cu) + ' (produits)' : '<span class="red">à compléter</span>')}</span></div>
+      <div class="dl cost"><span>Prix d'achat</span><span class="num">${num(p.buy)>0 ? amt(p.buy, p.cur) : (kit && cu ? '≈ ' + money(cu) + ' (produits)' : '<span class="red">à compléter</span>')}</span></div>
       <div class="dl"><span>Commission livreur</span><span class="num">${commVal(p, num(p.comm))}${p.commMode==='pct' ? ' ≈ ' + money(cm) : ''}</span></div>
       ${p.commCity ? Object.entries(p.commCity).map(([c,v]) => `<div class="dl"><span>&nbsp;&nbsp;↳ à ${esc(c)}</span><span class="num">${commVal(p, num(v))}${p.commMode==='pct' ? ' ≈ ' + money(su * num(v) / 100) : ''}</span></div>`).join('') : ''}
-      <div class="dl strong"><span>Bénéfice par pièce (après commission)</span><span class="num ${marge<0?'red':'green'}">${money(marge)}</span></div>
+      <div class="dl strong cost"><span>Bénéfice par pièce (après commission)</span><span class="num ${marge<0?'red':'green'}">${money(marge)}</span></div>
       ${p.cat ? `<div class="dl"><span>Catégorie</span><span>${esc(p.cat)}</span></div>` : ''}
       ${p.details ? `<p class="note" style="margin-top:8px;white-space:pre-line">${esc(p.details)}</p>` : ''}
     </div>
@@ -2504,6 +2624,8 @@ function moveForm(type, opt = {}){
       <div class="f" id="remBox"><span>🔔 Me rappeler cette commande</span><div class="chips" id="remChips" style="margin-bottom:6px">${[['', 'Pas de rappel spécial'], ['veille', 'La veille à 18 h'], ['matin', 'Le jour même à 8 h'], ['1h', '1 h avant'], ['autre', 'Autre date / heure']].map(([k, l]) => `<button type="button" class="chip" data-rem="${k}">${l}</button>`).join('')}</div>
         <input name="rem" type="datetime-local" step="3600" value="${esc(m?.rem || '')}" style="${m && m.rem ? '' : 'display:none'}"><small class="note" id="remTxt"></small></div>
       ${field('Payé en', `<select name="pay">${PAYS.map(x => `<option value="${x}" ${(m?.pay||'')===x?'selected':''}>${x || '— (non précisé)'}</option>`).join('')}</select>`, 'Pour une vente directe : cash, Mobile Money…')}
+      ${(() => { const cm = m ? creditMainOf(m) : null, on = !!(m && m.credit); return `<label class="f" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" name="credit" ${on ? 'checked' : ''} style="width:auto"> <b>💳 Vente à crédit</b> <span class="note">(le client paiera plus tard)</span></label>
+      <div class="row2" id="creditBox" style="${on ? '' : 'display:none'}">${field('Déjà payé (acompte)', `<input name="acompte" type="number" step="any" min="0" value="${on && cm ? (cm.acompte ?? '') : ''}" placeholder="0">`, 'Le livreur encaisse seulement cet acompte')}${field('Date promise de paiement', `<input name="dueDate" type="date" value="${on && cm ? esc(cm.dueDate || '') : ''}">`)}</div>`; })()}
       <div class="f"><span>Statut</span><div class="seg" id="segS">${Object.entries(STATUS).map(([k,l]) => `<button type="button" data-s="${k}">${l}</button>`).join('')}</div></div>`;
   else h += `<div></div></div>`;
   h += `<div class="row2">${field(type === 'vente' ? 'Date de la commande' : 'Date', `<input name="date" type="date" required value="${m ? m.date : today()}">`)}${field('Note', `<input name="note" value="${esc(m?.note)}" placeholder="${type==='entree'?'Fournisseur…':'Optionnel'}">`)}</div>
@@ -2512,6 +2634,7 @@ function moveForm(type, opt = {}){
   sheet(T[0], h);
 
   const f = $('#mf'), E = f.elements;
+  if(E.credit) E.credit.onchange = () => { $('#creditBox').style.display = E.credit.checked ? '' : 'none'; };
   if(!m && type === 'vente' && opt.client){ E.client.value = opt.client.name || ''; E.phone.value = opt.client.phone || ''; E.addr.value = opt.client.addr || ''; const d = f.querySelector('details.paste'); if(d) d.open = false; }
   let status = m?.status || (liv0 ? 'attente' : 'livre');
   const paintSeg = () => { if($('#segS')) [...$('#segS').children].forEach(b => b.classList.toggle('on', b.dataset.s === status)); };
@@ -2616,6 +2739,8 @@ function moveForm(type, opt = {}){
       if(!m || m.pid !== p.id || m.liv !== rec.liv || m.price !== rec.price) rec.commU = commUFor(p, liv(rec.liv), toUSD(rec.price, p.cur, m && m.cur === p.cur ? m.rate : rate()));
       if(!m || m.pid !== p.id || m.cur !== p.cur) rec.rate = rate();
       rec.client = E.client.value.trim(); rec.phone = E.phone.value.trim(); rec.addr = E.addr.value.trim(); rec.status = status;
+      if(E.credit && E.credit.checked){ rec.credit = true; if(!m || m.creditMain || !m.credit){ rec.creditMain = true; rec.acompte = num(E.acompte.value); rec.dueDate = E.dueDate.value || ''; } }
+      else if(E.credit){ delete rec.credit; delete rec.creditMain; delete rec.acompte; delete rec.dueDate; delete rec.cpays; }
       rec.ddate = E.ddate.value || rec.date; rec.dtime = E.dtime.value; if(E.rem && E.rem.value) rec.rem = E.rem.value.slice(0, 13) + ':00'; else delete rec.rem; rec.pay = E.pay ? E.pay.value : (rec.pay || '');
       if(rec.status === 'livre'){ if(!m) rec.ldate = rec.ddate; else if(m.status !== 'livre') rec.ldate = today(); else if(m.ddate !== rec.ddate) rec.ldate = rec.ddate; } else delete rec.ldate;
     }
@@ -2628,7 +2753,7 @@ function moveForm(type, opt = {}){
     const oid = m ? (m.ord || m.id) : rec.id;
     const more = type === 'vente' ? xl.filter(x => prod(x.pid) && x.qty > 0).map((x, i) => { const P = prod(x.pid);
       rec.ord = oid; return Object.assign({}, rec, {id:uid(), ord:oid, ts:Date.now() + i + 1, pid:P.id, qty:x.qty, price:x.price, cur:P.cur, rate:rate(), costU:unitCostUSD(P), commU:commUFor(P, liv(rec.liv), toUSD(x.price, P.cur))}); }) : [];
-    more.forEach(x => { delete x.ship; delete x.rem; });
+    more.forEach(x => { delete x.ship; delete x.rem; delete x.creditMain; delete x.acompte; delete x.dueDate; delete x.cpays; });
     next = next.concat(more);
     if(type === 'vente' && E.shipOn){
       // une seule ligne de la commande porte l'expédition ; « payé d'avance » vaut pour toute la commande
@@ -2702,6 +2827,7 @@ function saleSheet(id, fresh){
     </div>
     ${(() => { const ol = orderLines(m); if(ol.length < 2) return ''; const tot = {}; ol.forEach(it => tot[it.cur] = (tot[it.cur] || 0) + it.qty*it.price);
       return `<div class="card" style="margin-bottom:12px"><b>🛒 Commande de ${ol.length} produits</b><div class="list" style="margin-top:8px">${ol.map(it => `<button class="it" data-a="sale:${it.id}" style="${it.id === m.id ? 'background:var(--brand-soft,#eef)' : ''}"><div class="m"><div class="t">${esc(pname(it.pid))} × ${it.qty}</div><div class="d">${amt(it.qty*it.price, it.cur)} · ${STATUS[it.status] || ''}</div></div></button>`).join('')}</div><div class="dl strong" style="margin-top:6px"><span>Total de la commande</span><span class="num">${Object.entries(tot).map(([cu, v]) => amt(v, cu)).join(' + ')}</span></div></div>`; })()}
+    ${m.credit ? (() => { const c = creditInfo(m); return `<button class="card" data-a="credsheet:${c.M.id}" style="width:100%;text-align:left;margin-bottom:12px;${c.done ? '' : 'border:2px solid var(--bad,#dc2626)'}"><b>💳 Vente à crédit</b> — ${c.done ? '✅ réglée' : `reste à payer <b class="red">${amt(c.reste, c.cur)}</b> sur ${amt(c.total, c.cur)}${c.due ? ' · promis le ' + fmtDate(c.due) : ''}`}<br><span class="note">Touchez pour encaisser un paiement ou envoyer un rappel</span></button>`; })() : ''}
     <div class="sec" style="margin-top:4px"><h2>Envoyer les reçus par WhatsApp</h2></div>
     <div class="stack" style="margin-bottom:6px">
       ${L ? `<a class="btn wa block" href="${waLink(L.phone, rl)}" target="_blank" rel="noopener">${ico('wa')} 1. Bon de livraison → ${esc(L.name)}${L.phone ? '' : ' (choisir le contact)'}</a>` : ''}
@@ -2724,7 +2850,7 @@ function saleSheet(id, fresh){
     <div class="card" style="margin-bottom:12px">
       <div class="dl"><span>Total client</span><span class="num">${total}${m.cur === 'FC' ? ' ≈ ' + money(u) : ''}</span></div>
       <div class="dl"><span>Commission livreur</span><span class="num">${m.liv ? money(m.qty*num(m.commU)) : '—'}</span></div>
-      <div class="dl"><span>Bénéfice sur cette vente</span><span class="num">${money(u - m.qty*num(m.costU) - (m.liv ? m.qty*num(m.commU) : 0))}</span></div>
+      <div class="dl cost"><span>Bénéfice sur cette vente</span><span class="num">${money(u - m.qty*num(m.costU) - (m.liv ? m.qty*num(m.commU) : 0))}</span></div>
       <div class="dl"><span>Livreur</span><span>${L ? esc(L.name) + ' · ' + esc(L.city||'') + (L.phone ? '<br>' + esc(L.phone) : '') : 'Vente directe (dépôt)'}</span></div>
       <div class="dl"><span>Client</span><span>${esc(m.client || '—')}${m.phone ? '<br>' + esc(m.phone) : ''}</span></div>
       <div class="dl"><span>Adresse</span><span style="white-space:pre-line">${esc(m.addr || '—')}</span></div>
@@ -3014,6 +3140,7 @@ const A = {
   livday: (id, el) => livDaySheet(id, el && el.dataset.d),
   sasof: (_, el) => { stockAsOf = el.dataset.d || ''; render(); },
   planform: v => planForm(v || null),
+  planfor: (pid, el) => planForm(null, {pid, qty:num(el && el.dataset.q) || 10}),
   plandel: async id => { if(!await ask('Supprimer cet achat prévu ?', 'Supprimer')) return; S.moves = S.moves.filter(m => m.id !== id); save(); closeSheet(); render(); },
   shipform: id => shipForm(id),
   feeadd: () => { const b = $('#feeRows'); if(!b) return; b.insertAdjacentHTML('beforeend', feeRowHTML('', '')); const i = b.querySelectorAll('[data-fc=c]'); i[i.length - 1].focus(); },
@@ -3172,12 +3299,35 @@ function plansCard(){
     return `<div class="it" style="cursor:default;flex-wrap:wrap"><div class="ic c-in">${ico('in')}</div><div class="m" style="min-width:0;flex:1"><div class="t" style="white-space:normal">${esc(pname(m.pid))} × ${m.qty}</div><div class="d"><b class="${late ? 'red' : soon ? '' : ''}" style="${soon ? 'color:var(--warn,#b45309)' : ''}">📅 ${late ? 'En retard · ' : ''}${esc(dAbs(m.date, 1))}</b>${m.sup ? ' · ' + esc(m.sup) : ''}${num(m.cost) ? ' · ' + amt(m.cost, (prod(m.pid) || {}).cur || '$') + '/pièce' : ''}${m.note ? ' · ' + esc(m.note) : ''}</div></div>
       <div style="display:flex;gap:6px;width:100%;margin-top:8px"><button class="btn sm primary" style="flex:1" data-a="plandone:${m.id}">✅ Acheté (entrer au stock)</button><button class="btn sm" data-a="planform:${m.id}">✎ Modifier</button></div></div>`; }).join('')}</div>` : '<p class="note" style="margin-top:6px">Notez ici ce que vous devez racheter et quand : vous recevrez un rappel.</p>'}</div>`;
 }
-function planForm(id){
+/* ---------- Prévisions : stock qui va finir, produits qui dorment ---------- */
+function forecast(){
+  const t = today(), a14 = addDays(t, -13), a30 = addDays(t, -29), st = stockAt(), sold14 = {}, last = {}, first = {};
+  for(const m of S.moves){
+    if(m.type === 'vente' && m.status === 'livre'){ const d = mday(m); for(const [pid, q] of lines(m.pid, m.qty)){ if(d >= a14) sold14[pid] = (sold14[pid] || 0) + q; if(!last[pid] || d > last[pid]) last[pid] = d; } }
+    if(m.type === 'entree' && (!first[m.pid] || m.date < first[m.pid])) first[m.pid] = m.date;
+  }
+  const soon = [], sleep = [];
+  for(const p of S.products){ if(isKit(p)) continue; const have = totalOf(st, p.id) - pendAll(p.id), sold = sold14[p.id] || 0, perDay = sold / 14;
+    if(perDay > 0 && have > 0){ const days = have / perDay; if(days <= 7) soon.push({p, have, perDay, days, buy:Math.max(1, Math.ceil(perDay * 30))}); }
+    if(have > 0 && (!last[p.id] || last[p.id] < a30) && first[p.id] && first[p.id] < a30) sleep.push({p, have, value:have * unitCostUSD(p), since:last[p.id] || ''});
+  }
+  soon.sort((a, b) => a.days - b.days); sleep.sort((a, b) => b.value - a.value);
+  return {soon, sleep};
+}
+const fDays = d => d < 1 ? "moins d'1 jour" : '~' + Math.round(d) + ' jour' + (Math.round(d) > 1 ? 's' : '');
+function forecastCard(){
+  const {soon, sleep} = forecast(); if(!soon.length && !sleep.length) return '';
+  return `<div class="card" style="margin-bottom:10px">
+    ${soon.length ? `<b>⏳ Va bientôt finir</b> <span class="note">(au rythme des 14 derniers jours)</span><div class="list" style="margin:6px 0 ${sleep.length ? 12 : 0}px">${soon.map(x => `<div class="it"><div class="m"><div class="t">${esc(x.p.name)}</div><div class="d" style="white-space:normal">${fmt(x.have)} pièce(s) · ${fmt(r2(x.perDay))}/jour · <b class="red">${fDays(x.days)} de stock</b></div></div><button class="btn sm" data-a="planfor:${x.p.id}" data-q="${x.buy}">🛒 Prévoir l'achat</button></div>`).join('')}</div>` : ''}
+    ${sleep.length ? `<b>🐢 Produits qui dorment</b> <span class="note">(aucune vente depuis 30 jours)</span><div class="list" style="margin-top:6px">${sleep.map(x => `<div class="it"><div class="m"><div class="t">${esc(x.p.name)}</div><div class="d" style="white-space:normal">${fmt(x.have)} pièce(s)<span class="cost"> · <b>${money(x.value)}</b> bloqués</span>${x.since ? ' · dernière vente ' + fmtDate(x.since) : ' · jamais vendu'}</div></div><button class="btn sm" data-a="newpack">🎁 Promo</button></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+function planForm(id, opt = {}){
   const m = id ? S.moves.find(x => x.id === id) : null, P = S.products.filter(p => !isKit(p));
   if(!P.length){ toast('Ajoutez d\'abord vos produits'); return; }
   sheet(m ? 'Modifier l\'achat prévu' : '🛒 Prévoir un achat', `<form id="plf">
-    ${field('Produit *', `<select name="pid">${P.map(p => `<option value="${p.id}" ${m && m.pid === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>`)}
-    <div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : 10}">`)}${field('Date prévue de l\'achat *', `<input name="date" type="date" required value="${m ? m.date : addDays(today(), 7)}">`)}</div>
+    ${field('Produit *', `<select name="pid">${P.map(p => `<option value="${p.id}" ${(m && m.pid === p.id) || (!m && opt.pid === p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>`)}
+    <div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : (opt.qty || 10)}">`, !m && opt.qty ? 'Proposé : environ 1 mois de ventes' : '')}${field('Date prévue de l\'achat *', `<input name="date" type="date" required value="${m ? m.date : addDays(today(), 7)}">`)}</div>
     <div class="row2">${field('Prix d\'achat prévu (pièce)', `<input name="cost" type="number" step="any" min="0" value="${m ? (m.cost || '') : ''}">`)}${field('Fournisseur', `<input name="sup" value="${esc(m?.sup)}" placeholder="Optionnel">`)}</div>
     ${field('Note', `<input name="note" value="${esc(m?.note)}" placeholder="Ex : commander chez …">`)}
     <button class="btn primary block">${m ? 'Enregistrer' : 'Ajouter'}</button>
@@ -3252,6 +3402,11 @@ function freshStartSheet(){
       <button class="btn block" data-a="new:envoi">🛵 Envoyer du stock à un livreur</button></div>`), 900);
   };
 }
+A.credtab = k => { credTab = k; render(); };
+A.bmonth = k => { bilMonth = num(k); render(); };
+A.bcopy = () => { const t = bilanText(bilanData(bilMonth)); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Bilan copié ✅'), () => toast('Copie impossible')); };
+A.credsheet = id => credSheet(id);
+A.creddel = (_, el) => { const M = S.moves.find(x => x.id === el.dataset.id); if(!M) return; ask('Supprimer ce paiement ?', 'Supprimer').then(ok => { if(!ok) return; M.cpays = (M.cpays || []).filter(p => p.id !== el.dataset.p); save(); credSheet(M.id); render(); }); };
 A.install = async () => {
   if(installEvt){ try{ installEvt.prompt(); const r = await installEvt.userChoice; installEvt = null; if(r && r.outcome === 'accepted'){ localStorage.setItem('stock_installed','1'); toast('Installation en cours… ✅'); } render(); return; }catch(e){ installEvt = null; } }
   sheet("📲 Installer l'application", installHelpHTML());
@@ -3768,7 +3923,7 @@ function subDays(shop){ const end = shop && shop.paid_until; return end ? Math.r
 const inDays = d => d <= 0 ? "aujourd'hui" : d === 1 ? 'demain' : 'dans ' + d + ' jours';
 // Bandeau d'abonnement : prix pendant l'essai, avertissement avant la fin, rien quand c'est payé
 function subBanner(compact){
-  const shop = ONLINE.shop, si = subInfo(shop); if(!si || ONLINE.role === 'livreur') return '';
+  const shop = ONLINE.shop, si = subInfo(shop); if(!si || ONLINE.role === 'livreur' || ONLINE.role === 'vendeur') return '';
   const d = subDays(shop), owner = ONLINE.role === 'proprietaire', essai = shop.status === 'essai' && si.cls !== 'bad';
   if(si.cls === 'ok') return '';
   const renew = si.cls === 'bad' || (!essai && d != null && d <= 5);
@@ -3793,7 +3948,7 @@ function subWarnOnce(){
   const k = 'stock_online_warn_' + shop.id; try{ if(localStorage.getItem(k) === today()) return; localStorage.setItem(k, today()); }catch(_){}
   setTimeout(() => sheet(si.cls === 'bad' ? 'Abonnement terminé' : (shop.status === 'essai' ? '🎁 Votre essai se termine bientôt' : 'Avertissement abonnement'), subBanner(false) + `<p class="note" style="margin-top:10px">${shop.status === 'essai' && si.cls !== 'bad' ? 'Gardez toutes vos données (produits, ventes, livreurs) : activez votre abonnement avant la fin de l\'essai. ' : ''}Payez par Mobile Money puis envoyez la capture sur WhatsApp : BASILUA TECH active votre abonnement et ce message disparaît.</p>`), 600);
 }
-const ROLE_TXT = {proprietaire:'Propriétaire', gerant:'Gérant', livreur:'Livreur'};
+const ROLE_TXT = {proprietaire:'Propriétaire', gerant:'Gérant', vendeur:'Vendeur', livreur:'Livreur'};
 
 /* ---------- Écrans de connexion ---------- */
 function authShell(inner){
@@ -3956,7 +4111,7 @@ function showCreateShop(){
 }
 function openShop(shop){
   if(!shop) return;
-  ONLINE.shop = shop; ONLINE.role = shop.role || ONLINE.role;
+  ONLINE.shop = shop; ONLINE.role = shop.role || ONLINE.role; window.APP_ROLE = ONLINE.role; document.documentElement.classList.toggle('role-vendeur', ONLINE.role === 'vendeur');
   KEY = 'stock_online_' + shop.id;
   S = load();
   const cloud = shop.settings || {};
@@ -4017,13 +4172,14 @@ render = function(){
   rawRender();
   if(!ONLINE.shop) return;
   const pend = declsOf().filter(d => d.status === 'attente');
-  if(pend.length && (view === 'home' || view === 'livreurs') && ONLINE.role !== 'livreur'){
+  if(pend.length && (view === 'home' || view === 'livreurs') && !['livreur','vendeur'].includes(ONLINE.role)){
     $('#main').insertAdjacentHTML('afterbegin', `<button class="subban warn" style="display:block;width:100%;text-align:left" data-a="decllist">💸 ${pend.length} versement(s) déclaré(s) par vos livreurs, à confirmer (${money(pend.reduce((t,d) => t + declUSD(d), 0))}) — touchez pour vérifier</button>`);
   }
   if(view === 'plus'){
     const extra = (ONLINE.role === 'proprietaire' ? `<button class="it" data-a="nav:equipe"><div class="ic c-send">${ico('user')}</div><div class="m"><div class="t">Équipe</div><div class="d" style="white-space:normal">Inviter un gérant ou vos livreurs sur l'application</div></div>${ico('chev')}</button>` : '')
       + (ONLINE.admin ? `<button class="it" data-a="nav:admin"><div class="ic" style="background:#111827;color:#fff">${ico('set')}</div><div class="m"><div class="t">Espace BASILUA TECH</div><div class="d" style="white-space:normal">Clients, abonnements, mots de passe, sauvegarde globale</div></div>${ico('chev')}</button>` : '');
-    if(extra) $('#main').insertAdjacentHTML('afterbegin', `<div class="list menu" style="margin-bottom:12px">${extra}</div>`);
+    const extra2 = ['proprietaire','gerant'].includes(ONLINE.role) ? `<button class="it" data-a="nav:annonce"><div class="ic c-brand">${ico('send')}</div><div class="m"><div class="t">📢 Message à l'équipe</div><div class="d" style="white-space:normal">Une annonce à tous vos livreurs en une fois (prix, promo, horaires…)</div></div>${ico('chev')}</button><button class="it" data-a="nav:journal"><div class="ic c-x">${ico('book')}</div><div class="m"><div class="t">📋 Journal d'activité</div><div class="d" style="white-space:normal">Qui a créé, modifié ou supprimé quoi, et quand</div></div>${ico('chev')}</button>` : '';
+    if(extra || extra2) $('#main').insertAdjacentHTML('afterbegin', `<div class="list menu" style="margin-bottom:12px">${extra}${extra2}</div>`);
     $('#main').insertAdjacentHTML('beforeend', `<div class="list menu" style="margin-top:12px"><a class="it" href="guide.html" target="_blank" rel="noopener" style="text-decoration:none"><div class="ic c-in">${ico('book')}</div><div class="m"><div class="t">Guide d'utilisation</div><div class="d">Comment utiliser l'application, pas à pas</div></div>${ico('chev')}</a><a class="it" href="guide-livreur.html" target="_blank" rel="noopener" style="text-decoration:none"><div class="ic c-send">${ico('book')}</div><div class="m"><div class="t">Guide du livreur</div><div class="d">À envoyer à vos livreurs</div></div>${ico('chev')}</a></div>`);
   }
   const si = subInfo(ONLINE.shop), main = $('#main');
@@ -4068,7 +4224,7 @@ let META = {last:null, h:{}};
 const SYNC = {busy:false, again:false, state:'idle', pending:0, err:'', t:null};
 function loadMeta(){ try{ const m = JSON.parse(localStorage.getItem(KEY + '_sync') || 'null'); if(m && m.h) return m; }catch(_){} return {last:null, h:{}}; }
 function saveMeta(){ try{ localStorage.setItem(KEY + '_sync', JSON.stringify(META)); }catch(_){} }
-function shopWritable(){ const si = subInfo(ONLINE.shop); return !!ONLINE.shop && (!si || si.cls !== 'bad') && ['proprietaire','gerant'].includes(ONLINE.role); }
+function shopWritable(){ const si = subInfo(ONLINE.shop); return !!ONLINE.shop && (!si || si.cls !== 'bad') && ['proprietaire','gerant','vendeur'].includes(ONLINE.role); }
 function computeDirty(){
   const out = [], seen = new Set();
   for(const [kind, arr] of KINDS) for(const it of S[arr] || []){
@@ -4176,6 +4332,15 @@ document.addEventListener('click', e => {
   toast(ONLINE.role === 'livreur' ? 'Accès livreur : lecture seule.' : 'Abonnement inactif : lecture seule. Contactez BASILUA TECH.');
 }, true);
 
+// Compte « Vendeur » : actions réservées au patron / gérant
+const VB_NAME = ['newpack','editprod','delprod','delmove','money','stockupd','freshstart','planform','plandone','plandel','planfor','invform','invdel','declok','declko','backup','csv','preset','demo','editliv','delliv','feeadd','shipcoadd','shipcodel','importwb'];
+const VB_FULL = ['new:produit','new:entree','new:perte'];
+document.addEventListener('click', e => {
+  if(ONLINE.role !== 'vendeur') return;
+  const t = e.target.closest('[data-a]'); if(!t) return; const a = t.dataset.a || '', n = a.split(':')[0];
+  if(!VB_FULL.includes(a) && !VB_NAME.includes(n)) return;
+  e.preventDefault(); e.stopImmediatePropagation(); toast('Réservé au patron ou au gérant (compte Vendeur).');
+}, true);
 // Import des données de l'ancienne application WB Stock (même téléphone / même navigateur)
 function localWB(){
   for(const k of ['gestion_stock_livreurs_v2','stock_livreurs_vierge_v1']){
@@ -4200,7 +4365,78 @@ A.demo = async () => {
 /* =================================================================
    Vues supplémentaires : Équipe, Espace BASILUA TECH, écran Livreur
    ================================================================= */
-const CUSTOM = {}, CUSTOM_AFTER = {}, CSUB = {equipe:'Équipe', admin:'Espace BASILUA TECH', moi:'Mes livraisons'};
+const CUSTOM = {}, CUSTOM_AFTER = {}, CSUB = {equipe:'Équipe', admin:'Espace BASILUA TECH', moi:'Mes livraisons', journal:"Journal d'activité", annonce:"Message à l'équipe"};
+
+/* ---------- Journal d'activité (qui a fait quoi) ---------- */
+const JR = {rows:null, mem:{}, loading:false, err:'', who:'', type:'', limit:200};
+const JR_ST = {attente:'En attente', encours:'En route', livre:'Livré', annule:'Annulé'};
+const JR_TYPE = {vente:'une vente', entree:'une entrée de stock', envoi:'un envoi au livreur', retour:'un retour du livreur', perte:'une perte / sortie', depense:'une dépense', versement:'un versement', paiecomm:'un paiement de commission', decl:'une déclaration de versement', inventaire:'un contrôle de stock', ajust:'un ajustement de stock', plan:'un achat prévu', promesse:'une promesse client', annonce:'un message à l\'équipe'};
+async function loadJournal(){
+  JR.loading = true; JR.err = '';
+  const [l, m] = await Promise.all([
+    sb.from('item_log').select('id,item_id,kind,action,actor,at,o,n').eq('shop_id', ONLINE.shop.id).order('at', {ascending:false}).limit(JR.limit),
+    sb.from('members').select('user_id,role,display_name,phone').eq('shop_id', ONLINE.shop.id)]);
+  JR.loading = false; if(l.error){ JR.err = rpcErr(l.error); JR.rows = []; } else JR.rows = l.data || [];
+  JR.mem = {}; (m.data || []).forEach(x => JR.mem[x.user_id] = x);
+  if(view === 'journal') render();
+}
+function jrWho(id){ const x = JR.mem[id]; if(!x) return id ? 'Ancien membre' : 'Système'; return (x.display_name || telPretty(x.phone || '')) + ' (' + (ROLE_TXT[x.role] || x.role) + ')'; }
+function jrText(r){
+  const d = r.n || {}, o = r.o || {}, t = d.type || o.type;
+  const what = r.kind === 'product' ? `le produit « ${d.name || o.name || '?'} »` : r.kind === 'livreur' ? `le livreur « ${d.name || o.name || '?'} »` : (JR_TYPE[t] || 'une opération');
+  const det = r.kind === 'move' ? [d.pid ? pname(d.pid) + (d.qty ? ' × ' + d.qty : '') : '', d.client || '', d.amount ? amt(num(d.amount), d.cur) : (d.price && d.qty && t === 'vente' ? amt(d.qty * num(d.price), d.cur) : ''), d.liv && t !== 'vente' ? lname(d.liv) : (t === 'vente' && d.liv ? '🛵 ' + lname(d.liv) : ''), d.cat || ''].filter(Boolean).join(' · ') : '';
+  if(r.action === 'create') return `a créé ${what}${det ? ' : ' + det : ''}`;
+  if(r.action === 'delete') return `🗑️ a supprimé ${what}${det ? ' : ' + det : ''}`;
+  if(r.action === 'restore') return `a rétabli ${what}${det ? ' : ' + det : ''}`;
+  if(r.action === 'status') return `a mis « ${JR_ST[d.status] || d.status} » (avant : ${JR_ST[o.status] || o.status || '—'}) : ${det}${d.status === 'annule' && d.cancelReason ? ' — ' + d.cancelReason : ''}`;
+  const ch = []; const L = {qty:'quantité', price:'prix', client:'client', liv:'livreur', amount:'montant', sell:'prix de vente', buy:"prix d'achat", name:'nom', cat:'catégorie', pid:'produit', acompte:'acompte', credit:'crédit'};
+  Object.keys(L).forEach(k => { if(JSON.stringify(o[k]) !== JSON.stringify(d[k])){ const f = v => v === undefined || v === null || v === '' ? '—' : k === 'liv' ? lname(v) : k === 'pid' ? pname(v) : k === 'credit' ? (v ? 'oui' : 'non') : String(v); ch.push(`${L[k]} ${f(o[k])} → ${f(d[k])}`); } });
+  return `✏️ a modifié ${what}${det ? ' : ' + det : ''}${ch.length ? ' — <b>' + esc(ch.join(', ')) + '</b>' : ''}`;
+}
+CUSTOM.journal = () => {
+  if(!['proprietaire','gerant'].includes(ONLINE.role)) return `<div class="card empty">Réservé au patron et au gérant.</div>`;
+  if(JR.rows === null){ if(!JR.loading) loadJournal(); return `<div class="card empty">Chargement…</div>`; }
+  const who = [...new Set(JR.rows.map(r => r.actor || ''))];
+  const rows = JR.rows.filter(r => (!JR.who || (r.actor || '') === JR.who) && (!JR.type || (JR.type === 'del' ? r.action === 'delete' : JR.type === 'vente' ? (r.n || {}).type === 'vente' : JR.type === 'stock' ? ['entree','envoi','retour','perte','inventaire','ajust'].includes((r.n || {}).type) : r.kind === JR.type)));
+  const days = {}; rows.forEach(r => { const d = new Date(r.at), k = iso10(d); (days[k] = days[k] || []).push(r); });
+  return `${JR.err ? `<div class="subban bad">${esc(JR.err)}</div>` : ''}
+  <p class="note" style="margin-bottom:8px">Chaque création, modification, changement de statut ou suppression est noté ici avec la personne et l'heure (120 derniers jours). Personne ne peut l'effacer.</p>
+  <div class="chips" style="margin-bottom:8px">${[['', 'Tout'], ['vente', 'Ventes'], ['stock', 'Stock'], ['product', 'Produits'], ['del', '🗑️ Suppressions']].map(([k, l]) => `<button class="chip ${JR.type === k ? 'on' : ''}" data-a="jrtype" data-k="${k}">${l}</button>`).join('')}</div>
+  <label class="f"><span>Personne</span><select onchange="JR.who=this.value;render()"><option value="">Tout le monde</option>${who.map(w => `<option value="${esc(w)}" ${JR.who === w ? 'selected' : ''}>${esc(jrWho(w))}</option>`).join('')}</select></label>
+  ${Object.keys(days).length ? Object.entries(days).map(([d, L]) => `<p style="font-weight:800;margin:12px 2px 6px">📅 ${esc(fmtDate(d, true))}</p><div class="list">${L.map(r => `<div class="it"><div class="ic ${r.action === 'delete' ? 'c-loss' : r.action === 'status' ? 'c-in' : r.action === 'update' ? 'c-out' : 'c-brand'}">${String(new Date(r.at).getHours()).padStart(2, '0')}h${String(new Date(r.at).getMinutes()).padStart(2, '0')}</div><div class="m"><div class="t" style="white-space:normal">${esc(jrWho(r.actor))}</div><div class="d" style="white-space:normal">${jrText(r)}</div></div></div>`).join('')}</div>`).join('') : '<div class="card empty">Aucune activité pour ce filtre.</div>'}
+  <div class="btns" style="margin-top:12px"><button class="btn" data-a="jrmore">Voir plus ancien</button><button class="btn" data-a="jrreload">↻ Actualiser</button></div>`;
+};
+A.jrtype = (_, el) => { JR.type = el.dataset.k || ''; render(); };
+A.jrreload = () => { JR.rows = null; render(); };
+A.jrmore = () => { JR.limit += 300; JR.rows = null; render(); };
+
+/* ---------- Message à toute l'équipe (annonce aux livreurs) ---------- */
+const ANN_TPL = ['📢 Nouveau prix à partir d\'aujourd\'hui : ', '🎁 Promo en cours : ', '⏰ Rappel : versez l\'argent chaque soir avant 20h avec la capture.', '📅 Réunion de l\'équipe : ', '🙏 Merci à tous pour le travail de cette semaine !'];
+CUSTOM.annonce = () => {
+  if(!['proprietaire','gerant'].includes(ONLINE.role)) return `<div class="card empty">Réservé au patron et au gérant.</div>`;
+  const L = S.livreurs, sent = S.moves.filter(m => m.type === 'annonce'), groups = {};
+  sent.forEach(m => { const k = m.aid || m.id; (groups[k] = groups[k] || []).push(m); });
+  return `<form id="annf" class="card">
+    <label class="f"><span>Votre message *</span><textarea name="tx" required maxlength="500" placeholder="Ex : À partir de lundi, la pommade passe à 12 $."></textarea></label>
+    <div class="chips" style="flex-wrap:wrap;margin:-4px 0 10px">${ANN_TPL.map((t, i) => `<button type="button" class="chip" data-tpl="${i}">${esc(t.slice(0, 22))}…</button>`).join('')}</div>
+    <div class="f"><span>À qui ?</span>${L.length ? L.map(l => `<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" name="to" value="${esc(l.id)}" checked style="width:auto"> ${esc(l.name)}${l.city ? ' · ' + esc(l.city) : ''}</label>`).join('') : '<p class="note">Ajoutez d\'abord vos livreurs.</p>'}</div>
+    <button class="btn primary block">📢 Envoyer à l'équipe</button>
+    <p class="note" style="margin-top:8px">Le message s'affiche en haut de l'écran de chaque livreur et une notification part sur son téléphone. Vous pourrez aussi l'envoyer sur WhatsApp.</p></form>
+  <div id="annwa"></div>
+  ${Object.keys(groups).length ? `<div class="sec"><h2>Messages envoyés</h2></div><div class="list">${Object.values(groups).sort((a, b) => (b[0].ts || 0) - (a[0].ts || 0)).slice(0, 15).map(g => `<div class="it"><div class="ic c-brand">📢</div><div class="m"><div class="t" style="white-space:normal">${esc(g[0].text)}</div><div class="d">${fmtDate(g[0].date)} · à ${esc(g.map(m => lname(m.liv)).join(', '))}</div></div></div>`).join('')}</div>` : ''}`;
+};
+CUSTOM_AFTER.annonce = () => { const f = $('#annf'); if(!f) return; const E = f.elements;
+  f.querySelectorAll('[data-tpl]').forEach(b => b.onclick = () => { E.tx.value = ANN_TPL[+b.dataset.tpl]; E.tx.focus(); });
+  f.onsubmit = e => { e.preventDefault(); const tx = E.tx.value.trim(), to = [...f.querySelectorAll('input[name=to]:checked')].map(x => x.value);
+    if(!tx) return toast('Écrivez le message'); if(!to.length) return toast('Choisissez au moins un livreur');
+    const aid = uid(), now = Date.now();
+    to.forEach((lid, i) => S.moves.push({id:uid(), aid, ts:now + i, type:'annonce', liv:lid, text:tx, date:today(), by:(ONLINE.user && ONLINE.user.user_metadata && ONLINE.user.user_metadata.name) || ''}));
+    save(); syncNow();
+    to.forEach(lid => notifyShop('livreur', '📢 Message du patron', tx.slice(0, 200), {livreur_id:lid, tag:'ann-' + aid}));
+    toast('Message envoyé à ' + to.length + ' livreur(s) ✅'); render();
+    const box = $('#annwa'); if(box) box.innerHTML = `<div class="card" style="margin-top:12px"><b>Envoyer aussi sur WhatsApp</b><div class="stack" style="margin-top:8px">${to.map(lid => { const l = liv(lid); return `<a class="btn wa block" href="${waLink(l && l.phone || '', '📢 *Message de ' + S.settings.shop + '*\n\n' + tx)}" target="_blank" rel="noopener">${ico('wa')} ${esc(l ? l.name : 'Livreur')}</a>`; }).join('')}</div></div>`;
+  };
+};
 const APP_LINK = 'https://basiluatresor54-cmyk.github.io/reseau-vente/';
 function rpcErr(e){ return authErr(e); }
 function randPass(){ const a = 'abcdefghjkmnpqrstuvwxyz23456789'; const r = new Uint32Array(8); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(r) : r.forEach((_,i) => r[i] = Math.random()*1e9); return [...r].map(x => a[x % a.length]).join(''); }
@@ -4227,6 +4463,10 @@ const ROLE_INFO = {
     sees:'Comme vous : ventes, stock, clients, livreurs, dépenses, bénéfice et rapports de la boutique.',
     does:['Enregistrer les commandes et les ventes', 'Entrées de stock et envois aux livreurs', 'Ajouter / modifier les produits, prix et promos', 'Enregistrer les dépenses', 'Confirmer les versements des livreurs', 'Relancer les clients, voir les rapports'],
     not:['Inviter ou retirer des membres de l\'équipe', 'Payer ou gérer l\'abonnement']},
+  vendeur:{ic:'🛍️', t:'Vendeur', who:'Un(e) vendeur(se) ou une personne qui reçoit les commandes WhatsApp, sans accès aux chiffres de la boutique.',
+    sees:'Les commandes et ventes, les clients, les livreurs et le stock en pièces. Il ne voit pas les prix d\'achat, le bénéfice, les dépenses ni les rapports.',
+    does:['Enregistrer les commandes et les ventes (aussi à crédit)', 'Envoyer les bons aux livreurs et les reçus aux clients', 'Changer le statut des commandes', 'Relancer les clients, encaisser les crédits'],
+    not:['Voir les prix d\'achat, le bénéfice, les dépenses et les rapports', 'Créer ou modifier les produits et les prix', 'Entrées de stock, pertes, contrôles de stock', 'Supprimer une vente, confirmer les versements', 'Inviter l\'équipe, payer l\'abonnement']},
   livreur:{ic:'🛵', t:'Livreur', who:'La personne qui livre les commandes chez les clients, à Kinshasa ou dans une autre ville.',
     sees:'Seulement SES livraisons (client, téléphone, adresse, argent à encaisser), SON stock en main (disponible / réservé), SA commission de la semaine et l\'argent qu\'il doit verser.',
     does:['🛵 En route et ✅ Livré (avec la date)', '🔢 Livré en partie, 🔁 partie du pack', '❌ Pas livré : reporter ou annuler avec la raison', '💸 « J\'ai envoyé l\'argent » avec la capture Mobile Money', 'Voir son relevé de commissions'],
@@ -4246,9 +4486,9 @@ function roleInfoHTML(r, compact){
 CUSTOM.equipe = () => {
   if(ONLINE.role !== 'proprietaire') return `<div class="card empty">Réservé au propriétaire.</div>`;
   if(TEAM.members === null) return `<div class="card empty">Chargement…</div>`;
-  const R2 = {proprietaire:'Propriétaire', gerant:'Gérant', livreur:'Livreur'};
+  const R2 = {proprietaire:'Propriétaire', gerant:'Gérant', vendeur:'Vendeur', livreur:'Livreur'};
   return `<div class="card" style="margin-bottom:12px"><p class="note"><b>Gérant</b> : peut tout enregistrer (ventes, stock, dépenses).<br><b>Livreur</b> : voit seulement ses livraisons, son stock et sa commission, et marque « Livré ».</p>
-    <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700;color:var(--brand)">👥 Les rôles en détail : qui voit quoi, qui fait quoi</summary><div style="margin-top:10px">${roleInfoHTML('gerant')}${roleInfoHTML('livreur')}${roleInfoHTML('proprietaire')}</div></details></div>
+    <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700;color:var(--brand)">👥 Les rôles en détail : qui voit quoi, qui fait quoi</summary><div style="margin-top:10px">${roleInfoHTML('vendeur')}${roleInfoHTML('gerant')}${roleInfoHTML('livreur')}${roleInfoHTML('proprietaire')}</div></details></div>
   ${TEAM.err ? `<div class="subban bad">${esc(TEAM.err)}</div>` : ''}
   <div class="sec"><h2>Membres</h2></div>
   <div class="list">${TEAM.members.map(m => `<div class="it"><div class="ic c-brand">${esc(initials(m.display_name || '?'))}</div><div class="m"><div class="t">${esc(m.display_name || 'Sans nom')}</div><div class="d">${R2[m.role]}${m.livreur_id ? ' · fiche ' + esc(lname(m.livreur_id)) : ''} · ${esc(telPretty(m.phone || ''))}</div></div>${m.role !== 'proprietaire' ? `<button class="btn sm ghost-bad" data-a="rmmember:${m.user_id}">Retirer</button>` : ''}</div>`).join('')}</div>
@@ -4264,7 +4504,7 @@ function inviteMsg(i){
 function inviteSheet(pre = {}){
   const cc = String(S.settings.cc || '243');
   sheet('Inviter une personne', `<form id="invf">
-    ${field('Rôle', `<select name="role"><option value="livreur" ${pre.role !== 'gerant' ? 'selected' : ''}>Livreur</option><option value="gerant" ${pre.role === 'gerant' ? 'selected' : ''}>Gérant</option></select>`)}
+    ${field('Rôle', `<select name="role"><option value="livreur" ${pre.role !== 'gerant' && pre.role !== 'vendeur' ? 'selected' : ''}>Livreur</option><option value="vendeur" ${pre.role === 'vendeur' ? 'selected' : ''}>Vendeur</option><option value="gerant" ${pre.role === 'gerant' ? 'selected' : ''}>Gérant</option></select>`)}
     <div id="invRole"></div><div id="invLiv">${field('Fiche du livreur *', `<select name="liv"><option value="">Choisir…</option>${S.livreurs.slice().sort(byName).map(l => `<option value="${l.id}" ${l.id === pre.liv ? 'selected' : ''}>${esc(l.name)} (${esc(l.city || '')})</option>`).join('')}</select>`, S.livreurs.length ? 'Ses livraisons et sa commission viennent de cette fiche' : 'Ajoutez d\'abord le livreur dans l\'onglet Livreurs')}</div>
     ${field('Nom', `<input name="name" value="${esc(pre.name || '')}" placeholder="Ex : Marla">`)}
     <div class="row3" style="grid-template-columns:1.1fr 2fr">${field('Pays', `<select name="cc">${ccOptions(cc)}</select>`)}${field('Téléphone (son compte) *', `<input name="phone" type="tel" required value="${esc(pre.phone || '')}" placeholder="0812345678">`)}</div>
@@ -4309,8 +4549,9 @@ const mapsUrl = (addr, city) => { const a = String(addr || '').trim(); const u =
 const rtOf = m => num(m.rate) || rate();
 const both = (a, cur, rt) => cur === 'FC' ? `${amt(a, 'FC')} <span class="note">(≈ ${money(a / rt)})</span>` : `${amt(a, cur)} <span class="note">(≈ ${amt(Math.round(a * rt), 'FC')})</span>`;
 const bothTxt = (a, cur, rt) => cur === 'FC' ? `${amt(a, 'FC')} (≈ ${money(a / rt)})` : `${amt(a, cur)} (≈ ${amt(Math.round(a * rt), 'FC')})`;
+A.annseen = (_, el) => { try{ const a = JSON.parse(localStorage.getItem('stock_ann_seen') || '[]'); a.push(el.dataset.id); localStorage.setItem('stock_ann_seen', JSON.stringify(a.slice(-200))); }catch(_){} render(); };
 A.livchange = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if(!m) return;
-  const rt = rtOf(m), due = m.qty * m.price, dueFC = m.cur === 'FC' ? due : due * rt;
+  const rt = rtOf(m), due = m.credit ? (m.creditMain ? num(m.acompte) : 0) : m.qty * m.price, dueFC = m.cur === 'FC' ? due : due * rt;
   sheet('💵 Monnaie à rendre', `<p class="note" style="margin-bottom:10px">${esc(pname(m.pid))} × ${m.qty}${m.client ? ' · ' + esc(m.client) : ''}</p>
     <div class="card" style="margin-bottom:12px"><div class="dl strong"><span>À encaisser</span><span class="num">${both(due, m.cur, rt)}</span></div><div class="dl"><span>Taux</span><span>1 $ = ${fmt(rt)} ${esc(LC())}</span></div></div>
     <div class="row2">${field('Le client donne', `<input id="chG" type="number" inputmode="decimal" min="0" step="any" placeholder="Ex : 50000">`)}${field('Monnaie', `<select id="chC"><option value="FC" ${m.cur === 'FC' ? 'selected' : ''}>${esc(LC())}</option><option value="$" ${m.cur !== 'FC' ? 'selected' : ''}>$</option></select>`)}</div>
@@ -4391,12 +4632,16 @@ CUSTOM.moi = () => {
       ${m.ts ? `<div class="dl"><span>🕐 Commandée</span><span>${fmtDate(m.date || T, true)} à ${hhmm(m.ts)}</span></div>` : ''}
       ${m.postponed ? `<div class="dl"><span>Reportée</span><span>${m.postponed} fois${m.postponeReason ? ' — ' + esc(m.postponeReason) : ''}</span></div>` : ''}
       ${(() => { const sh = shipOf(m); return sh ? `<div class="dl strong"><span>🚚 À expédier</span><span>${esc(shipLine(sh))}<br>Frais : ${amt(num(sh.fee), sh.cur)} (payés par le client)</span></div>` : ''; })()}
-      <div class="dl strong"><span>À encaisser</span><span class="num">${m.pre ? '✅ Rien — déjà payé' : both(m.qty*m.price, m.cur, rtOf(m))}</span></div>
-      ${m.pre ? '' : `<button class="btn block" style="margin:6px 0 4px" data-a="livchange" data-id="${m.id}">💵 Monnaie à rendre</button>`}
+      <div class="dl strong"><span>À encaisser</span><span class="num">${m.pre ? '✅ Rien — déjà payé' : m.credit ? (num(m.acompte) > 0 && m.creditMain ? both(num(m.acompte), m.cur, rtOf(m)) + ' <span class="note">(acompte)</span>' : '💳 Rien — vente à crédit') : both(m.qty*m.price, m.cur, rtOf(m))}</span></div>
+      ${m.credit ? `<p class="note" style="margin:2px 0 4px">💳 Vente à crédit : le client paiera le reste plus tard au vendeur.</p>` : ''}
+      ${m.pre || (m.credit && !(num(m.acompte) > 0 && m.creditMain)) ? '' : `<button class="btn block" style="margin:6px 0 4px" data-a="livchange" data-id="${m.id}">💵 Monnaie à rendre</button>`}
       <div class="dl"><span>Votre commission</span><span class="num">${money(m.qty*num(m.commU))}</span></div>
       ${m.note ? `<p class="note" style="margin-top:6px">📝 ${esc(m.note)}</p>` : ''}
       <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livcancel" data-id="${m.id}">❌ Annuler la commande</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}</div>`;
   return `<div class="card" style="margin-bottom:12px"><b>${esc(L ? L.name : 'Livreur')}</b> · ${esc(L && L.city || '')}<br><span class="note">${esc(S.settings.shop)}</span><div id="moiClock" style="margin-top:6px;font-weight:650;font-size:14px">📅 ${esc(moiNow())}</div></div>
+  ${(() => { const seen = (() => { try{ return JSON.parse(localStorage.getItem('stock_ann_seen') || '[]'); }catch(_){ return []; } })();
+    const an = S.moves.filter(m => m.type === 'annonce' && m.liv === lid && !seen.includes(m.id) && (m.date || '') >= addDays(T, -14)).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 3);
+    return an.map(m => `<div class="card" style="margin-bottom:10px;border:2px solid var(--brand)"><b>📢 Message du patron</b> <span class="note">· ${esc(fmtDate(m.date))}</span><p style="margin:6px 0 8px;white-space:pre-line">${esc(m.text)}</p><button class="btn sm" data-a="annseen" data-id="${m.id}">👍 OK, j'ai lu</button></div>`).join(''); })()}
   ${nextDays ? `<div class="sec" style="margin-top:0"><h2>🔔 Vos prochaines livraisons</h2></div><div class="list" style="margin-bottom:12px">${nextDays}</div>` : ''}
   <div class="kpis">
     <div class="kpi"><div class="l">À livrer</div><div class="v num">${todo.length}</div><div class="s">commande(s)</div></div>
@@ -4758,7 +5003,7 @@ A.declphoto = async (id) => {
   const {data, error} = await sb.storage.from('captures').createSignedUrl(d.photo, 3600);
   if(error || !data) return toast('Capture indisponible : ' + rpcErr(error));
   sheet('Capture du versement', `<p class="note" style="margin-bottom:8px">${amt(num(d.amount), d.cur)} · ${esc(lname(d.liv))} · ${esc(d.method || '')}${d.ref ? ' · réf ' + esc(d.ref) : ''}</p><img src="${data.signedUrl}" alt="Capture" style="width:100%;border-radius:12px;background:#fff">
-    ${d.status === 'attente' && ONLINE.role !== 'livreur' ? `<div class="btns" style="margin-top:12px"><button class="btn primary" data-a="declok:${d.id}">Confirmer</button><button class="btn ghost-bad" data-a="declko:${d.id}">Refuser</button></div>` : ''}`);
+    ${d.status === 'attente' && !['livreur','vendeur'].includes(ONLINE.role) ? `<div class="btns" style="margin-top:12px"><button class="btn primary" data-a="declok:${d.id}">Confirmer</button><button class="btn ghost-bad" data-a="declko:${d.id}">Refuser</button></div>` : ''}`);
 };
 // Propriétaire / gérant : confirmer ou refuser
 A.decllist = () => {
@@ -4792,7 +5037,7 @@ const rawLivSheet2 = livSheet;
 livSheet = function(id){
   rawLivSheet2(id);
   const pend = declsOf(id).filter(d => d.status === 'attente');
-  if(pend.length && ONLINE.role !== 'livreur') $('#shb').insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px;border:2px solid var(--warn)"><b>💸 Versement(s) à confirmer</b><div class="list" style="box-shadow:none;margin-top:6px">${pend.map(d => declRow(d, true)).join('')}</div></div>`);
+  if(pend.length && !['livreur','vendeur'].includes(ONLINE.role)) $('#shb').insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px;border:2px solid var(--warn)"><b>💸 Versement(s) à confirmer</b><div class="list" style="box-shadow:none;margin-top:6px">${pend.map(d => declRow(d, true)).join('')}</div></div>`);
 };
 
 /* ---------- Démarrage ---------- */
