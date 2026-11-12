@@ -4363,7 +4363,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'f28178f732';
+const APP_BUILD = '53a1d4a082';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5241,9 +5241,16 @@ A.admexport = async () => {
   if(error) return toast(rpcErr(error));
   const txt = JSON.stringify(data);
   try{ localStorage.setItem('stock_last_backup', today()); }catch(_){}
-  download(`sauvegarde-globale-stock-livreurs-${today()}.json`, txt, 'application/json');
-  sheet('Sauvegarde globale', `<p class="note" style="margin-bottom:10px">${(data.shops||[]).length} boutique(s), ${(data.items||[]).length} élément(s). Le téléchargement a démarré. Sinon, copiez le texte.</p><button class="btn block" id="admcp">Copier</button><textarea class="code" readonly style="margin-top:10px">${esc(txt.slice(0, 20000))}${txt.length > 20000 ? '…' : ''}</textarea>`);
+  const fname = `sauvegarde-globale-stock-livreurs-${today()}.json`;
+  // Téléphone : « Envoyer sur Google Drive » ouvre le menu Partager (Drive, puis Enregistrer). Sinon : téléchargement comme avant.
+  let file = null; try{ file = new File([txt], fname.replace(/\.json$/, '.txt'), {type:'text/plain'}); if(!(navigator.canShare && navigator.canShare({files:[file]}))) file = null; }catch(_){ file = null; }
+  if(!file) download(fname, txt, 'application/json');
+  sheet('Sauvegarde globale', `<p class="note" style="margin-bottom:10px">${(data.shops||[]).length} boutique(s), ${(data.items||[]).length} élément(s). ${file ? 'Touchez « Envoyer sur Google Drive », choisissez <b>Drive</b>, puis <b>Enregistrer</b>.' : 'Le téléchargement a démarré : glissez le fichier dans votre Google Drive. Sinon, copiez le texte.'}</p>${file ? `<button class="btn primary block" id="admdrive" style="margin-bottom:8px">📤 Envoyer sur Google Drive</button><button class="btn block" id="admdl" style="margin-bottom:8px">💾 Télécharger sur ce téléphone</button>` : ''}<button class="btn block" id="admcp">Copier</button><textarea class="code" readonly style="margin-top:10px">${esc(txt.slice(0, 20000))}${txt.length > 20000 ? '…' : ''}</textarea>`);
   $('#admcp').onclick = () => copyText(txt);
+  if(file){
+    $('#admdrive').onclick = async () => { try{ await navigator.share({files:[file], title:file.name}); toast('Sauvegarde envoyée ✅'); }catch(e){ if(e && e.name !== 'AbortError'){ download(fname, txt, 'application/json'); toast('Partage impossible : fichier téléchargé'); } } };
+    $('#admdl').onclick = () => download(fname, txt, 'application/json');
+  }
 };
 
 /* ---------- Versements déclarés par le livreur, confirmés par le propriétaire ---------- */
