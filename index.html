@@ -154,6 +154,10 @@ table.tb{width:100%;border-collapse:collapse;font-size:13.5px}
 .actc{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);cursor:pointer}
 .actc:has(input:checked){border-color:var(--brand);background:var(--brand-soft)}
 .actc input{width:20px!important;height:20px;margin:2px 0 0;flex:none;accent-color:var(--brand)}
+.actw{display:grid;gap:4px}
+.actd{margin:0 4px 2px 42px;font-size:13px}.actd summary{cursor:pointer;color:var(--brand-tx,var(--brand));font-weight:700;padding:2px 0;list-style:none}.actd summary::-webkit-details-marker{display:none}.actd summary::after{content:' ▾'}.actd[open] summary::after{content:' ▴'}
+.actd ul{margin:6px 0 6px 18px;padding:0;line-height:1.45}.actd li{margin:2px 0}.actex{margin:0 0 8px;color:var(--muted);font-style:italic;line-height:1.4}
+.actno{justify-self:start;margin-top:2px;border:1.5px dashed var(--brand)!important;background:transparent!important;color:var(--brand-tx,var(--brand))!important}.actun{color:var(--brand-tx,var(--brand))!important;font-weight:600}
 .actc .ai{font-size:22px;line-height:1}.actc b{display:block;font-size:14.5px}.actc small{display:block;color:var(--muted);font-size:12.5px;line-height:1.35;margin-top:2px}
 .instcard{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;border:1.5px solid var(--brand)}
 .instic{font-size:30px;line-height:1}
@@ -1265,14 +1269,21 @@ const ACTS = [
   ['self','🚶','Vente en ligne, je livre moi-même','Commandes WhatsApp, livraisons, reçus et factures, sans livreurs'],
   ['imp','🚢','Importation sur commande','Chine, Dubaï… : acomptes, étapes jusqu\'à l\'arrivée, fournisseurs et marge privés']
 ];
+/* Avantages de chaque domaine, montrés avant de choisir (« Voir les avantages ») */
+const ACTS_INFO = {
+  shop: [['Vente rapide au comptoir en quelques secondes', 'Paiement cash ou Mobile Money noté sur chaque vente', 'Rapport du jour : ce que vous avez vendu et gagné aujourd\'hui', 'Stock à jour après chaque vente, alerte quand un produit est presque fini', 'Votre vendeur vend sans pouvoir changer vos prix'], 'Ce matin : 12 ventes, 86 000 FC encaissés, dont 30 000 FC par M-Pesa.'],
+  liv: [['Le stock de chaque livreur, ville par ville', 'Commandes WhatsApp enregistrées et confiées au livreur en un appui', 'Commission ou salaire du livreur calculés tout seuls', 'Chaque soir, vous savez qui vous doit combien'], 'Grâce est partie avec 6 colis. Ce soir, elle doit vous verser 84 000 FC.'],
+  self: [['Commandes WhatsApp avec adresse et heure de livraison', 'Reçus et factures envoyés au client sur WhatsApp', 'Ventes à crédit et rappels des clients'], '3 livraisons cet après-midi : Gombe 14 h, Limete 15 h 30, Ngaliema 17 h.'],
+  imp: [['Chaque commande suivie : acompte, fournisseur, transitaire, en route, arrivée, livrée', 'Marge réelle : prix de vente moins achat, transport et douane', 'Fournisseurs et prix d\'achat visibles par vous seul'], 'Vendu 1 200 $, achat 700 $, transport 120 $, douane 80 $ : bénéfice 300 $.']
+};
 function acts(){ const st = S.settings; if(st.acts && Object.values(st.acts).some(Boolean)) return st.acts; const m = st.mode || 'livraison'; return {shop: m !== 'livraison', liv: true, self: true, imp: !!st.imp}; }
 const has = k => !!acts()[k];
 const sells = () => has('shop') || has('liv') || has('self');
 const modeOf = () => { const a = acts(); return a.shop && (a.liv || a.self) ? 'mixte' : a.shop ? 'boutique' : 'livraison'; };
 const actsField = (st, title) => { const a = st.acts && Object.values(st.acts).some(Boolean) ? st.acts : (S && S.settings === st && st.setup ? acts() : {});
-  return `<div class="f"><span>${title || 'Quel est votre domaine d\'activité ?'} <small class="note">(cochez tout ce que vous faites)</small></span><div class="acts">${ACTS.map(([k,ic,t,d]) => `<label class="actc"><input type="checkbox" name="act_${k}" ${a[k] ? 'checked' : ''}><span class="ai">${ic}</span><span><b>${t}</b><small>${d}</small></span></label>`).join('')}</div><small class="note">L'application affiche seulement ce qui vous sert. Vous pouvez changer à tout moment dans Réglages.</small></div>`; };
-function readActs(E){ const a = {}; ACTS.forEach(([k]) => a[k] = !!(E['act_' + k] && E['act_' + k].checked)); if(!Object.values(a).some(Boolean)) ACTS.forEach(([k]) => a[k] = true); return a; }
-const actsSettings = a => ({acts:a, imp:!!a.imp, mode: a.shop && (a.liv || a.self) ? 'mixte' : a.shop ? 'boutique' : 'livraison'});
+  return `<div class="f"><span>${title || 'Quel est votre domaine d\'activité ?'} <small class="note">(cochez tout ce que vous faites)</small></span><div class="acts" onchange="if(event.target.name&&event.target.name.indexOf('act_')===0){var u=this.querySelector('[name=acts_unsure]');if(u)u.value='0';var n=this.querySelector('.actun');if(n)n.hidden=true}">${ACTS.map(([k,ic,t,d]) => `<div class="actw"><label class="actc"><input type="checkbox" name="act_${k}" ${a[k] ? 'checked' : ''}><span class="ai">${ic}</span><span><b>${t}</b><small>${d}</small></span></label>${ACTS_INFO[k] ? `<details class="actd"><summary>Voir les avantages</summary><ul>${ACTS_INFO[k][0].map(x => `<li>${x}</li>`).join('')}</ul><p class="actex">Exemple : « ${ACTS_INFO[k][1]} »</p><button type="button" class="btn sm primary" onclick="var w=this.closest('.actw'),c=w.querySelector('input');if(!c.checked){c.checked=true;c.dispatchEvent(new Event('change',{bubbles:true}))}this.closest('details').open=false">✓ Je choisis ${t.toLowerCase()}</button></details>` : ''}</div>`).join('')}<input type="hidden" name="acts_unsure" value="${st.actsUnsure ? '1' : '0'}"><button type="button" class="btn sm actno" onclick="var b=this.closest('.acts');b.querySelectorAll('input[type=checkbox]').forEach(function(c){c.checked=true});b.querySelector('[name=acts_unsure]').value='1';b.querySelector('.actun').hidden=false">🤔 Je ne sais pas encore : tout essayer</button><small class="note actun" ${st.actsUnsure ? '' : 'hidden'}>Tout est coché : vous essayez tout, puis vous choisirez ce qui vous sert.</small></div><small class="note">L'application affiche seulement ce qui vous sert. Vous pouvez changer à tout moment dans Réglages.</small></div>`; };
+function readActs(E){ const a = {}; ACTS.forEach(([k]) => a[k] = !!(E['act_' + k] && E['act_' + k].checked)); if(!Object.values(a).some(Boolean)) ACTS.forEach(([k]) => a[k] = true); Object.defineProperty(a, 'unsure', {value: !!(E.acts_unsure && E.acts_unsure.value === '1'), enumerable:false}); return a; }
+const actsSettings = a => ({acts:a, imp:!!a.imp, mode: a.shop && (a.liv || a.self) ? 'mixte' : a.shop ? 'boutique' : 'livraison', actsUnsure: !!a.unsure});
 const modeField = st => field('Comment vendez-vous ?', `<select name="mode">${Object.entries(MODES).map(([k,l]) => `<option value="${k}" ${(st.mode||'livraison')===k?'selected':''}>${l}</option>`).join('')}</select>`, 'Boutique : bouton « Vente rapide » sur l\'accueil. Tout le reste reste disponible.');
 function vReglages(){
   const st = S.settings;
@@ -3936,6 +3947,15 @@ function authErr(e){
   if(/maximum de boutiques/i.test(m)) return 'Nombre maximum de boutiques atteint.';
   return m || 'Une erreur est survenue.';
 }
+/* Espace BASILUA TECH : l'administrateur voit toutes les fonctions, quels que soient les domaines cochés */
+const actsOwn = acts;
+acts = function(){ return ONLINE.admin ? {shop:true, liv:true, self:true, imp:true} : actsOwn(); };
+/* « Je ne sais pas encore » : à la fin de l'essai, on demande au patron de choisir ses domaines */
+const actsAsk = () => ONLINE.role === 'proprietaire' && !!(S.settings && S.settings.actsUnsure) && shopWritable() && !ONLINE.admin && (ONLINE.shop.status !== 'essai' || (subDays(ONLINE.shop) ?? 99) <= 2);
+A.pickacts = () => {
+  sheet('Vos domaines', `<form id="pkf">${actsField(Object.assign({}, S.settings, {actsUnsure:false}), 'Que faites-vous vraiment ?')}<button class="btn primary block">Enregistrer</button></form>`);
+  $('#pkf').onsubmit = e => { e.preventDefault(); Object.assign(S.settings, actsSettings(readActs(e.target.elements))); save(); closeSheet(); render(); toast(S.settings.actsUnsure ? 'Vous continuez à tout essayer' : 'Domaines enregistrés ✅'); };
+};
 function subInfo(shop){
   if(!shop) return null;
   const t = today(), end = shop.paid_until;
@@ -4260,6 +4280,7 @@ render = function(){
     else main.insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px"><b>Vous avez déjà des données dans WB Stock ?</b><p class="note" style="margin:4px 0 10px">Dans l'ancienne application : Plus → Réglages → Exporter une sauvegarde → « Copier ». Puis ici : Plus → Réglages → Restaurer une sauvegarde → coller le texte.</p><button class="btn block" data-a="restore">Restaurer une sauvegarde maintenant</button></div>`);
   }
   if(si && si.cls !== 'ok') main.insertAdjacentHTML('afterbegin', subBanner(view !== 'home' && view !== 'reglages'));
+  if(view === 'home' && actsAsk()) main.insertAdjacentHTML('afterbegin', `<div class="subban info" style="display:block;text-align:left">🤔 <b>Vous avez tout essayé.</b> Choisissez maintenant ce qui sert à votre commerce : l'application n'affichera que ça (modifiable à tout moment).<div class="btns" style="margin-top:8px"><button class="btn sm primary" data-a="pickacts">Choisir mes domaines</button></div></div>`);
   if(view === 'reglages'){
     const meta = (ONLINE.user && ONLINE.user.user_metadata) || {};
     main.querySelector('.back')?.insertAdjacentHTML('afterend', `<div class="sec" style="margin-top:4px"><h2>Mon compte</h2></div>
@@ -4342,7 +4363,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '763cf98d09';
+const APP_BUILD = 'f28178f732';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5055,9 +5076,10 @@ async function livSetStatus(m, st, ld, onlyDate){
 const ADM = {shops:null, trial:null, q:'', loading:false, err:''};
 async function loadAdmin(){
   ADM.loading = true;
-  const [l, t] = await Promise.all([sb.rpc('admin_list_shops'), sb.rpc('get_trial_days')]);
+  const [l, t, ac] = await Promise.all([sb.rpc('admin_list_shops'), sb.rpc('get_trial_days'), sb.rpc('admin_list_shop_acts').then(r => r, () => ({data:null}))]);
   ADM.loading = false; ADM.err = l.error ? rpcErr(l.error) : '';
   ADM.shops = l.data || []; ADM.trial = t.data;
+  const acm = {}; (ac && ac.data || []).forEach(x => acm[x.id] = x); ADM.shops.forEach(x => { if(acm[x.id]) x.dom = acm[x.id]; });
   if(view === 'admin') render();
 }
 function shopState(s){ return subInfo({status:s.status, paid_until:s.paid_until}); }
@@ -5125,10 +5147,13 @@ function fuRows(){
       <p class="note" style="margin-top:6px">${f.end ? (f.end < t ? 'Essai terminé le ' + dAbs(f.end) : 'Fin d\'essai : ' + dAbs(f.end, 1) + (f.left <= 1 ? ' ⚠️' : '')) : ''} · ${f.active ? '✅ A commencé à utiliser l\'application' : '⚠️ Aucune opération enregistrée'}<br>Message conseillé aujourd'hui : <b>${lab}</b>${fuSent(s.id, f.rec) ? ' (déjà envoyé le ' + dAbs(fuSent(s.id, f.rec)) + ')' : ''}</p>
       ${fuButtons(s)}</div>`; }).join('');
 }
+/* Domaines choisis par chaque client (visible seulement dans l'espace BASILUA TECH) */
+function domTxt(dm){ if(!dm) return ''; const a = dm.acts && Object.values(dm.acts).some(Boolean) ? dm.acts : null; const L = a ? ACTS.filter(([k]) => a[k]).map(([k, ic, t]) => ic + ' ' + t) : [];
+  return `<div class="d" style="white-space:normal">${dm.unsure ? '🤔 Essaie tout (pas encore choisi)' : L.length ? esc(L.join(' · ')) : 'Domaine : ' + esc(dm.mode || 'non choisi')}</div>`; }
 function admRows(list){
   if(!list){ const q = norm0(ADM.q); list = (ADM.shops || []).filter(s => !q || norm0([s.name, s.owner_name, s.owner_phone, s.country].join(' ')).includes(q)); }
   if(!list.length) return '<div class="empty">Aucun client</div>';
-  return list.map(s => { const i = shopState(s); return `<button class="it" data-a="admshop:${s.id}"><div class="ic c-brand">${esc(initials(s.name))}</div><div class="m"><div class="t">${esc(s.name)}</div><div class="d">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}${s.country ? ' · ' + esc(s.country) : ''}</div><div class="d">${s.last_activity ? 'Actif ' + fmtDate(String(s.last_activity).slice(0,10)) : 'Aucune donnée'} · ${s.nb_items} élément(s) · ${s.nb_members} membre(s)</div></div><div class="r"><span class="pill ${i.cls === 'bad' ? 'p-annule' : s.status === 'essai' ? 'p-attente' : 'p-livre'}" style="${i.cls === 'bad' ? 'background:var(--bad-soft);color:var(--bad)' : ''}">${esc(i.short)}</span><div class="sm">${s.paid_until ? fmtDate(s.paid_until) : '∞'}</div></div></button>`; }).join('');
+  return list.map(s => { const i = shopState(s); return `<button class="it" data-a="admshop:${s.id}"><div class="ic c-brand">${esc(initials(s.name))}</div><div class="m"><div class="t">${esc(s.name)}</div><div class="d">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}${s.country ? ' · ' + esc(s.country) : ''}</div><div class="d">${s.last_activity ? 'Actif ' + fmtDate(String(s.last_activity).slice(0,10)) : 'Aucune donnée'} · ${s.nb_items} élément(s) · ${s.nb_members} membre(s)</div>${domTxt(s.dom)}</div><div class="r"><span class="pill ${i.cls === 'bad' ? 'p-annule' : s.status === 'essai' ? 'p-attente' : 'p-livre'}" style="${i.cls === 'bad' ? 'background:var(--bad-soft);color:var(--bad)' : ''}">${esc(i.short)}</span><div class="sm">${s.paid_until ? fmtDate(s.paid_until) : '∞'}</div></div></button>`; }).join('');
 }
 CUSTOM_AFTER.admin = () => {
   if(ADM.shops === null && !ADM.loading){ loadAdmin(); loadPrice(); loadPlans().then(() => { const g = $('#plansf'); if(g){ const E = g.elements; E.m3.value = PLANS.m3; E.m6.value = PLANS.m6; E.m12.value = PLANS.m12; E.rate.value = PLANS.rate; } }); }
