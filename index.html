@@ -233,6 +233,7 @@ body.authon .top, body.authon nav.nav, body.authon .fab, body.authon main{displa
 .ntbell{flex:none;position:relative;width:38px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.18);color:inherit;font-size:17px;margin-right:6px;cursor:pointer}
 .ntbell b{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#ef4444;color:#fff;font-size:11px;line-height:18px;font-weight:800}
 .ntrow.unread{background:color-mix(in srgb,var(--brand) 9%,transparent)}
+.ntx{margin-left:auto;align-self:flex-start;flex:none;min-width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:14px;color:var(--muted);background:color-mix(in srgb,var(--muted) 12%,transparent);cursor:pointer}.ntx:active{background:color-mix(in srgb,var(--red,#e5484d) 25%,transparent)}
 body.livmode nav.nav{display:none!important}
 body.livmode{padding-bottom:24px}
 @media (min-width:900px){body.livmode{padding-left:0}}
@@ -4280,7 +4281,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '99b8b0b054';
+const APP_BUILD = 'd42fb6d0fc';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -4301,6 +4302,11 @@ document.addEventListener('visibilitychange', () => { if(document.visibilityStat
 const NT = {rows:[], loaded:false, busy:false, lastPop:'', on:() => !!ONLINE.shop && ['proprietaire','gerant'].includes(ONLINE.role)};
 const ntKey = () => 'stock_nt_seen_' + (ONLINE.shop ? ONLINE.shop.id : '');
 const ntSeen = () => { try{ return localStorage.getItem(ntKey()) || ''; }catch(_){ return ''; } };
+const NH_KEY = () => 'stock_nt_hide_' + (ONLINE.shop ? ONLINE.shop.id : '');
+const nhGet = () => { try{ return Object.assign({k:[], o:'', t:0}, JSON.parse(localStorage.getItem(NH_KEY()) || '{}')); }catch(_){ return {k:[], o:'', t:0}; } };
+const nhSet = h => { h.k = h.k.slice(-400); try{ localStorage.setItem(NH_KEY(), JSON.stringify(h)); }catch(_){} };
+const ntVis = r => { const h = nhGet(); return !(h.o && r.at <= h.o) && !h.k.includes('o' + r.id); };
+const ntX = k => `<span class="ntx" role="button" aria-label="Supprimer la notification" data-a="ntdel" data-k="${esc(k)}">✕</span>`;
 const ntUnread = () => NT.rows.filter(r => r.at > ntSeen()).length;
 const ntText = r => jrText(r).replace(/ \(avant : [^)]*\)/, '').replace(/ · 🛵 [^·<]*$/, '');
 function ntIcon(r){ const n = r.n || {}, t = n.type; if(r.action === 'delete') return '🗑️'; if(r.action === 'status') return n.status === 'livre' ? '✅' : n.status === 'annule' ? '❌' : n.status === 'encours' ? '🛵' : '📅'; if(t === 'decl') return '💸'; if(t === 'vente') return '🛒'; return '✏️'; }
@@ -4312,7 +4318,7 @@ async function ntFetch(){
     let q = sb.from('item_log').select('id,item_id,kind,action,actor,at,o,n').eq('shop_id', ONLINE.shop.id).gte('at', since).order('at', {ascending:false}).limit(60);
     const {data, error} = await q; if(error) return;
     if((data || []).some(r => r.actor && !JR.mem[r.actor])){ const m = await sb.from('members').select('user_id,role,display_name,phone').eq('shop_id', ONLINE.shop.id); (m.data || []).forEach(x => JR.mem[x.user_id] = x); }
-    const rows = (data || []).filter(r => r.actor && r.actor !== me && (r.kind === 'move' ? !['plan','promesse','annonce'].includes((r.n || {}).type) : true));
+    const rows = (data || []).filter(r => r.actor && r.actor !== me && (r.kind === 'move' ? !['plan','promesse','annonce'].includes((r.n || {}).type) : true)).filter(ntVis);
     const fresh = NT.loaded ? rows.filter(r => r.at > (NT.lastPop || ntSeen())) : [];
     NT.rows = rows; NT.loaded = true; if(rows[0]) NT.lastPop = rows[0].at > NT.lastPop ? rows[0].at : NT.lastPop;
     if(fresh.length){ toast(`${ntIcon(fresh[0])} ${jrWho(fresh[0].actor).replace(/ \(.*\)$/, '')} ${ntText(fresh[0]).replace(/<[^>]+>/g, '')}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}`); try{ navigator.vibrate && navigator.vibrate(120); }catch(_){} }
@@ -4328,14 +4334,15 @@ function livNotifs(){
   const since = Date.now() - 7 * 864e5, out = [];
   S.moves.forEach(m => {
     if(m.liv !== lid) return;
-    if(m.type === 'vente' && m.ts > since && (m.status === 'attente' || m.status === 'encours')) out.push({t:m.ts, id:m.id, ic:'🛵', title:'Nouvelle livraison', body:`<b>${esc(pname(m.pid))} × ${m.qty}</b><br>👤 ${esc(m.client || 'Client')}${m.phone ? ' · ' + esc(m.phone) : ''}<br>📅 ${esc(whenFull(m))}${m.addr ? '<br>📍 ' + esc(m.addr) : ''}${m.ts ? '<br><span class="note">Commandée ' + (iso10(new Date(m.ts)) === today() ? "aujourd'hui" : 'le ' + esc(fmtDate(iso10(new Date(m.ts))))) + ' à ' + hhmm(m.ts) + '</span>' : ''}`});
-    else if(m.type === 'annonce' && m.ts > since) out.push({t:m.ts, ic:'📢', title:'Message du patron', body:esc(m.text || '')});
-    else if(m.type === 'decl' && m.status === 'confirme' && m.confirmed) out.push({t:new Date(m.confirmed + 'T12:00:00').getTime(), ic:'✅', title:'Versement confirmé', body:`${amt(num(m.amount), m.cur)} bien reçu par la boutique`});
+    if(m.type === 'vente' && m.ts > since && (m.status === 'attente' || m.status === 'encours')) out.push({k:'v' + m.id, t:m.ts, id:m.id, ic:'🛵', title:'Nouvelle livraison', body:`<b>${esc(pname(m.pid))} × ${m.qty}</b><br>👤 ${esc(m.client || 'Client')}${m.phone ? ' · ' + esc(m.phone) : ''}<br>📅 ${esc(whenFull(m))}${m.addr ? '<br>📍 ' + esc(m.addr) : ''}${m.ts ? '<br><span class="note">Commandée ' + (iso10(new Date(m.ts)) === today() ? "aujourd'hui" : 'le ' + esc(fmtDate(iso10(new Date(m.ts))))) + ' à ' + hhmm(m.ts) + '</span>' : ''}`});
+    else if(m.type === 'annonce' && m.ts > since) out.push({k:'a' + m.id, t:m.ts, ic:'📢', title:'Message du patron', body:esc(m.text || '')});
+    else if(m.type === 'decl' && m.status === 'confirme' && m.confirmed) out.push({k:'d' + m.id, t:new Date(m.confirmed + 'T12:00:00').getTime(), ic:'✅', title:'Versement confirmé', body:`${amt(num(m.amount), m.cur)} bien reçu par la boutique`});
   });
-  return out.sort((a, b) => b.t - a.t);
+  const h = nhGet();
+  return out.filter(x => x.t > h.t && !h.k.includes(x.k)).sort((a, b) => b.t - a.t);
 }
 function lnRow(x, unread){ const tag = x.id ? 'button' : 'div';
-  return `<${tag} class="it ntrow ${unread ? 'unread' : ''}"${x.id ? ` data-a="lnact" data-id="${esc(x.id)}" style="width:100%;text-align:left"` : ''}><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}${x.id ? '<br><span class="note">Toucher pour contacter le client ›</span>' : ''}</div></div></${tag}>`; }
+  return `<${tag} class="it ntrow ${unread ? 'unread' : ''}"${x.id ? ` data-a="lnact" data-id="${esc(x.id)}" style="width:100%;text-align:left"` : ''}><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}${x.id ? '<br><span class="note">Toucher pour contacter le client ›</span>' : ''}</div></div>${ntX(x.k)}</${tag}>`; }
 A.lnact = (_, el) => { const m = S.moves.find(x => String(x.id) === String(el.dataset.id)); if(!m){ toast('Commande pas encore chargée : touchez « En ligne » pour actualiser'); syncNow(); return; }
   const L = liv(m.liv);
   sheet('🛵 ' + (m.client || 'Client'), `<div class="card" style="margin-bottom:12px">
@@ -4360,10 +4367,10 @@ function ntBell(){ if(ONLINE.shop && ONLINE.role === 'livreur'){ const n = livNo
   if(!NT.on()) return ''; const n = ntUnread(); return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
 function ntRow(r){ const d = new Date(r.at), t = String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
   const click = r.kind === 'move' && ((r.n || {}).type === 'vente') && r.action !== 'delete';
-  return `<${click ? 'button' : 'div'} class="it ntrow ${r.at > ntSeen() ? 'unread' : ''}"${click ? ` data-a="ntact" data-id="${esc(r.item_id)}" style="width:100%;text-align:left"` : ''}><div class="ic c-in" style="font-size:18px">${ntIcon(r)}</div><div class="m"><div class="t" style="white-space:normal">${esc(jrWho(r.actor).replace(/ \(.*\)$/, ''))} <span class="note">· ${iso10(d) === today() ? t : fmtDate(iso10(d)) + ' ' + t}</span></div><div class="d" style="white-space:normal">${ntText(r)}${click ? ' <span class="note">· toucher pour écrire au client ›</span>' : ''}</div></div></${click ? 'button' : 'div'}>`; }
+  return `<${click ? 'button' : 'div'} class="it ntrow ${r.at > ntSeen() ? 'unread' : ''}"${click ? ` data-a="ntact" data-id="${esc(r.item_id)}" style="width:100%;text-align:left"` : ''}><div class="ic c-in" style="font-size:18px">${ntIcon(r)}</div><div class="m"><div class="t" style="white-space:normal">${esc(jrWho(r.actor).replace(/ \(.*\)$/, ''))} <span class="note">· ${iso10(d) === today() ? t : fmtDate(iso10(d)) + ' ' + t}</span></div><div class="d" style="white-space:normal">${ntText(r)}${click ? ' <span class="note">· toucher pour écrire au client ›</span>' : ''}</div></div>${ntX('o' + r.id)}</${click ? 'button' : 'div'}>`; }
 function ntCard(){ if(!NT.rows.length) return ''; const n = ntUnread(), L = NT.rows.slice(0, n ? Math.min(Math.max(n, 3), 6) : 3);
   return `<div id="ntcard"><div class="sec" style="margin-top:4px"><h2>🔔 Notifications${n ? ` <span class="pill p-attente">${n} nouvelle(s)</span>` : ''}</h2><button class="link" data-a="ntopen">Tout voir</button></div><div class="list" style="margin-bottom:12px">${L.map(ntRow).join('')}</div></div>`; }
-function ntPaint(){ const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('ntcard'); if(c && view === 'home'){ const h = ntCard(); if(h) c.outerHTML = h; } else if(!c && view === 'home' && NT.rows.length && !document.querySelector('#sheet.open, .sheet.open')){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', ntCard()); } }
+function ntPaint(){ const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('ntcard'); if(c && view === 'home'){ const h = ntCard(); if(h) c.outerHTML = h; else c.remove(); } else if(!c && view === 'home' && NT.rows.length && !document.querySelector('#sheet.open, .sheet.open')){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', ntCard()); } }
 // Toucher une notification : écrire au client (merci, mode d'emploi, avis, pourquoi annulé, relance)
 A.ntact = async (_, el) => { const id = el.dataset.id; let m = S.moves.find(x => String(x.id) === String(id));
   if(!m){ // pas encore sur ce téléphone : on la cherche en ligne
@@ -4397,10 +4404,24 @@ A.ntact = async (_, el) => { const id = el.dataset.id; let m = S.moves.find(x =>
   document.querySelectorAll('#shb .chip[data-t]').forEach(b => b.onclick = () => { document.querySelectorAll('#shb .chip[data-t]').forEach(x => x.classList.toggle('on', x === b)); tx.value = T[+b.dataset.t][1]; upd(); });
 };
 A.ntopen = () => { if(ONLINE.role === 'livreur'){ const L = livNotifs(), seen = lnSeen();
-    sheet('🔔 Notifications', L.length ? `<div class="list">${L.map(x => lnRow(x, x.t > seen)).join('')}</div>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
+    sheet('🔔 Notifications', L.length ? `<p class="note" style="margin-bottom:8px">Touchez ✕ pour supprimer une notification.</p><div class="list">${L.map(x => lnRow(x, x.t > seen)).join('')}</div><button class="btn block danger" style="margin-top:12px" data-a="ntclear">🗑️ Tout effacer</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
     try{ localStorage.setItem(LN_KEY(), String(Date.now())); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('lncard'); if(c) c.remove(); return; }
-  sheet('🔔 Notifications', NT.rows.length ? `<p class="note" style="margin-bottom:8px">Ce que votre équipe a fait ces 3 derniers jours (livré, annulé, versement, ventes, modifications).</p><div class="list">${NT.rows.map(ntRow).join('')}</div><button class="btn block" style="margin-top:12px" data-a="nav:journal">📋 Journal complet</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
+  sheet('🔔 Notifications', NT.rows.length ? `<p class="note" style="margin-bottom:8px">Ce que votre équipe a fait ces 3 derniers jours (livré, annulé, versement, ventes, modifications). Touchez ✕ pour supprimer une notification.</p><div class="list">${NT.rows.map(ntRow).join('')}</div><button class="btn block danger" style="margin-top:12px" data-a="ntclear">🗑️ Tout effacer</button><button class="btn block" style="margin-top:8px" data-a="nav:journal">📋 Journal complet</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
   try{ if(NT.rows[0]) localStorage.setItem(ntKey(), NT.rows[0].at); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); };
+// Supprimer une notification (sur cet appareil seulement : le journal garde tout)
+function ntAfterHide(){ const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell();
+  if(ONLINE.role === 'livreur'){ const c = document.getElementById('lncard'); if(c){ const h = lnCard(); if(h) c.outerHTML = h; else c.remove(); } }
+  else ntPaint();
+  document.querySelectorAll('#shb .list').forEach(l => { if(!l.querySelector('.ntrow')){ const sh = l.parentNode; sh.innerHTML = '<div class="card empty">Rien de nouveau pour le moment.</div>'; } }); }
+A.ntdel = (_, el) => { const k = el.dataset.k, h = nhGet(); if(!h.k.includes(k)) h.k.push(k); nhSet(h);
+  if(k[0] === 'o') NT.rows = NT.rows.filter(r => 'o' + r.id !== k);
+  document.querySelectorAll(`.ntx[data-k="${CSS.escape(k)}"]`).forEach(x => { const r = x.closest('.ntrow'); if(r) r.remove(); });
+  ntAfterHide(); toast('Notification supprimée'); };
+A.ntclear = async () => { if(!await ask('Effacer toutes les notifications de ce téléphone ? (Le journal garde tout.)', 'Tout effacer')) return;
+  const h = nhGet();
+  if(ONLINE.role === 'livreur') h.t = Date.now();
+  else { const top = NT.rows.reduce((a, r) => r.at > a ? r.at : a, h.o || ''); h.o = top; NT.rows = []; }
+  nhSet(h); closeSheet(); render(); toast('Notifications effacées'); };
 setInterval(() => { if(document.visibilityState !== 'hidden') ntFetch(); }, 30000);
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') ntFetch(); });
 // Livreur : on garde seulement les commandes qui existent encore en ligne (supprimées par le patron = retirées ici)
