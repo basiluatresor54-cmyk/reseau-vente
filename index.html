@@ -4301,13 +4301,36 @@ async function ntFetch(){
     ntPaint();
   } finally { NT.busy = false; }
 }
-function ntBell(){ if(!NT.on()) return ''; const n = ntUnread(); return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
+/* Livreur : ses notifications (nouvelles livraisons, messages du patron, versements confirmés) calculées sur ses propres données */
+const LN_KEY = () => 'stock_ln_seen_' + (ONLINE.shop ? ONLINE.shop.id : '');
+const lnSeen = () => { try{ return +(localStorage.getItem(LN_KEY()) || 0); }catch(_){ return 0; } };
+const whenFull = m => { const d = m.ddate || m.date, T = today(); return (d === T ? "Aujourd'hui" : d === addDays(T, 1) ? 'Demain' : dAbs(d, 1)) + (m.dtime ? ' à ' + String(m.dtime).replace(':', 'h') : ''); };
+function livNotifs(){
+  const lid = ONLINE.shop && ONLINE.shop.livreur_id; if(!lid) return [];
+  const since = Date.now() - 7 * 864e5, out = [];
+  S.moves.forEach(m => {
+    if(m.liv !== lid) return;
+    if(m.type === 'vente' && m.ts > since && (m.status === 'attente' || m.status === 'encours')) out.push({t:m.ts, ic:'🛵', title:'Nouvelle livraison', body:`<b>${esc(pname(m.pid))} × ${m.qty}</b><br>👤 ${esc(m.client || 'Client')}${m.phone ? ' · ' + esc(m.phone) : ''}<br>📅 ${esc(whenFull(m))}${m.addr ? '<br>📍 ' + esc(m.addr) : ''}${m.ts ? '<br><span class="note">Commandée ' + (iso10(new Date(m.ts)) === today() ? "aujourd'hui" : 'le ' + esc(fmtDate(iso10(new Date(m.ts))))) + ' à ' + hhmm(m.ts) + '</span>' : ''}`});
+    else if(m.type === 'annonce' && m.ts > since) out.push({t:m.ts, ic:'📢', title:'Message du patron', body:esc(m.text || '')});
+    else if(m.type === 'decl' && m.status === 'confirme' && m.confirmed) out.push({t:new Date(m.confirmed + 'T12:00:00').getTime(), ic:'✅', title:'Versement confirmé', body:`${amt(num(m.amount), m.cur)} bien reçu par la boutique`});
+  });
+  return out.sort((a, b) => b.t - a.t);
+}
+function lnCard(){ const L = livNotifs(), seen = lnSeen(), nw = L.filter(x => x.t > seen); if(!nw.length) return '';
+  return `<div id="lncard" class="card" style="margin-bottom:12px;border:2px solid var(--brand)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>🔔 ${nw.length} nouveauté(s)</b><button class="btn sm" data-a="lnseen">👍 OK, vu</button></div>
+    <div class="list" style="margin-top:8px">${nw.slice(0, 5).map(x => `<div class="it ntrow unread"><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}</div></div></div>`).join('')}</div></div>`; }
+A.lnseen = () => { try{ localStorage.setItem(LN_KEY(), String(Date.now())); }catch(_){} render(); };
+function ntBell(){ if(ONLINE.shop && ONLINE.role === 'livreur'){ const n = livNotifs().filter(x => x.t > lnSeen()).length; return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
+  if(!NT.on()) return ''; const n = ntUnread(); return `<button class="ntbell" id="ntbell" data-a="ntopen" aria-label="Notifications">🔔${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`; }
 function ntRow(r){ const d = new Date(r.at), t = String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
   return `<div class="it ntrow ${r.at > ntSeen() ? 'unread' : ''}"><div class="ic c-in" style="font-size:18px">${ntIcon(r)}</div><div class="m"><div class="t" style="white-space:normal">${esc(jrWho(r.actor).replace(/ \(.*\)$/, ''))} <span class="note">· ${iso10(d) === today() ? t : fmtDate(iso10(d)) + ' ' + t}</span></div><div class="d" style="white-space:normal">${ntText(r)}</div></div></div>`; }
 function ntCard(){ if(!NT.rows.length) return ''; const n = ntUnread(), L = NT.rows.slice(0, n ? Math.min(Math.max(n, 3), 6) : 3);
   return `<div id="ntcard"><div class="sec" style="margin-top:4px"><h2>🔔 Notifications${n ? ` <span class="pill p-attente">${n} nouvelle(s)</span>` : ''}</h2><button class="link" data-a="ntopen">Tout voir</button></div><div class="list" style="margin-bottom:12px">${L.map(ntRow).join('')}</div></div>`; }
 function ntPaint(){ const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('ntcard'); if(c && view === 'home'){ const h = ntCard(); if(h) c.outerHTML = h; } else if(!c && view === 'home' && NT.rows.length && !document.querySelector('#sheet.open, .sheet.open')){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', ntCard()); } }
-A.ntopen = () => { sheet('🔔 Notifications', NT.rows.length ? `<p class="note" style="margin-bottom:8px">Ce que votre équipe a fait ces 3 derniers jours (livré, annulé, versement, ventes, modifications).</p><div class="list">${NT.rows.map(ntRow).join('')}</div><button class="btn block" style="margin-top:12px" data-a="nav:journal">📋 Journal complet</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
+A.ntopen = () => { if(ONLINE.role === 'livreur'){ const L = livNotifs(), seen = lnSeen();
+    sheet('🔔 Notifications', L.length ? `<div class="list">${L.map(x => `<div class="it ntrow ${x.t > seen ? 'unread' : ''}"><div class="ic c-in" style="font-size:18px">${x.ic}</div><div class="m"><div class="t">${x.title}</div><div class="d" style="white-space:normal">${x.body}</div></div></div>`).join('')}</div>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
+    try{ localStorage.setItem(LN_KEY(), String(Date.now())); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); const c = document.getElementById('lncard'); if(c) c.remove(); return; }
+  sheet('🔔 Notifications', NT.rows.length ? `<p class="note" style="margin-bottom:8px">Ce que votre équipe a fait ces 3 derniers jours (livré, annulé, versement, ventes, modifications).</p><div class="list">${NT.rows.map(ntRow).join('')}</div><button class="btn block" style="margin-top:12px" data-a="nav:journal">📋 Journal complet</button>` : '<div class="card empty">Rien de nouveau pour le moment.</div>');
   try{ if(NT.rows[0]) localStorage.setItem(ntKey(), NT.rows[0].at); }catch(_){} const b = document.getElementById('ntbell'); if(b) b.outerHTML = ntBell(); };
 setInterval(() => { if(document.visibilityState !== 'hidden') ntFetch(); }, 30000);
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') ntFetch(); });
@@ -4349,7 +4372,7 @@ async function syncNow(){
     if(await pull()) changed = true;
     if(await livReconcile()) changed = true;
     ntFetch();
-    if(idsBefore){ const nw = S.moves.filter(m => m.type === 'vente' && !idsBefore.has(m.id) && (m.status === 'attente' || m.status === 'encours')); if(nw.length && idsBefore.size){ toast(`🛵 Nouvelle livraison : ${pname(nw[0].pid)} × ${nw[0].qty}${nw[0].client ? ' — ' + nw[0].client : ''}${nw.length > 1 ? ' (+' + (nw.length - 1) + ')' : ''}`); try{ navigator.vibrate && navigator.vibrate([120, 60, 120]); }catch(_){} } }
+    if(idsBefore){ const nw = S.moves.filter(m => m.type === 'vente' && !idsBefore.has(m.id) && (m.status === 'attente' || m.status === 'encours')); if(nw.length && idsBefore.size){ toast(`🛵 Nouvelle livraison — ${whenFull(nw[0])} : ${pname(nw[0].pid)} × ${nw[0].qty}${nw[0].client ? ' pour ' + nw[0].client : ''}${nw.length > 1 ? ' (+' + (nw.length - 1) + ' autre(s))' : ''}`); try{ navigator.vibrate && navigator.vibrate([120, 60, 120]); }catch(_){} } }
     if(changed){ rawSave(); render(); }
     SYNC.pending = shopWritable() ? computeDirty().length : 0;
     SYNC.state = SYNC.pending ? 'pending' : 'ok'; SYNC.err = ''; ONLINE.offline = false;
@@ -4696,6 +4719,7 @@ CUSTOM.moi = () => {
       ${m.note ? `<p class="note" style="margin-top:6px">📝 ${esc(m.note)}</p>` : ''}
       <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livcancel" data-id="${m.id}">❌ Annuler la commande</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}</div>`;
   return `<div class="card" style="margin-bottom:12px"><b>${esc(L ? L.name : 'Livreur')}</b> · ${esc(L && L.city || '')}<br><span class="note">${esc(S.settings.shop)}</span><div id="moiClock" style="margin-top:6px;font-weight:650;font-size:14px">📅 ${esc(moiNow())}</div></div>
+  ${lnCard()}
   ${pushState() !== 'on' ? notifCard() : ''}
   ${(() => { const seen = (() => { try{ return JSON.parse(localStorage.getItem('stock_ann_seen') || '[]'); }catch(_){ return []; } })();
     const an = S.moves.filter(m => m.type === 'annonce' && m.liv === lid && !seen.includes(m.id) && (m.date || '') >= addDays(T, -14)).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 3);
