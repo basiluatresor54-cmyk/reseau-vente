@@ -4322,7 +4322,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '988ea929a3';
+const APP_BUILD = '45c12317c4';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -4600,6 +4600,7 @@ function jrText(r){
   const d = r.n || {}, o = r.o || {}, t = d.type || o.type;
   const what = r.kind === 'product' ? `le produit « ${d.name || o.name || '?'} »` : r.kind === 'livreur' ? `le livreur « ${d.name || o.name || '?'} »` : (JR_TYPE[t] || 'une opération');
   const det = r.kind === 'move' ? [d.pid ? pname(d.pid) + (d.qty ? ' × ' + d.qty : '') : '', d.client || '', d.amount ? amt(num(d.amount), d.cur) : (d.price && d.qty && t === 'vente' ? amt(d.qty * num(d.price), d.cur) : ''), d.liv && t !== 'vente' ? lname(d.liv) : (t === 'vente' && d.liv ? '🛵 ' + lname(d.liv) : ''), d.cat || ''].filter(Boolean).join(' · ') : '';
+  if(r.action === 'create' && d.extra && t === 'vente') return `🛵 a vendu en plus : ${det}${d.extraOf ? ' (même client)' : ''}`;
   if(r.action === 'create') return `a créé ${what}${det ? ' : ' + det : ''}`;
   if(r.action === 'delete') return `🗑️ a supprimé ${what}${det ? ' : ' + det : ''}`;
   if(r.action === 'restore') return `a rétabli ${what}${det ? ' : ' + det : ''}`;
@@ -4852,7 +4853,7 @@ CUSTOM.moi = () => {
       ${m.pre || (m.credit && !(num(m.acompte) > 0 && m.creditMain)) ? '' : `<button class="btn block" style="margin:6px 0 4px" data-a="livchange" data-id="${m.id}">💵 Monnaie à rendre</button>`}
       <div class="dl"><span>Votre commission</span><span class="num">${money(m.qty*num(m.commU))}</span></div>
       ${m.note ? `<p class="note" style="margin-top:6px">📝 ${esc(m.note)}</p>` : ''}
-      <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livcancel" data-id="${m.id}">❌ Annuler la commande</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}</div>`;
+      <div class="btns" style="margin-top:10px">${m.status === 'attente' ? `<button class="btn" data-a="livstat:encours" data-id="${m.id}">🛵 En route</button>` : `<a class="btn wa" href="${waLink(m.phone, livMsg(m, L))}" target="_blank" rel="noopener">${ico('wa')} Client</a>`}<button class="btn primary" data-a="livstat:livre" data-id="${m.id}">✅ Livré</button></div><button class="btn ghost-bad block" style="margin-top:8px" data-a="livcancel" data-id="${m.id}">❌ Annuler la commande</button>${isKit(prod(m.pid)) ? `<button class="btn block" style="margin-top:8px" data-a="livswap" data-id="${m.id}">🔁 Le client a pris seulement une partie du pack</button>` : ''}${m.qty > 1 ? `<button class="btn block" style="margin-top:8px" data-a="livpart" data-id="${m.id}">🔢 Livré en partie (le client a pris moins)</button>` : ''}<button class="btn block" style="margin-top:8px" data-a="livextra" data-id="${m.id}">➕ Le client prend aussi un autre produit</button></div>`;
   return `<div class="card" style="margin-bottom:12px"><b>${esc(L ? L.name : 'Livreur')}</b> · ${esc(L && L.city || '')}<br><span class="note">${esc(S.settings.shop)}</span><div id="moiClock" style="margin-top:6px;font-weight:650;font-size:14px">📅 ${esc(moiNow())}</div></div>
   ${lnCard()}
   ${pushState() !== 'on' ? notifCard() : ''}
@@ -4868,6 +4869,7 @@ CUSTOM.moi = () => {
   </div>
   ${lqGet().length ? `<div class="warnbox" style="margin-top:12px">📶 ${lqGet().length} action(s) enregistrée(s) dans le téléphone, pas encore envoyée(s) : pas de réseau. Elles partiront toutes seules dès que la connexion revient. <button class="link" data-a="syncnow">Réessayer maintenant</button></div>` : ''}
   <button class="btn primary block" style="margin-top:12px" data-a="decl">💸 J'ai envoyé l'argent</button>
+  <button class="btn block" style="margin-top:8px" data-a="livextra">➕ J'ai vendu en plus (client qui m'a appelé)</button>
   <button class="btn block" style="margin-top:8px" data-a="livpoint">🌙 Mon point du jour</button>
   <button class="btn block" style="margin-top:8px" data-a="moirel:1">📄 Mon relevé de la semaine (commissions)</button>
   <div class="sec"><h2>📅 Mes livraisons par jour</h2></div>
@@ -4953,6 +4955,42 @@ A.livswap = (_, el) => { const m = S.moves.find(x => x.id === el.dataset.id); if
   closeSheet(); rawSave(); render(); if(r.queued) return true; syncNow(); toast(`Livré : ${pname(pid)} × ${q} ✅`);
   notifyShop('owners', `🔁 ${lname(m.liv)} : le client a pris une partie du pack`, `${from} → ${pname(pid)} × ${q}${m.client ? ' — ' + m.client : ''} · ${amt(q * m.price, m.cur)}`, {tag:'st-' + m.id});
   return true; }); };
+// Vente « en plus » faite par le livreur : client qui l'appelle directement, ou autre produit pris par un client.
+// Le prix est TOUJOURS celui de la boutique (non modifiable) ; il ne peut vendre que ce qu'il a en main.
+A.livextra = (_, el) => {
+  const lid = ONLINE.shop && ONLINE.shop.livreur_id, L = S.livreurs.find(l => l.id === lid), st = stockAt(S.moves);
+  const par = el && el.dataset && el.dataset.id ? S.moves.find(x => x.id === el.dataset.id) : null;
+  const ps = S.products.filter(p => !p.deleted && avail(st, lid, p.id) > 0).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  if(!ps.length){ sheet('➕ Vente en plus', `<div class="card empty">Vous n'avez aucun produit en main pour le moment.<br><br>Demandez au vendeur de vous envoyer le stock dans l'application, puis réessayez.</div>`); return; }
+  sheet('➕ Vente en plus', `<form id="lxf">
+    <p class="note" style="margin-bottom:10px">${par ? `Pour <b>${esc(par.client || 'ce client')}</b> : il prend aussi un autre produit.` : `Un client vous a contacté directement ? Enregistrez la vente ici : votre stock et l'argent à verser se mettent à jour, et le vendeur est prévenu.`}</p>
+    ${field('Produit (dans votre stock)', `<select name="pid">${ps.map(p => `<option value="${esc(p.id)}">${esc(p.name)} — ${esc(amt(num(p.sell), p.cur))} · en main : ${avail(st, lid, p.id)}</option>`).join('')}</select>`)}
+    ${field('Quantité', `<input name="qty" type="number" min="1" step="1" value="1" inputmode="numeric">`)}
+    <div class="card" id="lxPrice" style="margin-bottom:12px"></div>
+    ${par ? '' : `<div class="row2">${field('Nom du client', `<input name="client" maxlength="80" placeholder="Ex : Mme Kabeya">`)}${field('Téléphone', `<input name="phone" type="tel" maxlength="30" placeholder="08…">`)}</div>`}
+    <button class="btn primary block">✅ Enregistrer la vente</button>
+    <p class="note" style="margin-top:8px">🔒 Le prix est celui de la boutique : il ne peut pas être changé.</p></form>`);
+  const f = $('#lxf'), E = f.elements;
+  const upd = () => { const p = prod(E.pid.value), mx = avail(st, lid, E.pid.value), q = Math.max(1, Math.min(mx, Math.floor(num(E.qty.value)) || 1));
+    E.qty.max = mx; const u = toUSD(num(p.sell), p.cur), c = commUFor(p, L, u);
+    $('#lxPrice').innerHTML = `<div class="dl"><span>Prix (fixé par la boutique)</span><span class="num">${amt(num(p.sell), p.cur)}</span></div><div class="dl"><span>À encaisser</span><b class="num">${amt(q * num(p.sell), p.cur)}</b></div>${c ? `<div class="dl"><span>Votre commission</span><span class="num">${money(q * c)}</span></div>` : ''}`; };
+  E.pid.onchange = upd; E.qty.oninput = upd; upd();
+  f.onsubmit = async e => { e.preventDefault();
+    const pid = E.pid.value, p = prod(pid), mx = avail(stockAt(S.moves), lid, pid), q = Math.floor(num(E.qty.value));
+    if(!(q >= 1)){ toast('Quantité invalide'); return; }
+    if(q > mx){ toast(`Stock insuffisant : vous avez ${mx} ${p.name} en main`); return; }
+    const client = par ? (par.client || '') : E.client.value.trim(), phone = par ? (par.phone || '') : E.phone.value.trim();
+    const id = uid(), d = today(), u = toUSD(num(p.sell), p.cur);
+    const note = {t:`🛵 ${lname(lid)} a vendu en plus`, b:`${p.name} × ${q}${client ? ' — ' + client : ''} · ${amt(q * num(p.sell), p.cur)}`, tag:'x-' + id};
+    const b = f.querySelector('button.primary'); b.disabled = true;
+    const r = await livRpc('livreur_extra_sale', {p_shop:ONLINE.shop.id, p_id:id, p_pid:pid, p_qty:q, p_client:client || null, p_phone:phone || null, p_parent:par ? par.id : null, p_date:d}, note);
+    b.disabled = false;
+    if(!r.ok){ toast(r.error ? rpcErr(r.error) : "Impossible d'enregistrer la vente"); return; }
+    S.moves.push({id, ts:Date.now(), type:'vente', pid, qty:q, price:num(p.sell), cur:p.cur || '$', rate:rate(), costU:unitCostUSD(p), commU:commUFor(p, L, u), liv:lid, client, phone, addr:par ? par.addr : undefined, status:'livre', date:d, ddate:d, ldate:d, pay:'', extra:true, extraOf:par ? par.id : undefined});
+    closeSheet(); rawSave(); render(); if(r.queued) return;
+    syncNow(); toast(`Vente enregistrée ✅ · à verser +${amt(q * num(p.sell), p.cur)}`);
+    notifyShop('owners', note.t, note.b, {tag:note.tag}); };
+};
 /* Actions du livreur sans réseau : gardées dans le téléphone, envoyées au retour de la connexion */
 const LQ_KEY = () => 'stock_livq_' + (ONLINE.shop ? ONLINE.shop.id : '');
 const lqGet = () => { try{ return JSON.parse(localStorage.getItem(LQ_KEY()) || '[]'); }catch(_){ return []; } };
