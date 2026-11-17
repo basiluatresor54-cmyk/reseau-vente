@@ -190,6 +190,10 @@ table.tb{width:100%;border-collapse:collapse;font-size:13.5px}
 .sectc:has(input:checked){border-color:var(--brand);background:var(--brand-soft)}
 .upick{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));margin-bottom:0}
 @media (max-width:360px){.sects{grid-template-columns:1fr}}
+.rrow{display:grid;grid-template-columns:26px 1fr 92px;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.rrow .t{font-weight:700;font-size:14px;line-height:1.25}.rrow .d{font-size:12.5px;color:var(--muted);margin-top:2px}
+.rck input{width:20px;height:20px;margin:0;accent-color:var(--brand)}
+.rq{display:flex;flex-direction:column;gap:2px}.rq input{width:100%;min-height:40px;padding:6px 8px;border:1.5px solid var(--line);border-radius:10px;background:var(--field);color:var(--ink);font:inherit;font-weight:700;text-align:right}.rq small{font-size:11px;color:var(--muted);text-align:right}
 .kitrow select,.kitrow input{width:100%;padding:10px;border:1.5px solid var(--line);border-radius:11px;background:var(--field);min-height:44px;font-size:15px}
 .city{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px}
 .menu .it .ic{width:42px;height:42px}
@@ -858,6 +862,7 @@ function vStock(){
     <div class="chips" style="margin:8px 0 0"><button class="chip ${!stockAsOf ? 'on' : ''}" data-a="sasof" data-d="">Aujourd'hui (actuel)</button><button class="chip ${stockAsOf === addDays(t, -1) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -1)}">Hier soir</button><button class="chip ${stockAsOf === addDays(t, -7) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -7)}">Il y a 7 jours</button></div>
     ${stockAsOf ? `<p class="note" style="margin:8px 0 0">⏪ Vous voyez le stock tel qu'il était <b>à la fin du ${esc(dAbs(stockAsOf, 1))}</b>. <button class="link" data-a="sasof" data-d="">Revenir au stock actuel</button> · <button class="link" data-a="shday" data-d="${stockAsOf}">Mouvements de ce jour ›</button></p>` : ''}</div>
   <input class="search" type="search" placeholder="Rechercher un produit…" value="${esc(stockQ)}" oninput="stockQ=this.value;refreshList('stock')">
+  ${stockAsOf || isVendeur() ? '' : (n => n ? `<button class="card daycard" data-a="rachat"><span><b>À racheter</b> · ${n} produit(s) presque fini(s)</span><span class="note">Préparer la commande ›</span></button>` : '')(rachatList().length)}
   ${plansCard()}
   ${stockAsOf ? '' : forecastCard()}
   <div id="lst">${stockRows()}</div>
@@ -865,6 +870,7 @@ function vStock(){
   <div class="btns" style="margin-top:12px"><button class="btn" data-a="new:entree">+ Entrée de stock</button><button class="btn" data-a="new:envoi">Envoyer à un livreur</button></div>
   <div class="btns" style="margin-top:8px"><button class="btn" data-a="new:produit">+ Nouveau produit</button><button class="btn" data-a="newpack">🎁 Nouveau pack / promo</button></div>
   <div class="btns" style="margin-top:8px"><button class="btn primary" data-a="stockupd">📦 Mettre mon stock à jour</button><button class="btn" data-a="invform:">📋 Contrôle du dépôt</button></div>
+  ${isVendeur() ? '' : '<div class="btns" style="margin-top:8px"><button class="btn" data-a="importxl">Importer des produits (Excel)</button><button class="btn" data-a="rachat">À racheter</button></div>'}
   ${invHistHTML('')}`;
 }
 // Par produit : entré, vendu (livré, packs décomposés), en cours, perdu ; packs vendus
@@ -2547,6 +2553,7 @@ function productForm(id, opt = {}){
       <div id="cityRows">${cityCommRows(p)}</div>
       <button type="button" class="btn sm" id="addCity" style="margin-top:4px">+ Autre ville</button></details>
     ${p && isKit(p) ? '' : unitSection(p)}
+    ${p && isKit(p) ? '' : `<div id="supw">${supField(p)}</div>`}
     ${field('Alerte stock bas', `<input name="alert" type="number" min="0" step="1" value="${p ? p.alert : 3}">`, 'Alerte quand il reste ce nombre de pièces ou moins')}
     <label class="f" style="display:flex;gap:10px;align-items:center"><input type="checkbox" name="show" ${p && p.hide ? '' : 'checked'} style="width:22px;height:22px;min-height:0"><span style="margin:0">Visible dans ma boutique en ligne</span></label>
     ${p ? '' : `<div id="initw">${field('Stock de départ au dépôt', `<input name="init" type="number" min="0" step="1" placeholder="0">`, 'Dans l\'unité de base (pièces, kg…)')}</div>`}
@@ -2555,14 +2562,14 @@ function productForm(id, opt = {}){
     ${p ? `<button type="button" class="btn ghost-bad block" style="margin-top:8px" data-a="delprod:${p.id}">Supprimer ce produit</button>` : ''}</form>`);
   const f = $('#pf'), E = f.elements;
   let photo = (p && p.photo) || '';
-  unitWire(f);
+  unitWire(f); supWire(f);
   $('#pfPhoto').onchange = e => { const file = e.target.files[0]; if(!file) return; smallImage(file, 240, .72).then(u => { photo = u; $('#pfPrev').innerHTML = `<img src="${u}" alt="">`; $('#pfNoPhoto').hidden = false; }).catch(() => toast('Image illisible')); };
   $('#pfNoPhoto').onclick = () => { photo = ''; $('#pfPrev').textContent = '📷'; $('#pfNoPhoto').hidden = true; };
   // Pack / promo : composition, prix séparé, économie, coût et bénéfice
   let autoOld = !(p && num(p.old)), autoName = !p, autoComm = !(p && (num(p.comm) || (p.commCity && Object.keys(p.commCity).length)));
   const buyBox = E.buy.closest('.row2'), commBox = E.commMode.closest('.row2'), commHome = commBox.nextSibling;
   $('#kitw').insertAdjacentHTML('beforeend', '<div id="kitComm" style="margin-top:10px"><b style="font-size:14px">🛵 Commission du livreur pour cette promo</b></div>');
-  const setKind = pack => { E.iskit.checked = pack; if($('#usec')) $('#usec').hidden = pack; $('#kitw').hidden = !pack; if($('#initw')) $('#initw').hidden = pack; E.buy.required = !pack; E.name.required = !pack; if(buyBox) buyBox.hidden = pack;
+  const setKind = pack => { E.iskit.checked = pack; if($('#usec')) $('#usec').hidden = pack; if($('#supw')) $('#supw').hidden = pack; $('#kitw').hidden = !pack; if($('#initw')) $('#initw').hidden = pack; E.buy.required = !pack; E.name.required = !pack; if(buyBox) buyBox.hidden = pack;
     if(pack) $('#kitComm').appendChild(commBox); else commHome.parentNode.insertBefore(commBox, commHome);
     $('#sht').textContent = p ? $('#sht').textContent : (pack ? '🎁 Nouveau pack / promo' : 'Nouveau produit'); E.name.placeholder = pack ? 'Ex : Gamme complète Golden Hair' : 'Ex : Sac de poitrine'; kitSum(); };
   const kitSum = () => { if(!E.iskit.checked){ $('#kitSum').innerHTML = ''; return; }
@@ -2604,6 +2611,7 @@ function productForm(id, opt = {}){
     if(p && isKit(p) && kitv && kitKey(kitv) === kitKey(p.kit)) kitv = p.kit;
     const data = {name, details:E.details.value.trim(), usage:E.usage ? E.usage.value.trim() : (p && p.usage) || '', cat:E.cat.value.trim(), cur:E.cur.value, sell:num(E.sell.value), old:num(E.old.value) > num(E.sell.value) ? num(E.old.value) : 0, buy:num(E.buy.value), comm:num(E.comm.value), commMode:E.commMode.value, commCity:readCityComm(f), alert:Math.max(0, Math.round(num(E.alert.value))), kit:kitv, photo, hide:!E.show.checked};
     const ux = readUnits(f, p, !!kitv); if(!ux) return; Object.assign(data, ux);
+    if(!kitv){ const fid = readSup(f); if(fid === null) return; if(fid !== undefined) data.fid = fid || undefined; }
     if(p){ Object.assign(p, data); toast('Produit modifié'); }
     else {
       const np = Object.assign({id:uid()}, data); S.products.push(np);
@@ -2704,7 +2712,7 @@ function moveForm(type, opt = {}){
   sheet(T[0], h);
 
   const f = $('#mf'), E = f.elements;
-  const U = unitCtl({pid:E.pid, qty:E.qty, price:E.price, cost:E.cost, box:$('#uctl'), pack0:type === 'entree' && !m, onChange:() => upd()});
+  const U = unitCtl({pid:E.pid, qty:E.qty, price:E.price, cost:E.cost, box:$('#uctl'), pack0:type === 'entree' && !m && !opt.plan && !opt.qty, onChange:() => upd()});
   if(E.credit) E.credit.onchange = () => { $('#creditBox').style.display = E.credit.checked ? '' : 'none'; };
   if(!m && type === 'vente' && opt.client){ E.client.value = opt.client.name || ''; E.phone.value = opt.client.phone || ''; E.addr.value = opt.client.addr || ''; const d = f.querySelector('details.paste'); if(d) d.open = false; }
   let status = m?.status || (liv0 ? 'attente' : 'livre');
@@ -3945,7 +3953,9 @@ function unitCtl(o){ // o : {pid, qty, price?, cost?, box, pack0?, onChange?}
     if(!dec && o.qty.value !== '' && num(o.qty.value) !== Math.round(num(o.qty.value))) o.qty.value = Math.max(1, Math.round(num(o.qty.value)));
     o.box.innerHTML = p && (ks.length || decUnit(p)) ? `<div class="ubar">${ks.length ? `<div class="f" style="margin-bottom:6px"><span>Compter en</span><div class="seg upick">${[['0', unitOf(p)[1]]].concat(ks.map((x, i) => [String(i + 1), x.n + ' de ' + fmt(x.q)])).map(([v, l]) => `<button type="button" data-u="${v}" class="${String(k) === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>` : ''}<small class="note" data-uhint style="display:block;margin:-2px 0 10px"></small></div>` : '';
     hint(); };
-  o.box.addEventListener('click', e => { const b = e.target.closest('[data-u]'); if(!b) return; k = +b.dataset.u || 0; fill(); paint(); if(o.onChange) o.onChange(); });
+  o.box.addEventListener('click', e => { const b = e.target.closest('[data-u]'); if(!b) return; const om = mult(), q0 = num(o.qty.value); k = +b.dataset.u || 0;
+    if(q0 > 0){ let v = q0 * om / mult(); if(Math.abs(v - Math.round(v)) > 1e-9) v = q0 === 1 ? 1 : K() ? Math.max(1, Math.ceil(v)) : qr(P(), v); o.qty.value = r3(v); }
+    fill(); paint(); if(o.onChange) o.onChange(); });
   o.qty.addEventListener('input', hint);
   return {
     product(){ k = o.pack0 && packsOf(P()).length ? 1 : 0; if(k) fill(); paint(); },
@@ -4104,6 +4114,205 @@ Object.assign(A, {
   clotwho: (_, el) => { clotWho = el.dataset.k || ''; clotSheet(clotDate); },
   clot: id => clotDone(id)
 });
+
+/* ---------- Fournisseur habituel d'un produit (même liste que les fournisseurs de l'importation) ---------- */
+function supField(p){
+  const L = fourns(), cur = (p && p.fid) || '';
+  return `${field('Fournisseur habituel', `<select name="fid"><option value="">— Aucun —</option>${L.map(f => `<option value="${f.id}" ${f.id === cur ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}<option value="__new">+ Nouveau fournisseur…</option></select>`, 'Pour commander vite quand le stock est bas (liste « À racheter »)')}
+    <div id="supNew" class="row2" hidden>${field('Nom du fournisseur', `<input name="supName" maxlength="60" placeholder="Ex : Dépôt Kin Marché">`)}${field('Son WhatsApp', `<input name="supPhone" type="tel" placeholder="Ex : 0812345678">`)}</div>`;
+}
+function supWire(f){
+  const E = f.elements; if(!E.fid) return;
+  E.fid.addEventListener('change', () => { const n = E.fid.value === '__new'; f.querySelector('#supNew').hidden = !n; if(n) E.supName.focus(); });
+}
+function readSup(f){ // renvoie l'identifiant du fournisseur choisi (crée le nouveau si besoin), ou null en cas d'erreur
+  const E = f.elements; if(!E.fid) return undefined;
+  if(E.fid.value !== '__new') return E.fid.value || '';
+  const name = E.supName.value.trim(); if(!name){ toast('Tapez le nom du nouveau fournisseur'); E.supName.focus(); return null; }
+  const ex = fourns().find(x => norm(x.name) === norm(name)); if(ex){ if(E.supPhone.value.trim() && !ex.phone) ex.phone = E.supPhone.value.trim(); return ex.id; }
+  const F = {id:uid(), type:'fourn', date:today(), ts:Date.now(), name, phone:E.supPhone.value.trim(), city:''}; S.moves.push(F); return F.id;
+}
+
+/* ---------- À racheter : produits presque finis, groupés par fournisseur, commande sur WhatsApp ----------
+   Un produit apparaît quand son stock (dépôt + livreurs, moins les commandes en cours) atteint son seuil d'alerte,
+   ou quand il va finir dans moins de 7 jours au rythme des ventes. Quantité proposée : environ 1 mois de ventes. */
+function rachatList(){
+  const st = stockAt(), soon = forecast().soon, out = [];
+  for(const p of S.products){
+    if(isKit(p)) continue;
+    const have = r3(totalOf(st, p.id) - pendAll(p.id)), f = soon.find(x => x.p.id === p.id), low = have <= (p.alert || 0);
+    if(!low && !f) continue;
+    let need = f ? Math.ceil(f.perDay * 30 - Math.max(0, have)) : Math.max(num(p.alert) * 2 - Math.max(0, have), 0);
+    if(!(need > 0)) need = num(p.alert) > 0 ? num(p.alert) : 1;
+    need = decUnit(p) ? r3(need) : Math.ceil(need);
+    const k = packsOf(p).slice().sort((a, b) => num(b.q) - num(a.q))[0] || null;
+    out.push({p, have, low, days:f ? f.days : null, need, pack:k, n:k ? Math.max(1, Math.ceil(need / num(k.q) - 1e-9)) : need, fid:p.fid && fourns().some(x => x.id === p.fid) ? p.fid : ''});
+  }
+  return out.sort((a, b) => (a.days ?? (a.have <= 0 ? -1 : 0)) - (b.days ?? (b.have <= 0 ? -1 : 0)) || a.p.name.localeCompare(b.p.name));
+}
+function rachatSheet(){
+  if(isVendeur()) return toast('Réservé au patron ou au gérant');
+  const L = rachatList();
+  if(!L.length) return sheet('À racheter', `<div class="empty" style="padding:18px 8px">Aucun produit à racheter pour le moment.</div>
+    <p class="note">Un produit apparaît ici quand son stock descend à son seuil d'alerte (réglé dans la fiche produit), ou quand il va finir dans moins de 7 jours au rythme des ventes.</p>`);
+  const groups = {}; L.forEach(x => (groups[x.fid] = groups[x.fid] || []).push(x));
+  const keys = Object.keys(groups).sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || fname(a).localeCompare(fname(b)));
+  const row = x => { const p = x.p, unit = x.pack ? plural(x.pack.n, 2) : decUnit(p) ? unitOf(p)[2] : 'pièces';
+    return `<div class="rrow"><label class="rck"><input type="checkbox" data-rck="${p.id}" checked></label><div class="m"><div class="t">${esc(p.name)}</div><div class="d">Reste <b class="${x.have <= 0 ? 'red' : ''}">${x.have <= 0 ? 'rien' : esc(qtyTxt(p, x.have))}</b>${x.days != null ? ' · ' + fDays(x.days) : x.low ? ' · seuil atteint' : ''}</div></div>
+      <div class="rq"><input type="number" min="0" step="${x.pack || !decUnit(p) ? '1' : 'any'}" value="${x.n}" data-rq="${p.id}"><small>${esc(unit)}</small></div></div>`; };
+  sheet('À racheter', `<p class="note" style="margin-bottom:10px">Produits presque finis, regroupés par fournisseur. Ajustez les quantités, puis envoyez la commande sur WhatsApp. Les prix d'achat ne sont jamais envoyés.</p>
+    ${keys.map(k => { const F = k ? fourns().find(x => x.id === k) : null;
+      return `<div class="card rgrp" data-rg="${esc(k)}" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px"><b>${F ? esc(F.name) : 'Sans fournisseur habituel'}</b><span class="note">${F && F.phone ? esc(F.phone) : F ? 'pas de numéro' : ''}</span></div>
+        ${F ? '' : '<p class="note" style="margin:-2px 0 8px">Choisissez le fournisseur dans la fiche de chaque produit pour qu\'il soit rangé ici automatiquement.</p>'}
+        ${groups[k].map(row).join('')}
+        <div class="btns" style="margin-top:10px"><button type="button" class="btn wa" data-rsend="${esc(k)}">${ico('wa')} Envoyer la commande</button><button type="button" class="btn" data-rplan="${esc(k)}">Noter dans « Achats prévus »</button></div></div>`; }).join('')}`);
+  const box = $('#shb');
+  const picked = k => groups[k].map(x => { const ck = box.querySelector(`[data-rck="${x.p.id}"]`), v = num((box.querySelector(`[data-rq="${x.p.id}"]`) || {}).value);
+    return ck && ck.checked && v > 0 ? {x, v, base:x.pack ? qr(x.p, v * num(x.pack.q)) : qr(x.p, v)} : null; }).filter(Boolean);
+  const line = ({x, v}) => x.pack ? `• ${x.p.name} : ${fmt(v)} ${plural(x.pack.n, v)} (${qtyTxt(x.p, v * num(x.pack.q))})` : `• ${x.p.name} : ${qtyTxt(x.p, v)}`;
+  box.querySelectorAll('[data-rsend]').forEach(b => b.onclick = () => { const k = b.dataset.rsend, P = picked(k); if(!P.length) return toast('Cochez au moins un produit');
+    const F = k ? fourns().find(x => x.id === k) : null;
+    const txt = `Bonjour${F ? ' ' + F.name : ''},\nVoici ma commande pour *${S.settings.shop}* :\n\n${P.map(line).join('\n')}\n\nMerci de me confirmer le prix total et le jour de livraison.`;
+    window.open(waLink(F && F.phone ? F.phone : '', txt), '_blank', 'noopener'); });
+  box.querySelectorAll('[data-rplan]').forEach(b => b.onclick = () => { const k = b.dataset.rplan, P = picked(k); if(!P.length) return toast('Cochez au moins un produit');
+    const F = k ? fourns().find(x => x.id === k) : null, d = addDays(today(), 1);
+    P.forEach(({x, v, base}) => { if(plans().some(m => m.pid === x.p.id)) return; S.moves.push({id:uid(), ts:Date.now(), type:'plan', pid:x.p.id, qty:base, date:d, cost:num(x.p.buy) || '', sup:F ? F.name : '', note:x.pack ? fmt(v) + ' ' + plural(x.pack.n, v) : ''}); });
+    S.settings.setup = true; save(); closeSheet(); render(); toast('Ajouté aux achats prévus'); });
+}
+
+/* ---------- Ajouter des produits depuis Excel (.xlsx), un fichier CSV ou un copier-coller ----------
+   Lecture directe dans le téléphone : rien n'est envoyé ailleurs. Les produits qui existent déjà (même nom) sont ignorés. */
+const IMP_COLS = [
+  ['name', 'Nom du produit *', /^(nom|produit|article|design|libel|description|item|name|marchandise)/],
+  ['buy', "Prix d'achat", /(achat|^pa$|^p\.?a\.?$|cout|revient|cost)/],
+  ['alert', "Seuil d'alerte", /(alerte|seuil|minimum|^min)/],
+  ['qty', 'Stock (quantité)', /(stock|quantit|^qte|^qt|^nombre|^nb|qty|restant)/],
+  ['cat', 'Catégorie ou rayon', /(categ|rayon|famille|^type|groupe)/],
+  ['sell', 'Prix de vente *', /(vente|^pv$|^p\.?v\.?$|^prix|price|^p\.?u)/]
+];
+const colIdx = s => { let n = 0; for(const ch of String(s).toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
+const colName = i => { let s = ''; i++; while(i > 0){ const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };
+// « 1 500,50 », « 1,500.50 », « 15 $ », « 2 500 FC » → nombre
+function numx(v){
+  let s = String(v ?? '').replace(/[^0-9,.\-]/g, ''); if(!s) return 0;
+  const c = s.lastIndexOf(','), d = s.lastIndexOf('.');
+  if(c >= 0 && d >= 0) s = c > d ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if(c >= 0) s = /,\d{1,2}$/.test(s) && (s.match(/,/g) || []).length === 1 ? s.replace(',', '.') : s.replace(/,/g, '');
+  const n = parseFloat(s); return isFinite(n) ? n : 0;
+}
+function parseCSV(txt){
+  txt = String(txt || '').replace(/^﻿/, '');
+  const first = txt.split(/\r?\n/)[0] || '', d = ['\t', ';', ','].map(c => [c, first.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const rows = []; let row = [], f = '', q = false;
+  for(let i = 0; i < txt.length; i++){ const ch = txt[i];
+    if(q){ if(ch === '"'){ if(txt[i + 1] === '"'){ f += '"'; i++; } else q = false; } else f += ch; }
+    else if(ch === '"' && f === '') q = true;
+    else if(ch === d){ row.push(f); f = ''; }
+    else if(ch === '\n' || ch === '\r'){ if(ch === '\r' && txt[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+    else f += ch; }
+  if(f !== '' || row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => String(x).trim() !== ''));
+}
+async function readZip(buf){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), td = new TextDecoder();
+  let e = buf.byteLength - 22; while(e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if(e < 0) throw new Error('zip');
+  const n = dv.getUint16(e + 10, true), files = {}; let p = dv.getUint32(e + 16, true);
+  for(let i = 0; i < n; i++){
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    files[td.decode(u8.subarray(p + 46, p + 46 + nl))] = {method, csize, off}; p += 46 + nl + xl + cl;
+  }
+  return {names:Object.keys(files), async text(name){ const z = files[name]; if(!z) return null;
+    const s = z.off + 30 + dv.getUint16(z.off + 26, true) + dv.getUint16(z.off + 28, true), data = u8.slice(s, s + z.csize);
+    if(z.method === 0) return td.decode(data);
+    if(typeof DecompressionStream === 'undefined') throw new Error('old');
+    return await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text(); }};
+}
+async function readXlsx(buf){
+  const z = await readZip(buf), X = s => new DOMParser().parseFromString(s, 'application/xml'), strings = [];
+  const ss = await z.text('xl/sharedStrings.xml');
+  if(ss) [...X(ss).getElementsByTagName('si')].forEach(si => strings.push([...si.getElementsByTagName('t')].map(t => t.textContent).join('')));
+  let sheet = 'xl/worksheets/sheet1.xml';
+  try{ const wb = X(await z.text('xl/workbook.xml')), s1 = wb.getElementsByTagName('sheet')[0], rid = s1 && (s1.getAttribute('r:id') || s1.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'));
+    const rel = [...X(await z.text('xl/_rels/workbook.xml.rels')).getElementsByTagName('Relationship')].find(r => r.getAttribute('Id') === rid);
+    if(rel){ const t = rel.getAttribute('Target'), path = t.startsWith('/') ? t.slice(1) : 'xl/' + t.replace(/^\.\//, ''); if(z.names.includes(path)) sheet = path; } }catch(_){}
+  const xml = await z.text(sheet); if(!xml) throw new Error('sheet');
+  const rows = [];
+  for(const r of X(xml).getElementsByTagName('row')){ const row = [];
+    for(const c of r.getElementsByTagName('c')){ const ref = (c.getAttribute('r') || '').replace(/\d+/g, ''), i = ref ? colIdx(ref) : row.length, t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0];
+      row[i] = t === 's' ? (strings[+(v && v.textContent)] || '') : t === 'inlineStr' ? [...c.getElementsByTagName('t')].map(x => x.textContent).join('') : (v ? v.textContent : ''); }
+    rows.push(Array.from(row, x => x == null ? '' : String(x))); }
+  return rows.filter(r => r.some(x => String(x).trim() !== ''));
+}
+let IMPX = null; // {rows, head, map, cur}
+function importSheet(){
+  if(isVendeur()) return toast('Réservé au patron ou au gérant');
+  IMPX = null;
+  sheet('Importer des produits', `<p class="note" style="margin-bottom:10px">Vous avez déjà la liste de vos produits dans Excel ? Ajoutez-les tous en une fois. Une ligne = un produit.</p>
+    <div class="card tbw" style="margin-bottom:12px"><table class="tb"><tr><th>Produit</th><th class="rt">Prix de vente</th><th class="rt">Prix d'achat</th><th class="rt">Stock</th><th>Rayon</th></tr><tr><td>Coca 33 cl</td><td class="rt">0,7</td><td class="rt">0,5</td><td class="rt">48</td><td>Boissons</td></tr><tr><td>Lait Nido 400 g</td><td class="rt">4,5</td><td class="rt">3,6</td><td class="rt">12</td><td>Produits laitiers</td></tr></table>
+      <p class="note" style="margin-top:6px">Les colonnes peuvent être dans n'importe quel ordre : vous les vérifiez à l'étape suivante.</p></div>
+    <label class="btn primary block" style="cursor:pointer">Choisir un fichier Excel ou CSV<input type="file" id="impFile" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
+    <p class="note" style="text-align:center;margin:10px 0">ou</p>
+    <form id="impPaste">${field('Collez ici les lignes copiées depuis Excel', `<textarea name="t" rows="5" placeholder="Sélectionnez les lignes dans Excel, copiez, puis collez ici"></textarea>`)}<button class="btn block">Lire les lignes collées</button></form>
+    <div id="impStep"></div>`);
+  $('#impFile').onchange = async e => { const file = e.target.files && e.target.files[0]; if(!file) return;
+    try{
+      const nm = file.name.toLowerCase();
+      if(nm.endsWith('.xls')) return toast('Ancien format Excel : enregistrez le fichier en .xlsx ou en CSV');
+      const rows = nm.endsWith('.xlsx') ? await readXlsx(await file.arrayBuffer()) : parseCSV(await file.text());
+      importMap(rows);
+    }catch(err){ toast(String(err && err.message) === 'old' ? 'Ce téléphone ne lit pas les fichiers Excel : collez les lignes, ou enregistrez en CSV' : 'Fichier illisible : essayez de l\'enregistrer en CSV, ou collez les lignes'); }
+  };
+  $('#impPaste').onsubmit = e => { e.preventDefault(); e.stopPropagation(); const t = e.target.elements.t.value; if(!t.trim()) return toast('Collez d\'abord les lignes'); importMap(parseCSV(t)); };
+}
+function importMap(rows){
+  rows = (rows || []).map(r => r.map(x => String(x ?? '').trim()));
+  if(!rows.length) return toast('Aucune ligne trouvée');
+  const hi = rows.slice(0, 5).findIndex(r => r.some(x => IMP_COLS[0][2].test(norm(x))));
+  const head = hi >= 0 ? rows[hi] : null, data = hi >= 0 ? rows.slice(hi + 1) : rows;
+  const width = Math.max(...rows.map(r => r.length)), map = {};
+  if(head){ const used = new Set();
+    for(const [k, , re] of IMP_COLS){ const i = head.findIndex((h, j) => !used.has(j) && re.test(norm(h).replace(/\s+/g, ' ').trim())); if(i >= 0){ map[k] = i; used.add(i); } } }
+  else { map.name = 0; if(width > 1) map.sell = 1; if(width > 2) map.buy = 2; if(width > 3) map.qty = 3; }
+  IMPX = {data, head, width, map, cur:'$'};
+  importStep();
+}
+function importRows(){
+  const {data, map} = IMPX, have = new Set(S.products.map(p => norm(p.name).trim())), seen = new Set(), ok = [], skip = {dup:0, noname:0, noprice:0};
+  const g = (r, k) => map[k] != null && map[k] !== '' ? (r[map[k]] || '') : '';
+  for(const r of data){
+    const name = g(r, 'name').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if(!name){ skip.noname++; continue; }
+    const key = norm(name);
+    if(have.has(key) || seen.has(key)){ skip.dup++; continue; }
+    const sell = numx(g(r, 'sell')); if(!(sell > 0)){ skip.noprice++; continue; }
+    seen.add(key);
+    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:g(r, 'cat').slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert'))))});
+  }
+  return {ok, skip};
+}
+function importStep(){
+  const {head, width, map} = IMPX, {ok, skip} = importRows();
+  const opts = sel => `<option value="">— Aucune —</option>${Array.from({length:width}, (_, i) => `<option value="${i}" ${String(sel) === String(i) ? 'selected' : ''}>${esc(colName(i) + (head && head[i] ? ' · ' + head[i] : ''))}</option>`).join('')}`;
+  const sk = [skip.dup ? skip.dup + ' déjà présent(s) ou en double' : '', skip.noprice ? skip.noprice + ' sans prix de vente' : '', skip.noname ? skip.noname + ' sans nom' : ''].filter(Boolean).join(' · ');
+  $('#impStep').innerHTML = `<div class="sec" style="margin-top:16px"><h2>Vérifiez les colonnes</h2></div>
+    <form id="impMap" class="card" style="margin-bottom:12px">${['name', 'sell', 'buy', 'qty', 'cat', 'alert'].map(k => IMP_COLS.find(c => c[0] === k)).map(([k, l]) => `<label class="f" style="margin-bottom:8px"><span>${l}</span><select data-col="${k}">${opts(map[k] ?? '')}</select></label>`).join('')}
+      ${field('Devise des prix', `<select data-cur><option value="$" ${IMPX.cur === '$' ? 'selected' : ''}>Dollar ($)</option><option value="FC" ${IMPX.cur === 'FC' ? 'selected' : ''}>Monnaie locale (${esc(LC())})</option></select>`)}</form>
+    <div class="card tbw" style="margin-bottom:10px"><b>${ok.length} produit(s) prêt(s)</b>${sk ? `<p class="note" style="margin-top:4px">Ignorés : ${esc(sk)}</p>` : ''}
+      ${ok.length ? `<table class="tb" style="margin-top:8px"><tr><th>Produit</th><th class="rt">Vente</th><th class="rt">Achat</th><th class="rt">Stock</th><th>Rayon</th></tr>${ok.slice(0, 8).map(x => `<tr><td>${esc(x.name)}</td><td class="rt num">${fmt(x.sell)}</td><td class="rt num">${x.buy ? fmt(x.buy) : '—'}</td><td class="rt num">${x.qty || '—'}</td><td>${esc(x.cat || '—')}</td></tr>`).join('')}</table>${ok.length > 8 ? `<p class="note" style="margin-top:6px">… et ${ok.length - 8} autre(s)</p>` : ''}` : ''}</div>
+    <button class="btn primary block" id="impGo" ${ok.length ? '' : 'disabled'}>Ajouter ${ok.length} produit(s)</button>
+    <p class="note" style="margin-top:8px">Le stock est ajouté au dépôt comme « Stock de départ ». Vous pourrez ensuite compléter chaque fiche (photo, cartons, fournisseur…).</p>`;
+  $('#impMap').onchange = e => { const t = e.target; if(t.dataset.col) IMPX.map[t.dataset.col] = t.value === '' ? '' : +t.value; if(t.hasAttribute('data-cur')) IMPX.cur = t.value; importStep(); };
+  $('#impGo').onclick = async () => { const {ok} = importRows(); if(!ok.length) return;
+    if(!await ask(`Ajouter ${ok.length} produit(s) à votre stock ?`, 'Ajouter', false)) return;
+    const t = today(), ts = Date.now();
+    ok.forEach((x, i) => { const np = {id:uid(), name:x.name, details:'', usage:'', cat:x.cat, cur:IMPX.cur, sell:x.sell, old:0, buy:x.buy, comm:0, commMode:'fixe', commCity:null, alert:x.alert, kit:null, photo:'', hide:false};
+      S.products.push(np);
+      if(x.qty > 0) S.moves.push({id:uid(), ts:ts + i, type:'entree', pid:np.id, qty:x.qty, cost:np.buy, date:t, note:'Stock de départ (import)'}); });
+    S.settings.setup = true; save(); closeSheet(); render(); toast(ok.length + ' produit(s) ajouté(s)'); };
+  $('#impStep').scrollIntoView({behavior:'smooth', block:'start'});
+}
+Object.assign(A, {rachat: () => rachatSheet(), importxl: () => importSheet()});
 
 /* ---------- Formulaires : fonctionnent même dans un aperçu restreint (sans envoi de formulaire) ---------- */
 document.addEventListener('click', e => {
@@ -4628,7 +4837,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '34d8991f26';
+const APP_BUILD = '804ecb2fae';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -4854,7 +5063,7 @@ document.addEventListener('click', e => {
 }, true);
 
 // Compte « Vendeur » : actions réservées au patron / gérant
-const VB_NAME = ['newpack','editprod','delprod','delmove','money','stockupd','freshstart','planform','plandone','plandel','planfor','invform','invdel','declok','declko','backup','csv','preset','demo','editliv','delliv','feeadd','shipcoadd','shipcodel','importwb'];
+const VB_NAME = ['newpack','editprod','delprod','delmove','money','stockupd','freshstart','planform','plandone','plandel','planfor','invform','invdel','declok','declko','backup','csv','preset','demo','editliv','delliv','feeadd','shipcoadd','shipcodel','importwb','rachat','importxl'];
 const VB_FULL = ['new:produit','new:entree','new:perte'];
 document.addEventListener('click', e => {
   if(ONLINE.role !== 'vendeur') return;
