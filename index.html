@@ -4287,6 +4287,11 @@ render = function(){
     main.querySelectorAll('[data-a="backup"],[data-a="restore"]').forEach(b => b.remove());
     if(view === 'reglages'){ const n = [...main.querySelectorAll('p.note')].find(x => x.textContent.includes('exporter une sauvegarde de temps en temps')); if(n) n.innerHTML = n.innerHTML.replace('Vous pouvez aussi exporter une sauvegarde de temps en temps.', 'BASILUA TECH sauvegarde vos données <b>chaque semaine</b> et vous en remet une copie sur demande.'); }
   }
+  applyFont();
+  if(view === 'reglages' && (ONLINE.role === 'proprietaire' || ONLINE.admin)){
+    const h = [...main.querySelectorAll('.sec h2')].find(x => x.textContent.trim() === 'Sauvegarde et données');
+    if(h) h.parentElement.insertAdjacentHTML('beforebegin', fontSection());
+  }
   if(view === 'reglages'){
     const meta = (ONLINE.user && ONLINE.user.user_metadata) || {};
     main.querySelector('.back')?.insertAdjacentHTML('afterend', `<div class="sec" style="margin-top:4px"><h2>Mon compte</h2></div>
@@ -4369,7 +4374,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '1bcf785a0c';
+const APP_BUILD = '073c7f860c';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5241,6 +5246,40 @@ A.admpw = async (_, el) => {
     <div class="card" style="text-align:center;font-size:26px;font-weight:800;letter-spacing:.08em;margin-bottom:12px">${pw}</div>
     <a class="btn wa block" href="${waLink('+' + el.dataset.phone, msg)}" target="_blank" rel="noopener">${ico('wa')} Envoyer par WhatsApp</a>`);
 };
+/* ---------- Police d'écriture (choisie par le propriétaire, appliquée à toute l'équipe) ---------- */
+const FONTS = [
+  ['sys', 'Police du téléphone', '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif', 'Celle de votre téléphone (par défaut)'],
+  ['inter', 'Inter', '"BT Inter"', 'Moderne et très lisible'],
+  ['manrope', 'Manrope', '"BT Manrope"', 'Élégante et compacte'],
+  ['jakarta', 'Plus Jakarta Sans', '"BT Jakarta"', 'Chic et professionnelle'],
+  ['poppins', 'Poppins', '"BT Poppins"', 'Ronde et chaleureuse']
+];
+(function(){
+  const css = `@font-face{font-family:"BT Inter";src:url(font-inter.woff2) format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"BT Manrope";src:url(font-manrope.woff2) format("woff2");font-weight:200 800;font-display:swap}
+@font-face{font-family:"BT Jakarta";src:url(font-jakarta.woff2) format("woff2");font-weight:200 800;font-display:swap}
+${[400,600,700,800].map(w => `@font-face{font-family:"BT Poppins";src:url(font-poppins-${w}.woff2) format("woff2");font-weight:${w === 400 ? '100 500' : w === 600 ? '550 649' : w === 700 ? '650 749' : '750 900'};font-display:swap}`).join('\n')}
+html.ff-on body,html.ff-on body *:not(code):not(pre):not(.code):not(svg):not(path){font-family:var(--appfont),-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif!important}
+.fontpick{display:grid;gap:8px}.fontpick button{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line,#e5e7eb);background:var(--card,#fff);color:inherit;cursor:pointer}
+.fontpick button.on{border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 18%,transparent)}.fontpick b{font-size:16px;display:block}.fontpick small{color:var(--muted);font-size:12.5px}.fontpick .smp{font-size:13px;color:var(--muted);white-space:nowrap}`;
+  const st = document.createElement('style'); st.id = 'fontcss'; st.textContent = css; document.head.appendChild(st);
+})();
+function applyFont(){
+  const k = (S && S.settings && S.settings.font) || 'sys', f = FONTS.find(x => x[0] === k) || FONTS[0];
+  const root = document.documentElement;
+  if(f[0] === 'sys'){ root.classList.remove('ff-on'); root.style.removeProperty('--appfont'); }
+  else { root.style.setProperty('--appfont', f[2]); root.classList.add('ff-on'); }
+}
+function fontSection(){
+  const cur = (S.settings && S.settings.font) || 'sys';
+  return `<div class="sec"><h2>Police d'écriture</h2></div><div class="card" style="margin-bottom:12px"><p class="note" style="margin-bottom:10px">La forme des lettres dans toute l'application, pour vous et votre équipe.</p><div class="fontpick">${FONTS.map(([k, n, fam, d]) => { const ff = `font-family:${fam.replace(/"/g, '&quot;')},-apple-system,Roboto,sans-serif!important`; return `<button type="button" data-a="setfont:${k}" class="${cur === k ? 'on' : ''}" style="${ff}"><span style="${ff}"><b style="${ff}">${n}</b><small style="${ff}">${d}</small></span><span class="smp" style="${ff}">Ventes 186 000 FC</span></button>`; }).join('')}</div></div>`;
+}
+A.setfont = k => {
+  if(ONLINE.role !== 'proprietaire' && !ONLINE.admin) return toast('Seul le propriétaire choisit la police');
+  if(!FONTS.some(f => f[0] === k)) return;
+  S.settings.font = k; save(); applyFont(); render(); toast('Police enregistrée');
+};
+
 /* ---------- Interface sans émojis ----------
    Les textes affichés à l'écran sont nettoyés de leurs émojis (look professionnel).
    Les messages envoyés sur WhatsApp, les champs de saisie et les aperçus de message gardent les leurs. */
