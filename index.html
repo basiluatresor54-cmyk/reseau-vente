@@ -4610,7 +4610,12 @@ function showShopChooser(){
 function showNoShop(){
   const meta = (ONLINE.user && ONLINE.user.user_metadata) || {}, d = meta.phone || String(ONLINE.user && ONLINE.user.email || '').split('@')[0];
   const txt = `Bonjour, j'ai créé mon compte sur BASILUA TECH · Réseau & Vente avec le numéro ${telPretty(d)}. Invitez-moi dans l'équipe s'il vous plaît (Plus → Équipe → Inviter).`;
-  authShell(`<h2 style="font-size:17px;margin-bottom:6px">🛵 Compte livreur / équipe</h2>
+  authShell(`<div id="ownerBox" style="text-align:left;border:2px solid var(--brand);border-radius:14px;padding:12px 14px;margin-bottom:16px">
+      <b style="font-size:16px">Vous êtes le patron ?</b>
+      <p class="note" style="margin:4px 0 10px">Votre compte est prêt. Il reste à créer votre boutique : essai gratuit de 7 jours.</p>
+      <button class="btn primary block" id="toCreate2">Je suis le patron : créer ma boutique</button></div>
+    <p class="note" style="margin-bottom:10px;font-weight:600">Vous êtes livreur, vendeur ou gérant :</p>
+    <h2 style="font-size:17px;margin-bottom:6px">🛵 Compte livreur / équipe</h2>
     <p class="note" style="margin-bottom:12px">Votre compte est créé avec le numéro <b>${esc(telPretty(d))}</b>, mais le patron ne vous a pas encore ajouté à sa boutique.</p>
     <div style="text-align:left;background:var(--soft,#eef6f4);border-radius:12px;padding:10px 12px;margin-bottom:14px;font-size:14px;line-height:1.5">
       1️⃣ Envoyez votre numéro au patron.<br>2️⃣ Il vous invite : Plus → Équipe → Inviter, avec <b>ce même numéro</b>.<br>3️⃣ Touchez « Vérifier mon invitation ».</div>
@@ -4621,6 +4626,7 @@ function showNoShop(){
     <p class="note" style="margin-top:14px">Vous êtes le patron et voulez créer votre boutique ? <a href="#" class="link" id="toCreate">Créer ma boutique</a></p>`);
   $('#joinChk').onclick = afterLogin; $('#lo').onclick = logout;
   $('#toCreate').onclick = e => { e.preventDefault(); joinSet(''); showCreateShop(); };
+  $('#toCreate2').onclick = () => { joinSet(''); showCreateShop(); };
 }
 function showCreateShop(){
   const meta = (ONLINE.user && ONLINE.user.user_metadata) || {};
@@ -4839,7 +4845,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '3e7e3064ca';
+const APP_BUILD = '75d39562db';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
