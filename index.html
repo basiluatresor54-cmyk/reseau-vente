@@ -4369,7 +4369,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'd1db3d4565';
+const APP_BUILD = '1bcf785a0c';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5241,6 +5241,45 @@ A.admpw = async (_, el) => {
     <div class="card" style="text-align:center;font-size:26px;font-weight:800;letter-spacing:.08em;margin-bottom:12px">${pw}</div>
     <a class="btn wa block" href="${waLink('+' + el.dataset.phone, msg)}" target="_blank" rel="noopener">${ico('wa')} Envoyer par WhatsApp</a>`);
 };
+/* ---------- Interface sans émojis ----------
+   Les textes affichés à l'écran sont nettoyés de leurs émojis (look professionnel).
+   Les messages envoyés sur WhatsApp, les champs de saisie et les aperçus de message gardent les leurs. */
+const EMO_RE = /(?:(?![©®™✓✔✕✖←-⇿])\p{Extended_Pictographic})(?:️|[\u{1F3FB}-\u{1F3FF}])*(?:‍\p{Extended_Pictographic}️?)*[  ]?|️|⃣/gu;
+const EMO_TEST = /\p{Extended_Pictographic}|️|⃣/u;
+const emoKeep = el => !el || !!el.closest('textarea,pre,code,.code,script,style,[data-emo],[style*="pre-wrap"],[style*="pre-line"]');
+function emoClean(root){
+  if(!root) return;
+  if(root.nodeType === 3){ emoText(root); return; }
+  if(root.nodeType !== 1 || emoKeep(root)) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); const list = []; let n;
+  while((n = w.nextNode())) if(EMO_TEST.test(n.data)) list.push(n);
+  list.forEach(emoText);
+  root.querySelectorAll('[placeholder],[title],[aria-label]').forEach(el => ['placeholder','title','aria-label'].forEach(at => { const v = el.getAttribute(at); if(v && EMO_TEST.test(v) && !emoKeep(el)) el.setAttribute(at, v.replace(EMO_RE, '').trim()); }));
+}
+Object.assign(ICON, {
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  dot:'<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>'
+});
+const EMO_ICON = {'📦':'box','🛵':'truck','🚚':'truck','🚢':'box','✈':'send','🛒':'cart','🛍':'cart','👤':'user','👥':'user','🤝':'user','💳':'cash','💵':'cash','💸':'cash','💰':'coin','🪙':'coin','🧾':'receipt','📖':'book','📘':'book','⚙':'set','🔔':'bell','📅':'cal','🗓':'cal','🏷':'tag','📲':'wa','💬':'wa','🏪':'home','🏬':'home','🏠':'home','📤':'out','📥':'in'};
+const EMO_ONLY = /^\s*(\p{Extended_Pictographic})[\uFE0F\u200D\p{Extended_Pictographic}]*\s*$/u;
+function emoText(t){
+  const el = t.parentElement; if(emoKeep(el) || !EMO_TEST.test(t.data)) return;
+  // Emoji seul dans une pastille d'icône : on le remplace par une icône dessinée (même style que le reste)
+  const m = t.data.match(EMO_ONLY);
+  if(m && el && (/(^|\s)(ic|ai|ntbell|search)(\s|$)/.test(el.className) || (el.tagName === 'BUTTON' && el.textContent.trim() === t.data.trim()))){
+    const tmp = document.createElement('span'); tmp.innerHTML = ico(EMO_ICON[m[1]] || 'dot'); t.replaceWith(tmp.firstChild); return;
+  }
+  const had = /^\s/.test(t.data), v = t.data.replace(EMO_RE, '');
+  t.data = (had ? ' ' : '') + v.replace(/^\s+/, '');
+  if(!t.data.trim()){ t.data = ''; if(el && !el.textContent.trim() && !el.querySelector('svg,img') && /^(SPAN|B|I|EM|STRONG|SMALL)$/.test(el.tagName)) el.style.display = 'none'; }
+}
+try{
+  const emoObs = new MutationObserver(ms => ms.forEach(m => { if(m.type === 'characterData') emoText(m.target); else m.addedNodes.forEach(emoClean); }));
+  const emoStart = () => { emoClean(document.body); emoObs.observe(document.body, {subtree:true, childList:true, characterData:true}); };
+  if(document.body) emoStart(); else document.addEventListener('DOMContentLoaded', emoStart);
+}catch(_){}
+
 /* Sauvegarde / restauration : réservées à BASILUA TECH dans la version en ligne */
 ['backup','restore'].forEach(k => { const f = A[k]; if(typeof f === 'function') A[k] = function(){ if(!ONLINE.admin) return toast('Les sauvegardes sont gérées par BASILUA TECH'); return f.apply(this, arguments); }; });
 A.admdrive = async () => {
