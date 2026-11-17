@@ -4022,8 +4022,10 @@ function subBanner(compact){
   return `<div class="subban ${si.cls}">${txt}${ONLINE.offline ? '<br><b>Hors ligne</b>' : ''}${btn ? '<br>' + btn : ''}</div>`;
 }
 // Avertissement une fois par jour : fin d'essai proche, abonnement bientôt fini ou expiré
+/* Sauvegarde automatique sur Google Drive chaque dimanche à 20 h (Kinshasa) : plus besoin du rappel hebdomadaire */
+const DRIVE_AUTO = true;
 function backupWarnOnce(){
-  if(!ONLINE.admin) return; let last = ''; try{ last = localStorage.getItem('stock_last_backup') || ''; }catch(_){}
+  if(!ONLINE.admin) return; if(DRIVE_AUTO) return; let last = ''; try{ last = localStorage.getItem('stock_last_backup') || ''; }catch(_){}
   if(last && daysSince(last) < 7) return;
   const k = 'stock_backup_warn'; try{ if(localStorage.getItem(k) === today()) return; localStorage.setItem(k, today()); }catch(_){}
   setTimeout(() => sheet('💾 Sauvegarde de la semaine', `<p class="note" style="margin-bottom:12px">${last ? 'Dernière sauvegarde : ' + dAbs(last, 1) + '.' : 'Vous n\'avez encore jamais téléchargé de sauvegarde sur cet appareil.'}<br>Le plan gratuit de Supabase ne fait pas de sauvegarde automatique : téléchargez le fichier de toutes les boutiques et gardez-le sur Google Drive.</p><button class="btn primary block" data-a="admexport">💾 Télécharger la sauvegarde</button>`), 1500);
@@ -4363,7 +4365,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '53a1d4a082';
+const APP_BUILD = 'c02cb78197';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5106,7 +5108,7 @@ CUSTOM.admin = () => {
   <div class="card" style="margin-top:12px"><b>📱 Numéros pour payer l'abonnement</b> <span class="note">(affichés aux clients dans « Activer mon abonnement »)</span>
     <form id="payf" style="margin-top:10px">${[0,1,2].map(i => { const p = PAYINFO[i] || {}; return `<div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px"><label class="f" style="margin:0 0 8px"><select name="op${i}"><option value="">—</option>${OPS.map(o => `<option ${p.op === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label><label class="f" style="margin:0 0 8px"><input name="num${i}" value="${esc(p.num || '')}" placeholder="Numéro"></label><label class="f" style="margin:0 0 8px"><input name="name${i}" value="${esc(p.name || '')}" placeholder="Nom du compte"></label></div>`; }).join('')}<button class="btn block">Enregistrer les numéros</button></form></div>
   ${(() => { const last = (() => { try{ return localStorage.getItem('stock_last_backup') || ''; }catch(_){ return ''; } })(); const old = !last || daysSince(last) >= 7;
-    return `<div class="card" style="margin-top:12px;${old ? 'border:2px solid var(--warn,#d97706)' : ''}"><b>💾 Sauvegarde de toutes les boutiques</b><p class="note" style="margin:4px 0 10px">${last ? 'Dernière sauvegarde : ' + dAbs(last, 1) + '.' : 'Aucune sauvegarde faite sur cet appareil.'} ${old ? '<b>À faire cette semaine</b> (le plan gratuit de Supabase ne sauvegarde pas).' : '✅ À jour.'} Gardez le fichier sur Google Drive.</p><button class="btn ${old ? 'primary' : ''} block" data-a="admexport">💾 Télécharger la sauvegarde maintenant</button></div>`; })()}
+    return `<div class="card" style="margin-top:12px"><b>☁️ Sauvegarde sur Google Drive</b><p class="note" style="margin:4px 0 10px">✅ <b>Automatique chaque dimanche à 20 h</b> dans votre dossier Drive « Sauvegardes Réseau & Vente ».${last ? ' Dernière sauvegarde faite depuis cet appareil : ' + dAbs(last, 1) + '.' : ''} En cas de doute, sauvegardez tout de suite :</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">💾 Télécharger une copie sur cet appareil</button></div>`; })()}
   <div class="card" style="margin-top:12px"><form id="trialf" style="display:flex;gap:8px;align-items:flex-end"><label class="f" style="flex:1;margin:0"><span>Essai gratuit des nouvelles boutiques (jours)</span><input name="days" type="number" min="0" max="365" value="${esc(ADM.trial ?? 7)}"></label><button class="btn">Enregistrer</button></form></div>
   <div class="sec"><h2>🎯 Clients en essai à relancer</h2></div>
   <p class="note" style="margin:-4px 2px 8px">Le bouton vert est le message conseillé aujourd'hui. Touchez-le : WhatsApp s'ouvre avec le message prêt. ✓ = déjà envoyé.</p>
@@ -5115,7 +5117,7 @@ CUSTOM.admin = () => {
   <input class="search" type="search" placeholder="Rechercher un client, un numéro, un pays…" value="${esc(ADM.q)}" oninput="ADM.q=this.value;document.getElementById('admlist').innerHTML=admRows()">
   <div class="list" id="admlist">${admRows(list)}</div>
   <div class="sec"><h2>Sauvegarde</h2></div>
-  <div class="card"><p class="note" style="margin-bottom:10px">Exporte les données de <b>toutes</b> les boutiques (le plan gratuit de Supabase ne fait pas de sauvegarde automatique). Gardez le fichier sur Google Drive, une fois par semaine.</p><button class="btn primary block" data-a="admexport">Exporter toutes les données</button></div>`;
+  <div class="card"><p class="note" style="margin-bottom:10px">Les données de <b>toutes</b> les boutiques partent automatiquement sur votre Google Drive chaque dimanche à 20 h. Vous pouvez aussi le faire maintenant, ou garder une copie sur cet appareil.</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">Exporter toutes les données</button></div>`;
 };
 /* ---------- Suivi des clients en essai (messages Jour 1 / Jour 3 / Jour 6 / Expiré) ---------- */
 const FU_STEPS = [['j1', '👋 Jour 1 · Bienvenue'], ['j3', '🤝 Jour 3 · Aide'], ['j6', '⏳ Fin d\'essai'], ['exp', '🔁 Essai terminé']];
@@ -5234,6 +5236,16 @@ A.admpw = async (_, el) => {
   sheet('Nouveau mot de passe', `<p class="note" style="margin-bottom:10px">Communiquez ce mot de passe à la personne :</p>
     <div class="card" style="text-align:center;font-size:26px;font-weight:800;letter-spacing:.08em;margin-bottom:12px">${pw}</div>
     <a class="btn wa block" href="${waLink('+' + el.dataset.phone, msg)}" target="_blank" rel="noopener">${ico('wa')} Envoyer par WhatsApp</a>`);
+};
+A.admdrive = async () => {
+  if(!navigator.onLine) return toast('Pas de connexion internet');
+  toast('Envoi vers Google Drive…');
+  try{
+    const {data, error} = await sb.functions.invoke('drive-backup', {body:{}});
+    if(error || !data || !data.ok){ let m = (data && data.error) || ''; try{ if(!m && error && error.context) m = (await error.context.json()).error; }catch(_){} return sheet('Sauvegarde Google Drive', `<p class="note">❌ La sauvegarde n'a pas pu partir sur Google Drive.<br>${esc(m || 'Réessayez dans un instant.')}</p><button class="btn block" style="margin-top:10px" data-a="admexport">💾 Télécharger une copie à la place</button>`); }
+    try{ localStorage.setItem('stock_last_backup', today()); }catch(_){}
+    sheet('Sauvegarde Google Drive', `<p class="note" style="margin-bottom:10px">✅ <b>Sauvegarde envoyée sur Google Drive.</b><br>${data.shops} boutique(s), ${data.items} élément(s) · ${Math.max(1, Math.round(data.size / 1024))} Ko<br>Fichier : <b>${esc(data.name)}</b><br>Dossier : « Sauvegardes Réseau & Vente »</p>${data.link ? `<a class="btn primary block" href="${esc(data.link)}" target="_blank" rel="noopener">Voir dans Google Drive</a>` : ''}`);
+  }catch(e){ toast('Envoi impossible : ' + (e && e.message || 'erreur')); }
 };
 A.admexport = async () => {
   toast('Préparation de l\'export…');
