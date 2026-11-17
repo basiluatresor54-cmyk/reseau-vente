@@ -4374,7 +4374,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '073c7f860c';
+const APP_BUILD = 'bc185b5110';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5252,14 +5252,29 @@ const FONTS = [
   ['inter', 'Inter', '"BT Inter"', 'Moderne et très lisible'],
   ['manrope', 'Manrope', '"BT Manrope"', 'Élégante et compacte'],
   ['jakarta', 'Plus Jakarta Sans', '"BT Jakarta"', 'Chic et professionnelle'],
-  ['poppins', 'Poppins', '"BT Poppins"', 'Ronde et chaleureuse']
+  ['poppins', 'Poppins', '"BT Poppins"', 'Ronde et chaleureuse'],
+  ['nunito', 'Nunito', '"BT Nunito"', 'Arrondie, douce et amicale'],
+  ['comfortaa', 'Comfortaa', '"BT Comfortaa"', 'Très ronde, originale'],
+  ['quicksand', 'Quicksand', '"BT Quicksand"', 'Fine et légère'],
+  ['space', 'Space Grotesk', '"BT Space"', 'Technologique, moderne'],
+  ['oswald', 'Oswald', '"BT Oswald"', 'Étroite et forte, style affiche'],
+  ['lora', 'Lora', '"BT Lora"', 'Classique et sérieuse'],
+  ['playfair', 'Playfair Display', '"BT Playfair"', 'Luxe et élégante, style magazine']
 ];
 (function(){
   const css = `@font-face{font-family:"BT Inter";src:url(font-inter.woff2) format("woff2");font-weight:100 900;font-display:swap}
 @font-face{font-family:"BT Manrope";src:url(font-manrope.woff2) format("woff2");font-weight:200 800;font-display:swap}
 @font-face{font-family:"BT Jakarta";src:url(font-jakarta.woff2) format("woff2");font-weight:200 800;font-display:swap}
+@font-face{font-family:"BT Nunito";src:url(font-nunito.woff2) format("woff2");font-weight:200 1000;font-display:swap}
+@font-face{font-family:"BT Comfortaa";src:url(font-comfortaa.woff2) format("woff2");font-weight:300 700;font-display:swap}
+@font-face{font-family:"BT Quicksand";src:url(font-quicksand.woff2) format("woff2");font-weight:300 700;font-display:swap}
+@font-face{font-family:"BT Space";src:url(font-space-grotesk.woff2) format("woff2");font-weight:300 700;font-display:swap}
+@font-face{font-family:"BT Oswald";src:url(font-oswald.woff2) format("woff2");font-weight:200 700;font-display:swap}
+@font-face{font-family:"BT Lora";src:url(font-lora.woff2) format("woff2");font-weight:400 700;font-display:swap}
+@font-face{font-family:"BT Playfair";src:url(font-playfair-display.woff2) format("woff2");font-weight:400 900;font-display:swap}
 ${[400,600,700,800].map(w => `@font-face{font-family:"BT Poppins";src:url(font-poppins-${w}.woff2) format("woff2");font-weight:${w === 400 ? '100 500' : w === 600 ? '550 649' : w === 700 ? '650 749' : '750 900'};font-display:swap}`).join('\n')}
-html.ff-on body,html.ff-on body *:not(code):not(pre):not(.code):not(svg):not(path){font-family:var(--appfont),-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif!important}
+html.ff-on body,html.ff-on body *:not(code):not(pre):not(.code):not(svg):not(path){font-family:var(--appfont),-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif!important;font-variant-numeric:lining-nums}
+.fontpick button{font-variant-numeric:lining-nums}
 .fontpick{display:grid;gap:8px}.fontpick button{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line,#e5e7eb);background:var(--card,#fff);color:inherit;cursor:pointer}
 .fontpick button.on{border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 18%,transparent)}.fontpick b{font-size:16px;display:block}.fontpick small{color:var(--muted);font-size:12.5px}.fontpick .smp{font-size:13px;color:var(--muted);white-space:nowrap}`;
   const st = document.createElement('style'); st.id = 'fontcss'; st.textContent = css; document.head.appendChild(st);
