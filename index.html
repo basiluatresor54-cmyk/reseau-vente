@@ -4279,10 +4279,14 @@ render = function(){
   if(view === 'home' && !S.products.length && !S.moves.length && shopWritable()){
     const wb = localWB();
     if(wb) main.insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand)"><b>Données trouvées sur cet appareil</b><p class="note" style="margin:4px 0 10px">L'application « ${esc(wb.settings && wb.settings.shop || 'WB Stock')} » contient ${wb.products.length} produit(s), ${wb.livreurs.length} livreur(s) et ${wb.moves.length} opération(s). Voulez-vous les mettre en ligne dans cette boutique ?</p><button class="btn primary block" data-a="importwb">Importer ces données</button></div>`);
-    else main.insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px"><b>Vous avez déjà des données dans WB Stock ?</b><p class="note" style="margin:4px 0 10px">Dans l'ancienne application : Plus → Réglages → Exporter une sauvegarde → « Copier ». Puis ici : Plus → Réglages → Restaurer une sauvegarde → coller le texte.</p><button class="btn block" data-a="restore">Restaurer une sauvegarde maintenant</button></div>`);
+    else if(ONLINE.admin) main.insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px"><b>Vous avez déjà des données dans WB Stock ?</b><p class="note" style="margin:4px 0 10px">Dans l'ancienne application : Plus → Réglages → Exporter une sauvegarde → « Copier ». Puis ici : Plus → Réglages → Restaurer une sauvegarde → coller le texte.</p><button class="btn block" data-a="restore">Restaurer une sauvegarde maintenant</button></div>`);
   }
   if(si && si.cls !== 'ok') main.insertAdjacentHTML('afterbegin', subBanner(view !== 'home' && view !== 'reglages'));
   if(view === 'home' && actsAsk()) main.insertAdjacentHTML('afterbegin', `<div class="subban info" style="display:block;text-align:left">🤔 <b>Vous avez tout essayé.</b> Choisissez maintenant ce qui sert à votre commerce : l'application n'affichera que ça (modifiable à tout moment).<div class="btns" style="margin-top:8px"><button class="btn sm primary" data-a="pickacts">Choisir mes domaines</button></div></div>`);
+  if(!ONLINE.admin){
+    main.querySelectorAll('[data-a="backup"],[data-a="restore"]').forEach(b => b.remove());
+    if(view === 'reglages'){ const n = [...main.querySelectorAll('p.note')].find(x => x.textContent.includes('exporter une sauvegarde de temps en temps')); if(n) n.innerHTML = n.innerHTML.replace('Vous pouvez aussi exporter une sauvegarde de temps en temps.', 'BASILUA TECH sauvegarde vos données <b>chaque semaine</b> et vous en remet une copie sur demande.'); }
+  }
   if(view === 'reglages'){
     const meta = (ONLINE.user && ONLINE.user.user_metadata) || {};
     main.querySelector('.back')?.insertAdjacentHTML('afterend', `<div class="sec" style="margin-top:4px"><h2>Mon compte</h2></div>
@@ -4365,7 +4369,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'c02cb78197';
+const APP_BUILD = 'd1db3d4565';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5237,6 +5241,8 @@ A.admpw = async (_, el) => {
     <div class="card" style="text-align:center;font-size:26px;font-weight:800;letter-spacing:.08em;margin-bottom:12px">${pw}</div>
     <a class="btn wa block" href="${waLink('+' + el.dataset.phone, msg)}" target="_blank" rel="noopener">${ico('wa')} Envoyer par WhatsApp</a>`);
 };
+/* Sauvegarde / restauration : réservées à BASILUA TECH dans la version en ligne */
+['backup','restore'].forEach(k => { const f = A[k]; if(typeof f === 'function') A[k] = function(){ if(!ONLINE.admin) return toast('Les sauvegardes sont gérées par BASILUA TECH'); return f.apply(this, arguments); }; });
 A.admdrive = async () => {
   if(!navigator.onLine) return toast('Pas de connexion internet');
   toast('Envoi vers Google Drive…');
