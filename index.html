@@ -1608,7 +1608,7 @@ async function shareReceiptImage(id){
 }
 
 /* ---------- Ma boutique en ligne (lien public à partager) ---------- */
-const BOUTIQUE_URL = new URL('boutique/', location.href).href;
+const BOUTIQUE_URL = new URL('../boutique/', location.href).href;
 function catalogSection(){
   const on = typeof ONLINE !== 'undefined' && ONLINE && ONLINE.shop;
   if(!on) return `<div class="sec"><h2>🛍️ Ma boutique en ligne</h2></div><div class="card"><p class="note">Disponible dans la version en ligne de l'application (avec compte).</p></div>`;
@@ -3949,6 +3949,8 @@ function unitCtl(o){ // o : {pid, qty, price?, cost?, box, pack0?, onChange?}
       : decUnit(p) ? `Quantité en ${unitOf(p)[2]} (ex : 2,5)${o.price ? ' · prix pour 1 ' + unitOf(p)[1] : o.cost ? ' · coût pour 1 ' + unitOf(p)[1] : ''}`
       : packsOf(p).length ? `Quantité en pièces${o.price ? ' · prix pour 1 pièce' : ''}` : ''; };
   const paint = () => { const p = P(), ks = packsOf(p), pk = K(), dec = decUnit(p) && !pk;
+    const lab = (el, base) => { const sp = el && el.closest('label') && el.closest('label').querySelector(':scope > span'); if(!sp) return; if(sp.dataset.base == null) sp.dataset.base = sp.textContent; sp.textContent = pk ? base + ' par ' + pk.n.toLowerCase() : p && decUnit(p) ? base + ' par ' + unitOf(p)[1] : sp.dataset.base; };
+    lab(o.price, 'Prix'); lab(o.cost, 'Coût');
     o.qty.step = dec ? 'any' : '1'; o.qty.min = dec ? '0.001' : '1';
     if(!dec && o.qty.value !== '' && num(o.qty.value) !== Math.round(num(o.qty.value))) o.qty.value = Math.max(1, Math.round(num(o.qty.value)));
     o.box.innerHTML = p && (ks.length || decUnit(p)) ? `<div class="ubar">${ks.length ? `<div class="f" style="margin-bottom:6px"><span>Compter en</span><div class="seg upick">${[['0', unitOf(p)[1]]].concat(ks.map((x, i) => [String(i + 1), x.n + ' de ' + fmt(x.q)])).map(([v, l]) => `<button type="button" data-u="${v}" class="${String(k) === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>` : ''}<small class="note" data-uhint style="display:block;margin:-2px 0 10px"></small></div>` : '';
@@ -4837,7 +4839,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '804ecb2fae';
+const APP_BUILD = 'ee712c02f8';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5787,8 +5789,10 @@ function emoText(t){
   if(m && el && (/(^|\s)(ic|ai|ntbell|search)(\s|$)/.test(el.className) || (el.tagName === 'BUTTON' && el.textContent.trim() === t.data.trim()))){
     const tmp = document.createElement('span'); tmp.innerHTML = ico(EMO_ICON[m[1]] || 'dot'); t.replaceWith(tmp.firstChild); return;
   }
-  const had = /^\s/.test(t.data), v = t.data.replace(EMO_RE, '');
-  t.data = (had ? ' ' : '') + v.replace(/^\s+/, '');
+  const had = /^\s/.test(t.data), v = t.data.replace(EMO_RE, ''), nv = (had ? ' ' : '') + v.replace(/^\s+/, '');
+  // N'écrire que si le texte change : sinon l'observateur se relance sans fin (ex. « ↩️ » : la flèche est gardée)
+  if(nv === t.data) return;
+  t.data = nv;
   if(!t.data.trim()){ t.data = ''; if(el && !el.textContent.trim() && !el.querySelector('svg,img') && /^(SPAN|B|I|EM|STRONG|SMALL)$/.test(el.tagName)) el.style.display = 'none'; }
 }
 try{
