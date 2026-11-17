@@ -802,9 +802,9 @@ function vHomeVendeur(){
 function vHome(){
   if(isVendeur()) return vHomeVendeur();
   if(!sells() && has('imp')){ const cvi = S.settings.cover ? `<div class="cover" style="background-image:url('${S.settings.cover}')"></div>` : ''; return `${cvi}${installCard()}${vImport()}`; }
-  if(!S.products.length) return `${onbCard()}${installCard()}${impHomeCard()}<div class="card empty" style="margin-top:8px"><b>Bienvenue 👋</b>Ajoutez vos produits pour commencer.
+  if(!S.products.length) return `<div class="card empty" style="margin-bottom:12px"><b>Bienvenue 👋</b>Ajoutez vos produits pour commencer.
     <div class="stack" style="margin-top:16px">${PRESET ? `<button class="btn primary block" data-a="preset">Charger le catalogue ${esc(PRESET.label)}</button>` : ''}
-    <button class="btn ${PRESET?'':'primary'} block" data-a="new:produit">Ajouter un produit</button><button class="btn block" data-a="demo">Essayer avec des exemples</button></div></div>`;
+    <button class="btn ${PRESET?'':'primary'} block" data-a="new:produit">Ajouter un produit</button>${typeof importSheet === 'function' && !isVendeur() ? '<button class="btn block" data-a="importxl">Importer ma liste depuis Excel</button>' : ''}<button class="btn block" data-a="demo">Essayer avec des exemples</button></div></div>${onbCard()}${impHomeCard()}${installCard()}`;
   const r = stats(period), st = stockAt();
   const per = PERTXT[period];
   let remit = 0, topay = 0, units = 0, valBuy = 0;
@@ -1608,7 +1608,7 @@ async function shareReceiptImage(id){
 }
 
 /* ---------- Ma boutique en ligne (lien public à partager) ---------- */
-const BOUTIQUE_URL = new URL('../boutique/', location.href).href;
+const BOUTIQUE_URL = new URL('boutique/', location.href).href;
 function catalogSection(){
   const on = typeof ONLINE !== 'undefined' && ONLINE && ONLINE.shop;
   if(!on) return `<div class="sec"><h2>🛍️ Ma boutique en ligne</h2></div><div class="card"><p class="note">Disponible dans la version en ligne de l'application (avec compte).</p></div>`;
@@ -4725,7 +4725,7 @@ render = function(){
   if(!ONLINE.shop) return;
   const pend = declsOf().filter(d => d.status === 'attente');
   if(view === 'home' && NT.on()){ const c = ntCard(); if(c){ const anchor = $('#main .kpis'); if(anchor) anchor.insertAdjacentHTML('beforebegin', c); else $('#main').insertAdjacentHTML('afterbegin', c); } }
-  if(view === 'home' && ['off','install'].includes(pushState()) && (() => { try{ return localStorage.getItem('stock_notif_later') !== today(); }catch(_){ return true; } })()){
+  if(view === 'home' && (S.products.length || S.moves.length) && ['off','install'].includes(pushState()) && (() => { try{ return localStorage.getItem('stock_notif_later') !== today(); }catch(_){ return true; } })()){
     const st = pushState();
     $('#main').insertAdjacentHTML('afterbegin', `<div class="subban warn" style="display:block;text-align:left">🔔 <b>Notifications pas activées sur ce téléphone</b> : vous ne serez pas prévenu quand un livreur livre, annule ou verse l'argent.<div class="btns" style="margin-top:8px">${st === 'install' ? `<button class="btn sm primary" data-a="install">📲 Installer l'application (obligatoire sur iPhone)</button>` : `<button class="btn sm primary" data-a="pushon">🔔 Activer maintenant</button>`}<button class="btn sm" data-a="notiflater">Plus tard</button></div></div>`);
   }
@@ -4839,7 +4839,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'ee712c02f8';
+const APP_BUILD = '3e7e3064ca';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5549,10 +5549,11 @@ async function livSetStatus(m, st, ld, onlyDate){
 };
 
 /* ---------- Espace BASILUA TECH (administration) ---------- */
-const ADM = {shops:null, trial:null, q:'', loading:false, err:''};
+const ADM = {shops:null, trial:null, q:'', loading:false, err:'', orph:null};
 async function loadAdmin(){
   ADM.loading = true;
-  const [l, t, ac] = await Promise.all([sb.rpc('admin_list_shops'), sb.rpc('get_trial_days'), sb.rpc('admin_list_shop_acts').then(r => r, () => ({data:null}))]);
+  const [l, t, ac, orp] = await Promise.all([sb.rpc('admin_list_shops'), sb.rpc('get_trial_days'), sb.rpc('admin_list_shop_acts').then(r => r, () => ({data:null})), sb.rpc('admin_list_orphans').then(r => r, () => ({data:null}))]);
+  ADM.orph = orp && !orp.error && Array.isArray(orp.data) ? orp.data : [];
   ADM.loading = false; ADM.err = l.error ? rpcErr(l.error) : '';
   ADM.shops = l.data || []; ADM.trial = t.data;
   const acm = {}; (ac && ac.data || []).forEach(x => acm[x.id] = x); ADM.shops.forEach(x => { if(acm[x.id]) x.dom = acm[x.id]; });
@@ -5584,6 +5585,7 @@ CUSTOM.admin = () => {
   ${(() => { const last = (() => { try{ return localStorage.getItem('stock_last_backup') || ''; }catch(_){ return ''; } })(); const old = !last || daysSince(last) >= 7;
     return `<div class="card" style="margin-top:12px"><b>☁️ Sauvegarde sur Google Drive</b><p class="note" style="margin:4px 0 10px">✅ <b>Automatique chaque dimanche à 20 h</b> dans votre dossier Drive « Sauvegardes Réseau & Vente ».${last ? ' Dernière sauvegarde faite depuis cet appareil : ' + dAbs(last, 1) + '.' : ''} En cas de doute, sauvegardez tout de suite :</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">💾 Télécharger une copie sur cet appareil</button></div>`; })()}
   <div class="card" style="margin-top:12px"><form id="trialf" style="display:flex;gap:8px;align-items:flex-end"><label class="f" style="flex:1;margin:0"><span>Essai gratuit des nouvelles boutiques (jours)</span><input name="days" type="number" min="0" max="365" value="${esc(ADM.trial ?? 7)}"></label><button class="btn">Enregistrer</button></form></div>
+  ${orphRows()}
   <div class="sec"><h2>🎯 Clients en essai à relancer</h2></div>
   <p class="note" style="margin:-4px 2px 8px">Le bouton vert est le message conseillé aujourd'hui. Touchez-le : WhatsApp s'ouvre avec le message prêt. ✓ = déjà envoyé.</p>
   <div id="fubox">${fuRows()}</div>
@@ -5593,11 +5595,22 @@ CUSTOM.admin = () => {
   <div class="sec"><h2>Sauvegarde</h2></div>
   <div class="card"><p class="note" style="margin-bottom:10px">Les données de <b>toutes</b> les boutiques partent automatiquement sur votre Google Drive chaque dimanche à 20 h. Vous pouvez aussi le faire maintenant, ou garder une copie sur cet appareil.</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">Exporter toutes les données</button></div>`;
 };
+/* ---------- Comptes créés sans boutique : la personne s'est inscrite mais n'a pas fini (nom de la boutique) ---------- */
+function orphMsg(o){ const who = o.name ? ' ' + o.name : '';
+  return `Bonjour${who} 👋\nMerci de vous être inscrit sur *BASILUA TECH · Réseau & Vente* !\n\nIl vous reste une seule étape (1 minute) : donner un nom à votre boutique.\n\n1️⃣ Ouvrez l'application : ${APP_LINK}\n2️⃣ Connectez-vous avec votre numéro et votre mot de passe\n3️⃣ Tapez le nom de votre boutique, puis « Créer ma boutique »\n\nVotre essai gratuit commence à ce moment-là. Besoin d'aide ? Répondez à ce message, je vous guide.`; }
+function orphRows(){
+  const L = ADM.orph || []; if(!L.length) return '';
+  return `<div class="sec"><h2>Inscrits sans boutique (${L.length})</h2></div>
+  <p class="note" style="margin:-4px 2px 8px">Ces personnes ont créé un compte mais n'ont pas encore créé leur boutique. Envoyez-leur le message prêt pour les aider à finir.</p>
+  <div class="list">${L.map(o => { const sent = fuSent('orph' + o.phone, 'o');
+    return `<div class="it" style="cursor:default"><div class="ic c-brand">${esc(initials(o.name || '?'))}</div><div class="m"><div class="t">${esc(o.name || 'Sans nom')}</div><div class="d">${esc(telPretty(o.phone))} · inscrit ${esc(dAbs(String(o.created_at || '').slice(0, 10)))}</div></div>
+      <div class="r"><a class="btn sm ${sent ? '' : 'wa'}" style="text-decoration:none" href="${waLink('+' + o.phone, orphMsg(o))}" target="_blank" rel="noopener" onclick="admFuMark('orph${esc(o.phone)}','o')">${sent ? 'Relancé ✓' : 'Relancer'}</a></div></div>`; }).join('')}</div>`;
+}
 /* ---------- Suivi des clients en essai (messages Jour 1 / Jour 3 / Jour 6 / Expiré) ---------- */
 const FU_STEPS = [['j1', '👋 Jour 1 · Bienvenue'], ['j3', '🤝 Jour 3 · Aide'], ['j6', '⏳ Fin d\'essai'], ['exp', '🔁 Essai terminé']];
 const fuKey = (id, st) => 'stock_fu_' + id + '_' + st;
 const fuSent = (id, st) => { try{ return localStorage.getItem(fuKey(id, st)) || ''; }catch(_){ return ''; } };
-window.admFuMark = (id, st) => { try{ localStorage.setItem(fuKey(id, st), today()); }catch(_){} setTimeout(() => { if(view === 'admin'){ const b = document.getElementById('fubox'); if(b) b.innerHTML = fuRows(); } }, 400); };
+window.admFuMark = (id, st) => { try{ localStorage.setItem(fuKey(id, st), today()); }catch(_){} if(String(id).startsWith('orph')) setTimeout(() => { if(view === 'admin') render(); }, 400); setTimeout(() => { if(view === 'admin'){ const b = document.getElementById('fubox'); if(b) b.innerHTML = fuRows(); } }, 400); };
 function fuInfo(s){ const t = today(), start = String(s.created_at || '').slice(0, 10) || t, day = daysSince(start) + 1, end = s.paid_until || '', left = end ? Math.round((new Date(end + 'T12:00:00') - new Date(t + 'T12:00:00')) / 864e5) : 99;
   const rec = end && end < t ? 'exp' : left <= 1 ? 'j6' : day >= 3 ? 'j3' : 'j1';
   return {day, end, left, rec, active:!!s.last_activity}; }
