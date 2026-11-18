@@ -238,5 +238,14 @@
 </div></footer>
 
 <a class="sticky-wa" href="https://wa.me/243851507510?text=Bonjour%20BASILUA%20TECH%2C%20je%20veux%20en%20savoir%20plus%20sur%20Stock%20%26%20Livreurs" target="_blank" rel="noopener" aria-label="WhatsApp"><svg class="i" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-1.8-1.8l.8-1-1-2z"/></svg></a>
+<script>
+// Lien d'un ambassadeur (…/vente/?ref=CODE) : on garde le code pour l'inscription dans l'application
+(function(){ try{ var q = new URLSearchParams(location.search).get('ref'); if(!q || !/^[A-Za-z0-9]{4,12}$/.test(q)) return; q = q.toUpperCase();
+  localStorage.setItem('ref_code', q);
+  document.querySelectorAll('a[href*="?essai"]').forEach(function(a){ a.href = a.getAttribute('href') + '&ref=' + q; });
+  var b = document.createElement('div'); b.id = 'refBan'; b.textContent = 'Vous êtes invité par un ambassadeur (code ' + q + ') : 7 jours gratuits pour essayer.';
+  b.style.cssText = 'position:sticky;top:0;z-index:50;background:#0F766E;color:#fff;text-align:center;font-weight:700;font-size:14px;padding:10px 12px';
+  document.body.insertBefore(b, document.body.firstChild); }catch(e){} })();
+</script>
 </body>
 </html>

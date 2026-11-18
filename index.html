@@ -6101,7 +6101,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '47dbf3d7ce';
+const APP_BUILD = '94ae698a9e';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -7614,6 +7614,158 @@ A.admpayko = async id => { const x = (ADMP.list || []).find(y => y.id === id); i
       if(p){ const n = [...main.querySelectorAll('.dl span')].find(x => x.textContent === 'Abonnement'); if(n) n.parentElement.insertAdjacentHTML('afterend', `<div class="dl"><span>Paiement envoyé</span><span>${fmt(num(p.amount))} $ · code ${esc(p.code)} · en cours de vérification</span></div>`); } }
   }
 }catch(e){ console.error(e); } }; })();
+
+/* ---------- Programme Ambassadeur : le client devient ambassadeur dès son premier abonnement payé ---------- */
+const REF = {d:null, t:0, busy:false, att:false};
+const REF_URL = 'https://basiluatresor54-cmyk.github.io/reseau-vente/vente/';
+const REF_DEF = {on:true, pct1:15, pct2:5, months:12, min:2, bonus:10, bonus_min:3, fast_days:3, fast_bonus:7};
+const refCfg = () => Object.assign({}, REF_DEF, (REF.d && REF.d.cfg) || {});
+const refOwner = () => !!(ONLINE.shop && ONLINE.role === 'proprietaire');
+const usd = v => fmt(Math.round((num(v) + Number.EPSILON) * 100) / 100) + ' $';
+(() => { try{ const q = new URLSearchParams(location.search).get('ref'); if(q && /^[A-Za-z0-9]{4,12}$/.test(q)) localStorage.setItem('ref_code', q.toUpperCase()); }catch(_){} })();
+async function loadRef(force){
+  if(!sb || !ONLINE.user || REF.busy) return;
+  if(!force && Date.now() - REF.t < 300000) return;
+  REF.busy = true; REF.t = Date.now();
+  try{ const {data, error} = await sb.rpc('ref_me'); if(!error && data){ REF.d = data; if(document.getElementById('refBox')) paintRef(); } }catch(_){}
+  REF.busy = false;
+}
+// Lien d'invitation : le nouveau client est rattaché à son ambassadeur
+async function refAttachSaved(){
+  let c = ''; try{ c = localStorage.getItem('ref_code') || ''; }catch(_){}
+  if(!c || REF.att || !refOwner()) return; REF.att = true;
+  try{ const {data, error} = await sb.rpc('ref_attach', {p_code:c});
+    if(error && /fetch|network/i.test(error.message || '')){ REF.att = false; return; }
+    try{ localStorage.removeItem('ref_code'); }catch(_){}
+    if(!error && data){ toast('Invité par ' + (data.name || 'un ambassadeur') + ' : bienvenue !'); REF.t = 0; loadRef(true); } }catch(_){ REF.att = false; }
+}
+function refEx(){ const c = refCfg(), p1 = num(c.pct1) / 100, p2 = num(c.pct2) / 100;
+  return [['1 mois', +PRICE || 2.9], ['3 mois', +PLANS.m3 || 7.9], ['6 mois', +PLANS.m6 || 14.9], ['1 an', +PLANS.m12 || 26]]
+    .map(([t, p]) => `<div class="dl"><span>Il paie ${t} (${fmt(p)} $)</span><span><b>+${usd(p * p1)}</b> puis ${usd(p * p2)} à chaque renouvellement</span></div>`).join(''); }
+function refHow(){ const c = refCfg();
+  return `<div class="card" style="margin-bottom:12px"><b>Comment ça marche</b>
+    <div class="dl"><span>1. Vous partagez votre lien</span><span>WhatsApp, statut, groupes</span></div>
+    <div class="dl"><span>2. Un commerçant s'inscrit</span><span>7 jours gratuits pour lui</span></div>
+    <div class="dl"><span>3. Il paie son abonnement</span><span>vous gagnez <b>${c.pct1} %</b></span></div>
+    <div class="dl"><span>4. Il renouvelle</span><span>vous gagnez <b>${c.pct2} %</b> pendant ${c.months} mois</span></div>
+    <div class="dl"><span>5. Vous retirez</span><span>dès ${usd(c.min)}, par Mobile Money</span></div>
+    <p class="note" style="margin-top:8px">Exemples (formule Simple) :</p>${refEx()}
+    ${num(c.bonus) > 0 ? `<p class="note" style="margin-top:8px">Concours du mois : le meilleur ambassadeur (au moins ${c.bonus_min} filleuls payants) gagne un bonus de ${usd(c.bonus)}.</p>` : ''}</div>`; }
+const REF_RULES = () => { const c = refCfg(); return `<div class="card" style="margin-bottom:12px"><b>Le règlement en bref</b>
+  <p class="note" style="margin-top:6px;line-height:1.6">Vous gagnez seulement sur les commerçants que vous invitez vous-même (un seul niveau). La commission est gagnée quand BASILUA TECH a confirmé le paiement du filleul ; elle est annulée si ce paiement est faux ou annulé. Votre abonnement doit rester payé : sinon vos nouveaux gains sont mis en attente 30 jours. L'argent est envoyé seulement sur un numéro Mobile Money à votre nom. Interdit : promettre ce que l'application ne fait pas, changer les prix, se présenter comme employé de BASILUA TECH, se parrainer soi-même ou créer de faux comptes, encaisser l'argent d'un filleul. En cas de triche : arrêt du compte et perte des gains liés. Vous êtes indépendant (pas employé). BASILUA TECH peut changer les pourcentages en prévenant 7 jours avant ; ce qui est déjà gagné ne change pas.</p></div>`; };
+function refLink(){ const a = REF.d && REF.d.amb; return a ? REF_URL + '?ref=' + a.code : ''; }
+function refShareMsg(){ const a = REF.d.amb, c = refCfg();
+  return `Bonjour 👋\nJ'utilise *Réseau & Vente* pour gérer mon stock, mes ventes, mes livreurs et ma boutique en ligne, directement sur mon téléphone. Ça m'aide beaucoup !\n\nEssayez gratuitement pendant 7 jours :\n${refLink()}\n\nMon code : *${a.code}*${num(c.fast_bonus) > 0 ? `\n🎁 Payez dans vos ${c.fast_days} premiers jours : ${c.fast_bonus} jours offerts en plus.` : ''}`; }
+const REF_ST = {gagne:['Gagné', 'p-livre'], attente:['En attente', 'p-attente'], annule:['Annulé', 'p-annule'], demande:['En cours', 'p-attente'], paye:['Payé', 'p-livre'], refuse:['Refusé', 'p-annule']};
+function paintRef(){ const box = document.getElementById('refBox'); if(!box) return; const d = REF.d, c = refCfg();
+  if(!d){ box.innerHTML = '<div class="empty">Chargement…</div>'; return; }
+  if(!d.paid){ // Période d'essai : le programme est visible mais fermé
+    box.innerHTML = `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand);text-align:center"><b style="font-size:17px">Gagnez de l'argent avec Réseau &amp; Vente</b>
+      <p class="note" style="margin:6px 0 10px">Invitez d'autres commerçants et gagnez <b>${c.pct1} %</b> de leur abonnement, puis <b>${c.pct2} %</b> à chaque renouvellement.</p>
+      <div class="pill p-attente" style="display:inline-block;margin-bottom:10px">Fermé pendant l'essai gratuit</div>
+      <p class="note" style="margin-bottom:10px">Une seule condition : <b>payer votre abonnement</b>. Le programme s'ouvre tout de suite après.</p>
+      <button class="btn primary block" data-a="paysub">Payer mon abonnement et devenir ambassadeur</button></div>
+      ${refHow()}
+      ${d.parrain ? `<p class="note" style="text-align:center">Vous avez été invité par <b>${esc(d.parrain.name || '')}</b> (code ${esc(d.parrain.code)}).</p>` : d.can_attach ? `<form id="refAtt" class="card"><b>Quelqu'un vous a invité ?</b><p class="note" style="margin:4px 0 8px">Tapez son code d'ambassadeur (dans les 7 jours après votre inscription).</p><div style="display:flex;gap:8px"><input name="c" autocapitalize="characters" placeholder="Ex : MARIE07" style="flex:1"><button class="btn">Valider</button></div></form>` : ''}`;
+    const f = $('#refAtt'); if(f) f.onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const v = e.target.elements.c.value.trim(); if(!v) return;
+      const {data, error} = await sb.rpc('ref_attach', {p_code:v}); if(error) return toast(rpcErr(error)); toast('Invité par ' + (data && data.name || 'un ambassadeur')); loadRef(true); };
+    return; }
+  const a = d.amb || {};
+  if(a.status && a.status !== 'actif'){ box.innerHTML = `<div class="card empty">Votre compte ambassadeur est ${a.status === 'suspendu' ? 'suspendu' : 'arrêté'}. Contactez BASILUA TECH.</div>`; return; }
+  if(!a.accepted){ // Premier passage : accepter le règlement
+    box.innerHTML = `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand);text-align:center"><b style="font-size:17px">Vous pouvez devenir ambassadeur</b><p class="note" style="margin-top:6px">Merci pour votre abonnement. Acceptez le règlement pour recevoir votre lien et commencer à gagner de l'argent.</p></div>
+      ${refHow()}${REF_RULES()}
+      <form id="refAcc" class="card"><b>Votre numéro Mobile Money (à votre nom)</b><p class="note" style="margin:4px 0 8px">C'est là que vous recevrez votre argent. Vous pouvez le mettre plus tard.</p>
+        <div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px">${field('Réseau', `<select name="op"><option value="">—</option>${OPS.filter(o => o !== 'Autre').map(o => `<option>${o}</option>`).join('')}</select>`)}${field('Numéro', `<input name="num" type="tel" placeholder="08…">`)}${field('Nom du compte', `<input name="name" placeholder="Votre nom">`)}</div>
+        <button class="btn primary block" id="refAccGo">J'accepte le règlement</button></form>`;
+    $('#refAcc').onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements;
+      if(E.num.value.trim() && !E.op.value) return toast('Choisissez le réseau');
+      const {error} = await sb.rpc('ref_accept', {p_op:E.op.value, p_num:E.num.value.trim(), p_name:E.name.value.trim()}); if(error) return toast(rpcErr(error));
+      toast('Bienvenue parmi les ambassadeurs !'); await loadRef(true); };
+    return; }
+  const T = d.totals || {}, F = d.filleuls || [], E = d.earnings || [], P = d.payouts || [], top = d.top || [], solde = num(T.solde);
+  box.innerHTML = `<div class="card" style="margin-bottom:12px;text-align:center;border:2px solid var(--brand)"><div class="note">Votre code d'ambassadeur</div><div class="num" style="font-size:28px;font-weight:900;letter-spacing:.06em">${esc(a.code)}</div>
+      <input readonly value="${esc(refLink())}" onclick="this.select()" style="font-size:13px;margin:8px 0;width:100%">
+      <div class="btns"><button class="btn" data-a="refcopy">Copier le lien</button><a class="btn wa" href="${waLink('', refShareMsg())}" target="_blank" rel="noopener">${ico('wa')} Partager sur WhatsApp</a></div></div>
+    <div class="kpis"><div class="kpi"><div class="l">Solde à retirer</div><div class="v num pos">${usd(solde)}</div><div class="s">dès ${usd(c.min)}</div></div><div class="kpi"><div class="l">Gagné au total</div><div class="v num">${usd(T.gagne)}</div><div class="s">${F.filter(f => f.paid).length} filleul(s) payant(s)</div></div>
+      ${num(T.attente) ? `<div class="kpi"><div class="l">En attente</div><div class="v num">${usd(T.attente)}</div><div class="s">renouvelez votre abonnement</div></div>` : ''}<div class="kpi"><div class="l">Déjà retiré</div><div class="v num">${usd(T.retire)}</div><div class="s">${num(T.en_cours) ? usd(T.en_cours) + ' en cours' : 'Mobile Money'}</div></div></div>
+    ${num(T.en_cours) ? `<div class="subban info" style="display:block;margin-top:10px">Retrait de ${usd(T.en_cours)} en cours : BASILUA TECH l'envoie aujourd'hui.</div>` : solde >= num(c.min) ? `<button class="btn primary block" style="margin-top:10px" data-a="refpay">Retirer ${usd(solde)}</button>` : `<p class="note" style="margin-top:8px;text-align:center">Retrait possible dès ${usd(c.min)}.</p>`}
+    <div class="sec"><h2>Mes filleuls (${F.length})</h2></div>
+    <div class="list">${F.map(f => `<div class="it" style="cursor:default"><div class="ic c-brand">${esc(initials(f.name || f.shop || '?'))}</div><div class="m"><div class="t">${esc(f.name || 'Commerçant')}${f.shop ? ' · ' + esc(f.shop) : ''}</div><div class="d">Inscrit ${esc(fmtDate(String(f.at).slice(0, 10)))}${num(f.gain) ? ' · vous a rapporté ' + usd(f.gain) : ''}</div></div><div class="r"><span class="pill ${f.paid ? 'p-livre' : 'p-attente'}">${f.paid ? 'A payé' : 'En essai'}</span></div></div>`).join('') || '<div class="empty">Partagez votre lien : vos filleuls apparaîtront ici.</div>'}</div>
+    ${top.length ? `<div class="sec"><h2>Classement du mois</h2></div><div class="list">${top.map((t, i) => `<div class="it" style="cursor:default${t.me ? ';border:2px solid var(--brand)' : ''}"><div class="ic" style="background:${['#f5c542','#c0c7d1','#d4925b'][i] || 'var(--soft)'};color:#111;font-weight:900">${i + 1}</div><div class="m"><div class="t">${esc(t.name || '—')}${t.me ? ' (vous)' : ''}</div><div class="d">${t.n} filleul(s) payant(s)</div></div></div>`).join('')}</div>` : ''}
+    <div class="sec"><h2>Historique</h2></div>
+    <div class="list">${[...E.map(e => ({at:e.at, t:(e.kind === 'premier' ? 'Premier paiement' : e.kind === 'bonus' ? 'Bonus' : 'Renouvellement') + (e.name ? ' · ' + e.name : ''), a:'+' + usd(e.amount), st:e.status})), ...P.map(p => ({at:p.at, t:'Retrait ' + (p.method === 'mm' ? 'Mobile Money' : 'en mois gratuits') + (p.days ? ' (' + p.days + ' jours)' : ''), a:'-' + usd(p.amount), st:p.status}))]
+      .sort((x, y) => String(y.at).localeCompare(String(x.at))).map(h => `<div class="it" style="cursor:default"><div class="m"><div class="t">${esc(h.t)}</div><div class="d">${esc(fmtDate(String(h.at).slice(0, 10)))}</div></div><div class="r"><b class="num">${h.a}</b><div><span class="pill ${(REF_ST[h.st] || [])[1] || ''}">${(REF_ST[h.st] || [h.st])[0]}</span></div></div></div>`).join('') || '<div class="empty">Aucun gain pour le moment.</div>'}</div>
+    <details class="card" style="margin-top:12px"><summary><b>Règlement et exemples</b></summary><div style="margin-top:8px">${refHow()}${REF_RULES()}</div></details>`;
+}
+A.amb = () => { sheet('Gagner de l\'argent', '<div id="refBox"></div>'); paintRef(); loadRef(true); };
+A.refcopy = () => copyText(refLink());
+A.refpay = () => { const a = REF.d.amb, T = REF.d.totals;
+  sheet('Retirer mon argent', `<p class="note" style="margin-bottom:10px">Solde : <b>${usd(T.solde)}</b>. Comment voulez-vous le recevoir ?</p>
+    ${a.mm_num ? `<button class="btn primary block" data-a="refpaygo:mm">Par Mobile Money : ${esc(a.mm_op)} ${esc(a.mm_num)}</button>` : `<form id="refMm" class="card" style="margin-bottom:10px"><b>Votre numéro Mobile Money (à votre nom)</b><div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">${field('Réseau', `<select name="op" required>${OPS.filter(o => o !== 'Autre').map(o => `<option>${o}</option>`).join('')}</select>`)}${field('Numéro', `<input name="num" type="tel" required placeholder="08…">`)}${field('Nom du compte', `<input name="name" required>`)}</div><button class="btn primary block">Enregistrer et retirer par Mobile Money</button></form>`}
+    <button class="btn block" style="margin-top:8px" data-a="refpaygo:mois">En mois gratuits pour ma boutique</button>
+    <p class="note" style="margin-top:10px">BASILUA TECH envoie l'argent le jour même (le lendemain si la demande arrive après 18 h ou un dimanche).</p>`);
+  const f = $('#refMm'); if(f) f.onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements;
+    const {error} = await sb.rpc('ref_accept', {p_op:E.op.value, p_num:E.num.value.trim(), p_name:E.name.value.trim()}); if(error) return toast(rpcErr(error));
+    await loadRef(true); A.refpaygo('mm'); };
+};
+A.refpaygo = async m => { const {data, error} = await sb.rpc('ref_request_payout', {p_method:m}); if(error) return toast(rpcErr(error));
+  await loadRef(true); sheet('Retrait demandé', `<div class="card" style="text-align:center"><b style="font-size:18px">${usd(data.amount)}</b><p class="note" style="margin-top:6px">${m === 'mm' ? 'BASILUA TECH vous envoie cet argent par Mobile Money. Vous recevrez une notification dès l\'envoi.' : 'BASILUA TECH ajoute les jours gratuits à votre abonnement. Vous recevrez une notification.'}</p></div><button class="btn block" style="margin-top:10px" data-a="amb">Retour</button>`); };
+/* Espace BASILUA TECH : retraits à payer, réglages, classement, ambassadeurs */
+const ADMR = {d:null, t:0};
+async function loadAdmRef(){ if(!ONLINE.admin) return; ADMR.t = Date.now();
+  const {data, error} = await sb.rpc('admin_ref_overview'); if(!error){ ADMR.d = data; if(view === 'admin') render(); } }
+function admRefBlock(){ const d = ADMR.d; if(!d) return ''; const c = Object.assign({}, REF_DEF, d.cfg || {}), pend = (d.payouts || []).filter(p => p.status === 'demande');
+  const pRow = p => `<div class="card" style="margin-bottom:8px;border:2px solid var(--brand)"><div style="display:flex;justify-content:space-between"><b>${esc(p.name || '—')}</b><b class="num">${usd(p.amount)}</b></div>
+    <div class="note">${esc(telPretty(p.phone || ''))} · ${esc(fmtDate(String(p.at).slice(0, 10)))}</div>
+    ${p.method === 'mm' ? `<div class="dl"><span>${esc(p.op)}</span><span><b class="num" style="font-size:17px">${esc(p.num)}</b> <button class="btn sm" data-a="copypay" data-v="${esc(p.num)}">Copier</button></span></div>${p.mm_name ? `<div class="dl"><span>Au nom de</span><span>${esc(p.mm_name)}</span></div>` : ''}` : '<div class="dl"><span>Choix</span><span>Mois gratuits (ajoutés tout seuls)</span></div>'}
+    <div class="btns" style="margin-top:8px"><button class="btn primary" data-a="admrefok:${p.id}">${p.method === 'mm' ? 'Argent envoyé' : 'Ajouter les jours'}</button><button class="btn ghost-bad" data-a="admrefko:${p.id}">Refuser</button></div></div>`;
+  const last = (d.top || [])[0];
+  return `<div class="sec"><h2>Programme Ambassadeur</h2><button class="link" data-a="admrefreload">Actualiser</button></div>
+    ${pend.length ? `<p class="note" style="margin:0 2px 8px"><b>${pend.length} retrait(s) à payer</b> : envoyez l'argent depuis votre téléphone, puis touchez « Argent envoyé ».</p>${pend.map(pRow).join('')}` : '<div class="card empty" style="margin-bottom:8px">Aucun retrait à payer.</div>'}
+    ${last && last.n >= num(c.bonus_min) && !last.bonus_done && num(c.bonus) > 0 ? `<div class="card" style="margin-bottom:8px"><b>Gagnant du mois dernier : ${esc(last.name)}</b><p class="note">${last.n} filleuls payants.</p><button class="btn primary block" style="margin-top:8px" data-a="admrefbonus:${last.user_id}">Donner le bonus de ${usd(c.bonus)}</button></div>` : ''}
+    <details class="card" style="margin-bottom:8px"><summary><b>Ambassadeurs (${(d.ambassadors || []).length})</b></summary><div class="list" style="margin-top:8px">${(d.ambassadors || []).map(x => `<div class="it" style="cursor:default"><div class="m"><div class="t">${esc(x.name || '—')} · ${esc(x.code)}${x.status !== 'actif' ? ' · ' + esc(x.status) : ''}</div><div class="d">${esc(telPretty(x.phone || ''))} · ${x.filleuls} filleul(s), ${x.payants} payant(s) · gagné ${usd(num(x.gagne))} · retiré ${usd(num(x.retire))}${x.mm_num ? ' · ' + esc(x.mm_op) + ' ' + esc(x.mm_num) : ''}</div></div><div class="r"><button class="btn sm" data-a="admrefst:${x.user_id}|${x.status === 'actif' ? 'suspendu' : 'actif'}">${x.status === 'actif' ? 'Suspendre' : 'Réactiver'}</button>${x.mm_num ? `<button class="btn sm" style="margin-top:4px" data-a="admrefmm:${x.user_id}">Effacer le numéro</button>` : ''}</div></div>`).join('') || '<div class="empty">Aucun ambassadeur pour le moment.</div>'}</div></details>
+    <details class="card" style="margin-bottom:8px"><summary><b>Classement de ce mois</b></summary><div style="margin-top:8px">${(d.top_now || []).map((t, i) => `<div class="dl"><span>${i + 1}. ${esc(t.name || '—')}</span><span>${t.n} payant(s) · ${usd(num(t.g))}</span></div>`).join('') || '<p class="note">Personne pour le moment.</p>'}</div></details>
+    <details class="card" style="margin-bottom:8px"><summary><b>Derniers gains</b></summary><div class="list" style="margin-top:8px">${(d.earnings || []).map(e => `<div class="it" style="cursor:default"><div class="m"><div class="t">${esc(e.parrain || '—')} · +${usd(e.amount)}</div><div class="d">${e.kind === 'premier' ? 'Premier paiement' : e.kind === 'bonus' ? 'Bonus' : 'Renouvellement'}${e.filleul ? ' de ' + esc(e.filleul) : ''} · ${esc(fmtDate(String(e.at).slice(0, 10)))}</div></div><div class="r"><span class="pill ${(REF_ST[e.status] || [])[1] || ''}">${(REF_ST[e.status] || [e.status])[0]}</span>${e.status !== 'annule' ? `<button class="btn sm" style="margin-top:4px" data-a="admrefcancel:${e.id}">Annuler</button>` : ''}</div></div>`).join('') || '<div class="empty">Aucun gain.</div>'}</div></details>
+    <details class="card" style="margin-bottom:12px"><summary><b>Réglages du programme</b></summary><form id="refCfgF" style="margin-top:8px">
+      <label class="f" style="display:flex;gap:10px;align-items:center;margin:0 0 10px"><input type="checkbox" name="on" ${c.on ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Programme ouvert (nouvelles commissions)</span></label>
+      <div class="row2">${field('Premier paiement (%)', `<input name="pct1" type="number" step="0.1" min="0" max="90" value="${esc(c.pct1)}">`)}${field('Renouvellements (%)', `<input name="pct2" type="number" step="0.1" min="0" max="90" value="${esc(c.pct2)}">`)}</div>
+      <div class="row2">${field('Renouvellements pendant (mois)', `<input name="months" type="number" min="0" max="60" value="${esc(c.months)}">`)}${field('Retrait minimum ($)', `<input name="min" type="number" step="0.5" min="0" value="${esc(c.min)}">`)}</div>
+      <div class="row2">${field('Bonus du mois ($)', `<input name="bonus" type="number" step="0.5" min="0" value="${esc(c.bonus)}">`)}${field('Filleuls payants minimum', `<input name="bonus_min" type="number" min="0" value="${esc(c.bonus_min)}">`)}</div>
+      <div class="row2">${field('Filleul qui paie dans les (jours)', `<input name="fast_days" type="number" min="0" max="30" value="${esc(c.fast_days)}">`)}${field('reçoit en plus (jours)', `<input name="fast_bonus" type="number" min="0" max="60" value="${esc(c.fast_bonus)}">`)}</div>
+      <button class="btn block">Enregistrer les réglages</button></form></details>`; }
+function admRefWire(){ const f = $('#refCfgF'); if(!f) return;
+  f.onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements, p = {on:E.on.checked};
+    for(const k of ['pct1','pct2','months','min','bonus','bonus_min','fast_days','fast_bonus']){ const v = parseFloat(String(E[k].value).replace(',', '.')); if(isNaN(v) || v < 0) return toast('Valeur invalide'); p[k] = v; }
+    const {error} = await sb.rpc('admin_set_ref_cfg', {p}); if(error) return toast(rpcErr(error)); toast('Réglages enregistrés'); loadAdmRef(); }; }
+A.admrefreload = () => loadAdmRef();
+A.admrefok = async id => { const p = ((ADMR.d || {}).payouts || []).find(x => x.id === id); if(!p) return;
+  if(!await ask(p.method === 'mm' ? `Vous avez bien envoyé ${usd(p.amount)} sur ${p.op} ${p.num} ?` : `Ajouter des jours gratuits pour ${usd(p.amount)} ?`, p.method === 'mm' ? 'Oui, envoyé' : 'Ajouter', false)) return;
+  const {error} = await sb.rpc('admin_ref_payout_decide', {p_id:id, p_ok:true}); if(error) return toast(rpcErr(error)); toast('Retrait payé'); loadAdmRef();
+  if(p.phone && p.method === 'mm') sheet('Retrait payé', `<a class="btn wa block" href="${waLink(p.phone, `Bonjour ${p.name || ''} 👋\nVotre retrait ambassadeur de ${usd(p.amount)} est envoyé sur ${p.op} ${p.num}. Merci pour votre travail !\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Prévenir l'ambassadeur</a>`); };
+A.admrefko = async id => { if(!await ask('Refuser ce retrait ? L\'argent reste dans le solde de l\'ambassadeur.', 'Refuser')) return;
+  const {error} = await sb.rpc('admin_ref_payout_decide', {p_id:id, p_ok:false}); if(error) return toast(rpcErr(error)); loadAdmRef(); };
+A.admrefbonus = async uid => { const c = Object.assign({}, REF_DEF, (ADMR.d || {}).cfg || {});
+  if(!await ask(`Donner le bonus du mois (${usd(c.bonus)}) à cet ambassadeur ?`, 'Donner', false)) return;
+  const {error} = await sb.rpc('admin_ref_bonus', {p_user:uid, p_amount:num(c.bonus), p_note:'Bonus du meilleur ambassadeur du mois'}); if(error) return toast(rpcErr(error)); toast('Bonus donné'); loadAdmRef(); };
+A.admrefcancel = async id => { if(!await ask('Annuler ce gain ? (paiement faux ou annulé)', 'Annuler le gain')) return;
+  const {error} = await sb.rpc('admin_ref_cancel_earning', {p_id:id}); if(error) return toast(rpcErr(error)); loadAdmRef(); };
+A.admrefst = async v => { const [uid, st] = String(v).split('|'); const {error} = await sb.rpc('admin_ref_set_status', {p_user:uid, p_status:st, p_reset_mm:false}); if(error) return toast(rpcErr(error)); loadAdmRef(); };
+A.admrefmm = async uid => { if(!await ask('Effacer le numéro Mobile Money de cet ambassadeur ? Il pourra en mettre un nouveau.', 'Effacer')) return;
+  const {error} = await sb.rpc('admin_ref_set_status', {p_user:uid, p_status:null, p_reset_mm:true}); if(error) return toast(rpcErr(error)); loadAdmRef(); };
+// Branchements : Plus, accueil (pendant l'essai), espace BASILUA TECH
+(() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
+  const main = $('#main'); if(!main || !ONLINE.shop) return;
+  if(view === 'admin' && ONLINE.admin){ if(Date.now() - ADMR.t > 60000) loadAdmRef();
+    const pf = main.querySelector('#pricef'); if(pf && ADMR.d){ pf.closest('.card').insertAdjacentHTML('beforebegin', admRefBlock()); admRefWire(); } return; }
+  if(!refOwner()) return;
+  refAttachSaved().then(() => loadRef());
+  const paid = REF.d ? REF.d.paid : ONLINE.shop.status === 'actif', c = refCfg();
+  if(view === 'plus'){ main.insertAdjacentHTML('afterbegin', `<div class="list menu" style="margin-bottom:12px"><button class="it" data-a="amb"><div class="ic c-in">${ico('user')}</div><div class="m"><div class="t">Gagner de l'argent</div><div class="d" style="white-space:normal">${paid ? 'Votre lien d\'ambassadeur, vos filleuls et vos gains' : 'Programme Ambassadeur : ouvert dès votre abonnement payé'}</div></div>${ico('chev')}</button></div>`); }
+  if(view === 'home' && !paid && c.on && (() => { try{ return localStorage.getItem('stock_amb_later') !== today(); }catch(_){ return true; } })()){
+    main.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:12px;border:2px dashed var(--brand)"><b>Gagnez de l'argent avec Réseau &amp; Vente</b><p class="note" style="margin:4px 0 10px">Dès votre abonnement payé, vous devenez ambassadeur : invitez d'autres commerçants et gagnez <b>${c.pct1} %</b> de leur abonnement, puis <b>${c.pct2} %</b> à chaque renouvellement.</p><div class="btns"><button class="btn sm primary" data-a="amb">Voir comment</button><button class="btn sm" data-a="amblater">Plus tard</button></div></div>`); }
+}catch(e){ console.error(e); } }; })();
+A.amblater = () => { try{ localStorage.setItem('stock_amb_later', today()); }catch(_){} render(); };
 
 </script>
 </body>
