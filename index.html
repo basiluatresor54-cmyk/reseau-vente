@@ -5352,35 +5352,43 @@ let PRICE = (() => { try{ const v = parseFloat(localStorage.getItem('stock_onlin
 /* Plusieurs magasins : prix réduit par magasin (PLANS.multi, 2 $ par défaut) dès 2 magasins du même patron */
 const ownShops = () => (ONLINE.shops || []).filter(s => s.role === 'proprietaire');
 const multiP = () => +PLANS.multi || 2;
-const priceFor = n => n >= 2 ? `${fmt(multiP())} $ / mois par magasin (${n} magasins : ${fmt(multiP() * n)} $ / mois)` : fmt(PRICE) + ' $ / mois';
-const subPrice = () => ownShops().length >= 2 ? fmt(multiP()) + ' $ / mois par magasin' : fmt(PRICE) + ' $ / mois';
+/* Formules : Simple (2 gérants, 3 vendeurs, livreurs illimités) et Pro (équipe illimitée + fonctions Pro) */
+const isPro = s => !!s && s.plan === 'pro';
+const PLAN_TXT = {simple:'Simple', pro:'Pro'};
+const perMonth = (n, pro) => pro ? (n >= 2 ? (+PLANS.promulti || 2.8) : (+PLANS.pro || 3.9)) : (n >= 2 ? multiP() : +PRICE);
+const priceFor = (n, pro) => (n >= 2 ? `${fmt(perMonth(n, pro))} $ / mois par magasin (${n} magasins : ${fmt(perMonth(n, pro) * n)} $ / mois)` : fmt(perMonth(1, pro)) + ' $ / mois') + (pro ? ' · formule Pro' : '');
+let PAYPRO = null; // formule choisie dans « Activer mon abonnement » (null = celle de la boutique)
+const payPro = () => PAYPRO == null ? isPro(ONLINE.shop) : PAYPRO;
+const subPrice = () => { const n = ownShops().length, pro = isPro(ONLINE.shop); return fmt(perMonth(n, pro)) + ' $ / mois' + (n >= 2 ? ' par magasin' : '') + (pro ? ' (Pro)' : ''); };
 let PAYINFO = (() => { try{ return JSON.parse(localStorage.getItem('stock_online_pay') || '[]'); }catch(_){ return []; } })();
 /* ---------- Formules 1, 3, 6 et 12 mois (prix réglables dans l'espace BASILUA TECH) ---------- */
-let PLANS = (() => { try{ return Object.assign({m3:7.9, m6:14.9, m12:26, rate:2800, multi:2}, JSON.parse(localStorage.getItem('stock_online_plans') || '{}')); }catch(_){ return {m3:7.9, m6:14.9, m12:26, rate:2800, multi:2}; } })();
-async function loadPlans(){ try{ const r = await sb.rpc('get_plans'); if(r.data && typeof r.data === 'object'){ PLANS = Object.assign({m3:7.9, m6:14.9, m12:26, rate:2800, multi:2}, r.data); localStorage.setItem('stock_online_plans', JSON.stringify(PLANS)); } }catch(_){} }
+let PLANS = (() => { try{ return Object.assign({m3:7.9, m6:14.9, m12:26, rate:2800, multi:2, pro:3.9, promulti:2.8, pro_on:false}, JSON.parse(localStorage.getItem('stock_online_plans') || '{}')); }catch(_){ return {m3:7.9, m6:14.9, m12:26, rate:2800, multi:2, pro:3.9, promulti:2.8, pro_on:false}; } })();
+async function loadPlans(){ try{ const r = await sb.rpc('get_plans'); if(r.data && typeof r.data === 'object'){ PLANS = Object.assign({m3:7.9, m6:14.9, m12:26, rate:2800, multi:2, pro:3.9, promulti:2.8, pro_on:false}, r.data); localStorage.setItem('stock_online_plans', JSON.stringify(PLANS)); } }catch(_){} }
 const fcRound = v => v < 10000 ? Math.round(v / 100) * 100 : Math.round(v / 1000) * 1000;
 const subFc = usd => fcRound(usd * (+PLANS.rate || 2800)).toLocaleString('fr-FR') + ' FC';
-function planList(nShops){ const n = nShops == null ? ownShops().length : nShops;
-  if(n >= 2){ const per = multiP() * n; return [{k:'m1', n:1, t:'1 mois', p:per}, {k:'m3', n:3, t:'3 mois', p:per * 3, tag:'Le plus choisi'}, {k:'m6', n:6, t:'6 mois', p:per * 6}, {k:'m12', n:12, t:'1 an', p:per * 12}]; }
+function planList(nShops, pro){ const n = nShops == null ? ownShops().length : nShops; if(pro == null) pro = payPro();
+  if(n >= 2 || pro){ const per = r2c(perMonth(n, pro) * Math.max(1, n)); return [{k:'m1', n:1, t:'1 mois', p:per}, {k:'m3', n:3, t:'3 mois', p:per * 3, tag:'Le plus choisi'}, {k:'m6', n:6, t:'6 mois', p:per * 6}, {k:'m12', n:12, t:'1 an', p:per * 12}]; }
   const m = +PRICE || 0; return [
   {k:'m1', n:1, t:'1 mois', p:m},
   {k:'m3', n:3, t:'3 mois', p:+PLANS.m3, tag:'Le plus choisi'},
   {k:'m6', n:6, t:'6 mois', p:+PLANS.m6},
   {k:'m12', n:12, t:'1 an', p:+PLANS.m12, tag:(m > 0 && +PLANS.m12 > 0 && Math.round(12 - PLANS.m12 / m) >= 1) ? Math.round(12 - PLANS.m12 / m) + ' mois offerts' : ''}]; }
 const planTxt = pl => `${pl.t} · ${fmt(pl.p)} $ (≈ ${subFc(pl.p)})`;
-const planLines = n => planList(n).map(pl => `• ${planTxt(pl)}${pl.tag ? ' — ' + pl.tag : ''}`).join('\n');
+const r2c = v => Math.round(v * 100) / 100;
+const planLines = (n, pro) => planList(n, pro).map(pl => `• ${planTxt(pl)}${pl.tag ? ' — ' + pl.tag : ''}`).join('\n');
 async function loadPayInfo(){ try{ const r = await sb.rpc('get_pay_info'); if(Array.isArray(r.data)){ PAYINFO = r.data; localStorage.setItem('stock_online_pay', JSON.stringify(PAYINFO)); } }catch(_){} }
 const OPS = ['M-Pesa (Vodacom)', 'Airtel Money', 'Orange Money', 'Afrimoney', 'Autre'];
 let PAYPLAN = 'm3';
 function payMsg(){ const shop = ONLINE.shop || {}, pl = planList().find(x => x.k === PAYPLAN) || planList()[0], own = ownShops();
-  if(own.length >= 2) return `Bonjour BASILUA TECH 👋\nJe viens de payer mon abonnement Réseau & Vente — formule *${planTxt(pl)}* — pour mes ${own.length} magasins : ${own.map(x => '« ' + x.name + ' »').join(', ')} (${fmt(multiP())} $ par magasin et par mois).\nVoici la capture du paiement 👇`;
-  return `Bonjour BASILUA TECH 👋\nJe viens de payer mon abonnement Réseau & Vente — formule *${planTxt(pl)}* — pour la boutique « ${shop.name || ''} ».\nVoici la capture du paiement 👇`; }
+  if(own.length >= 2) return `Bonjour BASILUA TECH 👋\nJe viens de payer mon abonnement Réseau & Vente${payPro() ? ' *Pro*' : ''} — formule *${planTxt(pl)}* — pour mes ${own.length} magasins : ${own.map(x => '« ' + x.name + ' »').join(', ')} (${fmt(perMonth(own.length, payPro()))} $ par magasin et par mois).\nVoici la capture du paiement 👇`;
+  return `Bonjour BASILUA TECH 👋\nJe viens de payer mon abonnement Réseau & Vente${payPro() ? ' *Pro*' : ''} — formule *${planTxt(pl)}* — pour la boutique « ${shop.name || ''} ».\nVoici la capture du paiement 👇`; }
 function paySheet(){
   const shop = ONLINE.shop || {}, si = subInfo(shop) || {}, renew = si.cls === 'bad' || shop.status !== 'essai';
   const msg = payMsg();
   sheet('💳 ' + (renew ? 'Renouveler' : 'Activer') + ' mon abonnement', `
     <div class="note" style="text-align:center;margin-bottom:8px">Abonnement BASILUA TECH · Réseau &amp; Vente — toutes les fonctions, téléphone et ordinateur, vos livreurs inclus</div>
-    ${ownShops().length >= 2 ? `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand)"><b>Prix plusieurs magasins</b><p class="note" style="margin-top:4px">Vous avez ${ownShops().length} magasins : <b>${fmt(multiP())} $ par magasin et par mois</b>, soit <b>${fmt(multiP() * ownShops().length)} $ par mois pour tous</b>. Un seul paiement active tous vos magasins.</p></div>` : ''}
+    ${PLANS.pro_on || isPro(ONLINE.shop) ? proPick() : ''}
+    ${ownShops().length >= 2 ? `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand)"><b>Prix plusieurs magasins</b><p class="note" style="margin-top:4px">Vous avez ${ownShops().length} magasins : <b>${fmt(perMonth(ownShops().length, payPro()))} $ par magasin et par mois</b>, soit <b>${fmt(r2c(perMonth(ownShops().length, payPro()) * ownShops().length))} $ par mois pour tous</b>. Un seul paiement active tous vos magasins.</p></div>` : ''}
     <div class="sec"><h2>Choisissez votre formule</h2></div>
     <div id="plbox" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${planList().map(pl => `<button type="button" class="card plc${pl.k === PAYPLAN ? ' on' : ''}" data-a="pickplan" data-k="${pl.k}" style="position:relative;text-align:center;padding:12px 8px;cursor:pointer;border:2px solid ${pl.k === PAYPLAN ? 'var(--brand)' : 'transparent'};font:inherit;color:inherit">${pl.tag ? `<div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--brand);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px">${esc(pl.tag)}</div>` : ''}<div style="font-weight:700">${pl.t}</div><div class="num" style="font-size:22px;font-weight:800">${fmt(pl.p)} $</div><div class="note">≈ ${subFc(pl.p)}${pl.n > 1 && pl.p ? '<br>soit ' + fmt(Math.round(pl.p / pl.n * 100) / 100) + ' $ / mois' : ''}</div></button>`).join('')}</div>
     <div class="sec"><h2>1. Envoyez le paiement</h2></div>
@@ -5389,7 +5397,10 @@ function paySheet(){
     <p class="note" style="margin-bottom:10px">Faites une capture d'écran du message de confirmation du paiement, puis touchez le bouton : BASILUA TECH active votre abonnement, en général dans l'heure.</p>
     <a class="btn wa block" id="paywa" href="${supportLink(msg)}" target="_blank" rel="noopener">${ico('wa')} J'ai payé : envoyer la capture</a>`);
 }
-A.paysub = () => { loadPlans().then(() => { if(document.getElementById('plbox')) A.pickplan(null, {dataset:{k:PAYPLAN}}); }); paySheet(); };
+function proPick(){ const n = ownShops().length, P = payPro(), c = (pro, t, d) => `<button type="button" class="card plc${P === pro ? ' on' : ''}" data-a="pickpro" data-pro="${pro ? 1 : 0}" style="text-align:left;padding:12px;cursor:pointer;border:2px solid ${P === pro ? 'var(--brand)' : 'transparent'}"><b>${t}</b> · ${fmt(perMonth(n, pro))} $ / mois${n >= 2 ? ' par magasin' : ''}<div class="note" style="margin-top:4px">${d}</div></button>`;
+  return `<div class="sec"><h2>Votre formule</h2></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">${c(false, 'Simple', 'Livreurs illimités, 2 gérants, 3 vendeurs, toutes les fonctions de base')}${c(true, 'Pro', 'Équipe illimitée (gérants, vendeurs) et les fonctions Pro')}</div>`; }
+A.pickpro = (_, el) => { PAYPRO = el.dataset.pro === '1'; paySheet(); };
+A.paysub = () => { PAYPRO = null; loadPlans().then(() => { if(document.getElementById('plbox')) A.pickplan(null, {dataset:{k:PAYPLAN}}); }); paySheet(); };
 A.pickplan = (_, el) => { PAYPLAN = el.dataset.k; document.querySelectorAll('#plbox .plc').forEach(b => { const on = b.dataset.k === PAYPLAN; b.classList.toggle('on', on); b.style.borderColor = on ? 'var(--brand)' : 'transparent'; }); const a = document.getElementById('paywa'); if(a) a.href = supportLink(payMsg()); };
 A.copypay = (_, el) => copyText(el.dataset.v);
 async function loadPrice(){ try{ const r = await sb.rpc('get_price'); if(r.data != null){ PRICE = +r.data; localStorage.setItem('stock_online_price', String(PRICE)); } }catch(_){} }
@@ -5405,7 +5416,7 @@ function subBanner(compact){
   const btn = owner ? `<button class="btn sm primary" style="margin-top:8px" data-a="paysub">💳 ${renew ? 'Renouveler' : 'Activer'} mon abonnement · ${subPrice()}</button>` : '';
   let txt;
   if(si.cls === 'bad') txt = `⛔ ${esc(si.txt)}<br><b>Abonnement : ${subPrice()}</b>`;
-  else if(essai) txt = `🎁 <b>Essai gratuit</b> : ${d} jour${d>1?'s':''} restant${d>1?'s':''} (fin ${inDays(d) === "aujourd'hui" ? "aujourd'hui" : 'le ' + dAbs(shop.paid_until, 1)}).<br>Ensuite : <b>${subPrice()}</b>${ownShops().length >= 2 ? ' — vous avez ' + ownShops().length + ' magasins : ' + fmt(multiP() * ownShops().length) + ' $ / mois pour tous' : ', ou moins cher en 3, 6 ou 12 mois (dès ' + fmt(Math.round(PLANS.m12 / 12 * 100) / 100) + ' $ / mois)'}, payable par Mobile Money.`;
+  else if(essai) txt = `🎁 <b>Essai gratuit</b> : ${d} jour${d>1?'s':''} restant${d>1?'s':''} (fin ${inDays(d) === "aujourd'hui" ? "aujourd'hui" : 'le ' + dAbs(shop.paid_until, 1)}).<br>Ensuite : <b>${subPrice()}</b>${ownShops().length >= 2 ? ' — vous avez ' + ownShops().length + ' magasins : ' + fmt(r2c(perMonth(ownShops().length, isPro(ONLINE.shop)) * ownShops().length)) + ' $ / mois pour tous' : isPro(ONLINE.shop) ? '' : ', ou moins cher en 3, 6 ou 12 mois (dès ' + fmt(Math.round(PLANS.m12 / 12 * 100) / 100) + ' $ / mois)'}, payable par Mobile Money.`;
   else txt = `⚠️ <b>Votre abonnement se termine ${inDays(d)}</b> (${dAbs(shop.paid_until, 1)}).<br>Renouvelez pour ne pas passer en lecture seule : <b>${subPrice()}</b>.`;
   if(compact) return `<div class="subban ${si.cls} subsmall">${essai ? `🎁 Essai : ${d} j restant${d>1?'s':''} · ${subPrice()}` : si.cls === 'bad' ? '⛔ ' + esc(si.short) + ' · ' + subPrice() : `⚠️ Abonnement : fin ${inDays(d)}`}${owner ? ` · <button class="link" data-a="paysub">${renew ? 'Renouveler' : 'Activer'}</button>` : ''}</div>`;
   return `<div class="subban ${si.cls}">${txt}${ONLINE.offline ? '<br><b>Hors ligne</b>' : ''}${btn ? '<br>' + btn : ''}</div>`;
@@ -5507,7 +5518,7 @@ async function afterLogin(){
   loadPrice(); loadPayInfo(); loadPlans();
   try{
     const [shops, mem] = await Promise.all([
-      sb.from('shops').select('id,name,settings,status,paid_until'),
+      sb.from('shops').select('id,name,settings,status,paid_until,plan'),
       sb.from('members').select('shop_id,role,livreur_id,display_name').eq('user_id', session.user.id)
     ]);
     if(shops.error) throw shops.error; if(mem.error) throw mem.error;
@@ -5703,6 +5714,7 @@ render = function(){
         <div class="dl"><span>Téléphone</span><span>${esc(telPretty(meta.phone || ''))}</span></div>
         <div class="dl"><span>Boutique</span><span>${esc(ONLINE.shop.name)}</span></div>
         <div class="dl"><span>Rôle</span><span>${ROLE_TXT[ONLINE.role] || '—'}</span></div>
+        <div class="dl"><span>Formule</span><span>${PLAN_TXT[isPro(ONLINE.shop) ? 'pro' : 'simple']}</span></div>
         <div class="dl"><span>Abonnement</span><span>${si ? esc(si.short) : '—'}</span></div>
         ${si && si.cls !== 'ok' ? `<div class="dl"><span>Tarif</span><span><b>${subPrice()}</b></span></div>` : ''}
         <p class="note" style="margin:8px 0 12px">${si ? esc(si.txt) : ''}</p>
@@ -5777,7 +5789,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'f026a084a2';
+const APP_BUILD = '17168a1398';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5938,11 +5950,11 @@ async function livReconcile(force){
   return S.moves.length !== before;
 }
 async function refreshShop(){
-  const {data, error} = await sb.from('shops').select('id,name,settings,status,paid_until').eq('id', ONLINE.shop.id);
+  const {data, error} = await sb.from('shops').select('id,name,settings,status,paid_until,plan').eq('id', ONLINE.shop.id);
   if(error || !data || !data[0]) return false;
-  const row = data[0], before = cj([ONLINE.shop.status, ONLINE.shop.paid_until, ONLINE.shop.name]);
-  Object.assign(ONLINE.shop, {status:row.status, paid_until:row.paid_until});
-  let changed = before !== cj([row.status, row.paid_until, row.name]);
+  const row = data[0], before = cj([ONLINE.shop.status, ONLINE.shop.paid_until, ONLINE.shop.name, ONLINE.shop.plan || 'simple']);
+  Object.assign(ONLINE.shop, {status:row.status, paid_until:row.paid_until, plan:row.plan || 'simple'});
+  let changed = before !== cj([row.status, row.paid_until, row.name, row.plan || 'simple']);
   // réglages modifiés sur un autre appareil (et rien en attente ici)
   if(cj(row.settings || {}) !== ONLINE.pushed && cj(settingsForCloud()) === ONLINE.pushed){
     Object.assign(S.settings, row.settings || {}, {shop:row.name}); ONLINE.pushed = cj(row.settings || {}); ONLINE.shop.name = row.name; rawSave(); changed = true;
@@ -6154,12 +6166,20 @@ function roleInfoHTML(r, compact){
     ${r === 'livreur' ? `<div class="note" style="margin-top:6px">Avant d'inviter un livreur, créez sa fiche dans <b>Livreurs</b> (nom, ville, commission). <a href="guide-livreur.html" target="_blank" rel="noopener">📘 Guide du livreur</a></div>` : ''}
   </div>`;
 }
+// Formule et limites de l'équipe (Simple : 2 gérants, 3 vendeurs ; livreurs illimités)
+function teamPlanCard(){
+  if(isPro(ONLINE.shop)) return `<div class="card" style="margin-bottom:12px"><b>Formule Pro</b> · équipe illimitée (gérants, vendeurs, livreurs).</div>`;
+  const cnt = r => (TEAM.members || []).filter(m => m.role === r).length + (TEAM.invites || []).filter(i => i.role === r).length;
+  return `<div class="card" style="margin-bottom:12px"><b>Formule Simple</b><div class="dl"><span>Gérants</span><span class="num">${cnt('gerant')} / 2</span></div><div class="dl"><span>Vendeurs</span><span class="num">${cnt('vendeur')} / 3</span></div><div class="dl"><span>Livreurs</span><span>illimités</span></div>
+    ${PLANS.pro_on ? `<p class="note" style="margin-top:6px">Besoin de plus de gérants ou de vendeurs ? La formule <b>Pro</b> (${fmt(perMonth(Math.max(1, ownShops().length), true))} $ / mois${ownShops().length >= 2 ? ' par magasin' : ''}) donne une équipe illimitée.</p><button class="btn sm" style="margin-top:6px" data-a="paysub">Passer à Pro</button>` : ''}</div>`;
+}
 CUSTOM.equipe = () => {
   if(ONLINE.role !== 'proprietaire') return `<div class="card empty">Réservé au propriétaire.</div>`;
   if(TEAM.members === null) return `<div class="card empty">Chargement…</div>`;
   const R2 = {proprietaire:'Propriétaire', gerant:'Gérant', vendeur:'Vendeur', livreur:'Livreur'};
   return `<div class="card" style="margin-bottom:12px"><p class="note"><b>Gérant</b> : peut tout enregistrer (ventes, stock, dépenses).<br><b>Livreur</b> : voit seulement ses livraisons, son stock et sa commission, et marque « Livré ».</p>
     <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700;color:var(--brand)">👥 Les rôles en détail : qui voit quoi, qui fait quoi</summary><div style="margin-top:10px">${roleInfoHTML('vendeur')}${roleInfoHTML('gerant')}${roleInfoHTML('livreur')}${roleInfoHTML('proprietaire')}</div></details></div>
+  ${teamPlanCard()}
   ${TEAM.err ? `<div class="subban bad">${esc(TEAM.err)}</div>` : ''}
   <div class="sec"><h2>Membres</h2></div>
   <div class="list">${TEAM.members.map(m => `<div class="it"><div class="ic c-brand">${esc(initials(m.display_name || '?'))}</div><div class="m"><div class="t">${esc(m.display_name || 'Sans nom')}</div><div class="d">${R2[m.role]}${m.livreur_id ? ' · fiche ' + esc(lname(m.livreur_id)) : ''} · ${esc(telPretty(m.phone || ''))}</div></div>${m.role !== 'proprietaire' ? `<button class="btn sm ghost-bad" data-a="rmmember:${m.user_id}">Retirer</button>` : ''}</div>`).join('')}</div>
@@ -6518,6 +6538,8 @@ CUSTOM.admin = () => {
       <label class="f" style="margin:0 0 8px"><span>1 an</span><input name="m12" type="number" step="0.01" min="0" value="${esc(PLANS.m12)}"></label>
       <label class="f" style="margin:0 0 8px"><span>Taux FC / $</span><input name="rate" type="number" step="1" min="1" value="${esc(PLANS.rate)}"></label></div>
       <label class="f" style="margin:0 0 8px"><span>Plusieurs magasins : prix par magasin et par mois ($), dès 2 magasins</span><input name="multi" type="number" step="0.01" min="0" value="${esc(PLANS.multi ?? 2)}"></label>
+      <div class="row2"><label class="f" style="margin:0 0 8px"><span>Pro : 1 magasin ($ / mois)</span><input name="pro" type="number" step="0.01" min="0" value="${esc(PLANS.pro ?? 3.9)}"></label><label class="f" style="margin:0 0 8px"><span>Pro : par magasin dès 2 ($)</span><input name="promulti" type="number" step="0.01" min="0" value="${esc(PLANS.promulti ?? 2.8)}"></label></div>
+      <label class="f" style="display:flex;gap:10px;align-items:center;margin:0 0 10px"><input type="checkbox" name="pro_on" ${PLANS.pro_on ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Proposer la formule Pro aux clients (sinon : visible seulement pour les boutiques que vous passez en Pro)</span></label>
       <button class="btn block">Enregistrer les formules</button></form></div>
   <div class="card" style="margin-top:12px"><b>📱 Numéros pour payer l'abonnement</b> <span class="note">(affichés aux clients dans « Activer mon abonnement »)</span>
     <form id="payf" style="margin-top:10px">${[0,1,2].map(i => { const p = PAYINFO[i] || {}; return `<div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px"><label class="f" style="margin:0 0 8px"><select name="op${i}"><option value="">—</option>${OPS.map(o => `<option ${p.op === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label><label class="f" style="margin:0 0 8px"><input name="num${i}" value="${esc(p.num || '')}" placeholder="Numéro"></label><label class="f" style="margin:0 0 8px"><input name="name${i}" value="${esc(p.name || '')}" placeholder="Nom du compte"></label></div>`; }).join('')}<button class="btn block">Enregistrer les numéros</button></form></div>
@@ -6554,15 +6576,15 @@ function fuInfo(s){ const t = today(), start = String(s.created_at || '').slice(
   const rec = end && end < t ? 'exp' : left <= 1 ? 'j6' : day >= 3 ? 'j3' : 'j1';
   return {day, end, left, rec, active:!!s.last_activity}; }
 function fuMsg(s, st){
-  const f = fuInfo(s), who = s.owner_name ? ' ' + s.owner_name : '', shop = s.name || 'votre boutique', guide = new URL('guide.html', APP_LINK).href, nOwn = admOwnN(s);
+  const f = fuInfo(s), who = s.owner_name ? ' ' + s.owner_name : '', shop = s.name || 'votre boutique', guide = new URL('guide.html', APP_LINK).href, nOwn = admOwnN(s), pro = isPro(s);
   const pay = PAYINFO.length ? PAYINFO.map(p => `• ${p.op} : ${p.num}${p.name ? ' (' + p.name + ')' : ''}`).join('\n') : '• Mobile Money : +243 851 507 510';
   const endTxt = f.end ? (f.left <= 0 ? "aujourd'hui" : f.left === 1 ? 'demain' : 'le ' + dAbs(f.end, 1)) : 'bientôt';
   if(st === 'j1') return `Bonjour${who} 👋\nBienvenue sur *BASILUA TECH · Réseau & Vente* ! Votre boutique « ${shop} » est prête, avec votre essai gratuit${f.end ? ' jusqu\'au ' + dAbs(f.end, 1) : ''}.\n\nPour bien démarrer (10 minutes) :\n1️⃣ Ajoutez vos produits (prix d'achat et de vente)\n2️⃣ Ajoutez vos livreurs, puis invitez-les (Plus → Équipe)\n3️⃣ Enregistrez votre première commande : collez le message WhatsApp du client, tout se remplit\n\n📘 Guide pas à pas : ${guide}\n\nUne question ? Répondez simplement à ce message, je vous aide 🙏\nBASILUA TECH`;
   if(st === 'j3') return f.active
     ? `Bonjour${who} 👋\nComment se passe votre essai de *Réseau & Vente* pour « ${shop} » ? 😊\n\n3 astuces pour gagner du temps :\n• Invitez vos livreurs : ils marquent eux-mêmes « Livré » et vous voyez l'argent à recevoir\n• Le soir, ouvrez le « Point du soir » : qui doit verser combien\n• Fixez vos objectifs de ventes et de bénéfice sur l'accueil\n\nIl vous reste ${Math.max(0, f.left)} jour(s) d'essai. Besoin d'aide ? Répondez ici 🙏\nBASILUA TECH`
     : `Bonjour${who} 👋\nJe vois que vous n'avez pas encore enregistré de produit ni de vente sur « ${shop} ».\n\nVoulez-vous que je vous aide à démarrer ? En 10 minutes (appel ou WhatsApp), on met ensemble vos produits et vos livreurs, et vous voyez tout de suite votre stock et votre bénéfice.\n\nIl vous reste ${Math.max(0, f.left)} jour(s) d'essai gratuit.\n📘 Guide : ${guide}\n\nDites-moi quand vous êtes disponible 🙏\nBASILUA TECH`;
-  if(st === 'j6') return `Bonjour${who} 👋\nVotre essai gratuit de *Réseau & Vente* pour « ${shop} » se termine ${endTxt}.\n\nPour continuer sans rien perdre (produits, ventes, livreurs, clients) : *${priceFor(nOwn)}* seulement.\n\nOu payez en une fois${nOwn >= 2 ? ' pour tous vos magasins' : ', moins cher'} :\n${planLines(nOwn)}\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, j'active votre abonnement tout de suite ✅\nMerci pour votre confiance 🙏 — BASILUA TECH`;
-  return `Bonjour${who} 👋\nVotre essai de *Réseau & Vente* pour « ${shop} » est terminé.\n\nBonne nouvelle : toutes vos données sont gardées (produits, ventes, livreurs, clients). Pour reprendre là où vous vous êtes arrêté : *${priceFor(nOwn)}*.\n\nOu payez en une fois${nOwn >= 2 ? ' pour tous vos magasins' : ', moins cher'} :\n${planLines(nOwn)}\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, je réactive votre boutique tout de suite ✅\nBASILUA TECH`;
+  if(st === 'j6') return `Bonjour${who} 👋\nVotre essai gratuit de *Réseau & Vente* pour « ${shop} » se termine ${endTxt}.\n\nPour continuer sans rien perdre (produits, ventes, livreurs, clients) : *${priceFor(nOwn, pro)}* seulement.\n\nOu payez en une fois${nOwn >= 2 || pro ? ' pour tous vos magasins' : ', moins cher'} :\n${planLines(nOwn, pro)}\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, j'active votre abonnement tout de suite ✅\nMerci pour votre confiance 🙏 — BASILUA TECH`;
+  return `Bonjour${who} 👋\nVotre essai de *Réseau & Vente* pour « ${shop} » est terminé.\n\nBonne nouvelle : toutes vos données sont gardées (produits, ventes, livreurs, clients). Pour reprendre là où vous vous êtes arrêté : *${priceFor(nOwn, pro)}*.\n\nOu payez en une fois${nOwn >= 2 || pro ? ' pour tous vos magasins' : ', moins cher'} :\n${planLines(nOwn, pro)}\n\nPayer par Mobile Money :\n${pay}\n\nEnvoyez-moi la capture du paiement ici, je réactive votre boutique tout de suite ✅\nBASILUA TECH`;
 }
 function fuButtons(s){ const f = fuInfo(s);
   return `<div class="btns" style="flex-wrap:wrap;gap:6px;margin-top:8px">${FU_STEPS.map(([st, lb]) => { const sent = fuSent(s.id, st), on = st === f.rec;
@@ -6581,13 +6603,13 @@ function domTxt(dm){ if(!dm) return ''; const a = dm.acts && Object.values(dm.ac
 function admRows(list){
   if(!list){ const q = norm0(ADM.q); list = (ADM.shops || []).filter(s => !q || norm0([s.name, s.owner_name, s.owner_phone, s.country].join(' ')).includes(q)); }
   if(!list.length) return '<div class="empty">Aucun client</div>';
-  return list.map(s => { const i = shopState(s); return `<button class="it" data-a="admshop:${s.id}"><div class="ic c-brand">${esc(initials(s.name))}</div><div class="m"><div class="t">${esc(s.name)}</div><div class="d">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}${s.country ? ' · ' + esc(s.country) : ''}</div><div class="d">${s.last_activity ? 'Actif ' + fmtDate(String(s.last_activity).slice(0,10)) : 'Aucune donnée'} · ${s.nb_items} élément(s) · ${s.nb_members} membre(s)</div>${domTxt(s.dom)}</div><div class="r"><span class="pill ${i.cls === 'bad' ? 'p-annule' : s.status === 'essai' ? 'p-attente' : 'p-livre'}" style="${i.cls === 'bad' ? 'background:var(--bad-soft);color:var(--bad)' : ''}">${esc(i.short)}</span><div class="sm">${s.paid_until ? fmtDate(s.paid_until) : '∞'}</div></div></button>`; }).join('');
+  return list.map(s => { const i = shopState(s); return `<button class="it" data-a="admshop:${s.id}"><div class="ic c-brand">${esc(initials(s.name))}</div><div class="m"><div class="t">${esc(s.name)}</div><div class="d">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}${s.country ? ' · ' + esc(s.country) : ''}</div><div class="d">${s.last_activity ? 'Actif ' + fmtDate(String(s.last_activity).slice(0,10)) : 'Aucune donnée'} · ${s.nb_items} élément(s) · ${s.nb_members} membre(s)</div>${domTxt(s.dom)}</div><div class="r"><span class="pill ${i.cls === 'bad' ? 'p-annule' : s.status === 'essai' ? 'p-attente' : 'p-livre'}" style="${i.cls === 'bad' ? 'background:var(--bad-soft);color:var(--bad)' : ''}">${esc(i.short)}${isPro(s) ? ' · Pro' : ''}</span><div class="sm">${s.paid_until ? fmtDate(s.paid_until) : '∞'}</div></div></button>`; }).join('');
 }
 CUSTOM_AFTER.admin = () => {
-  if(ADM.shops === null && !ADM.loading){ loadAdmin(); loadPrice(); loadPlans().then(() => { const g = $('#plansf'); if(g){ const E = g.elements; E.m3.value = PLANS.m3; E.m6.value = PLANS.m6; E.m12.value = PLANS.m12; E.rate.value = PLANS.rate; if(E.multi) E.multi.value = PLANS.multi ?? 2; } }); }
+  if(ADM.shops === null && !ADM.loading){ loadAdmin(); loadPrice(); loadPlans().then(() => { const g = $('#plansf'); if(g){ const E = g.elements; E.m3.value = PLANS.m3; E.m6.value = PLANS.m6; E.m12.value = PLANS.m12; E.rate.value = PLANS.rate; if(E.multi) E.multi.value = PLANS.multi ?? 2; if(E.pro) E.pro.value = PLANS.pro ?? 3.9; if(E.promulti) E.promulti.value = PLANS.promulti ?? 2.8; if(E.pro_on) E.pro_on.checked = !!PLANS.pro_on; } }); }
   const pf = $('#pricef'); if(pf) pf.onsubmit = async e => { e.preventDefault(); const v = parseFloat(String(e.target.elements.p.value).replace(',', '.')); if(isNaN(v)) return toast('Prix invalide'); const {error} = await sb.rpc('admin_set_price', {p_price:v}); if(error) return toast(rpcErr(error)); PRICE = v; try{ localStorage.setItem('stock_online_price', String(v)); }catch(_){} toast('Prix enregistré : ' + subPrice()); };
   const plf = $('#plansf'); if(plf) plf.onsubmit = async e => { e.preventDefault(); const E = e.target.elements, num = n => parseFloat(String(E[n].value).replace(',', '.'));
-    const p = {m3:num('m3'), m6:num('m6'), m12:num('m12'), rate:num('rate'), multi:E.multi ? num('multi') : (+PLANS.multi || 2)}; if(Object.values(p).some(v => isNaN(v) || v < 0) || !(p.rate > 0)) return toast('Valeurs invalides');
+    const p = {m3:num('m3'), m6:num('m6'), m12:num('m12'), rate:num('rate'), multi:E.multi ? num('multi') : (+PLANS.multi || 2), pro:E.pro ? num('pro') : (+PLANS.pro || 3.9), promulti:E.promulti ? num('promulti') : (+PLANS.promulti || 2.8)}; if(Object.values(p).some(v => isNaN(v) || v < 0) || !(p.rate > 0)) return toast('Valeurs invalides'); if(E.pro_on) p.pro_on = E.pro_on.checked;
     const {error} = await sb.rpc('admin_set_plans', {p_plans:p}); if(error) return toast(rpcErr(error)); PLANS = Object.assign(PLANS, p); try{ localStorage.setItem('stock_online_plans', JSON.stringify(PLANS)); }catch(_){} toast('Formules enregistrées ✅'); };
   const pyf = $('#payf'); if(pyf) pyf.onsubmit = async e => { e.preventDefault(); const E = e.target.elements;
     const info = [0,1,2].map(i => ({op:E['op' + i].value, num:E['num' + i].value.trim(), name:E['name' + i].value.trim()})).filter(x => x.op && x.num);
@@ -6595,6 +6617,10 @@ CUSTOM_AFTER.admin = () => {
   const f = $('#trialf'); if(f) f.onsubmit = async e => { e.preventDefault(); const d = parseInt(e.target.elements.days.value, 10); const {error} = await sb.rpc('admin_set_trial_days', {p_days:d}); if(error) return toast(rpcErr(error)); ADM.trial = d; toast('Essai gratuit : ' + d + ' jours pour les nouvelles boutiques'); };
 };
 A.admreload = () => { ADM.shops = null; render(); };
+A.admplan = async (_, el) => { const s = (ADM.shops || []).find(x => x.id === el.dataset.id); if(!s || s.plan === el.dataset.plan) return;
+  if(!await ask(`Passer « ${s.name} » en formule ${PLAN_TXT[el.dataset.plan]} ?`, 'Confirmer', false)) return;
+  const {error} = await sb.rpc('admin_set_shop_plan', {p_shop:s.id, p_plan:el.dataset.plan}); if(error) return toast(rpcErr(error));
+  s.plan = el.dataset.plan; toast('Formule ' + PLAN_TXT[s.plan] + ' ✅'); A.admshop(s.id); };
 // Nombre de magasins du même patron (même numéro de téléphone)
 const admOwnN = s => s && s.owner_phone ? (ADM.shops || []).filter(x => x.owner_phone === s.owner_phone).length : 1;
 function addMonths(iso, n){ const d = new Date(iso + 'T12:00:00'); d.setMonth(d.getMonth() + n); return iso10(d); }
@@ -6609,7 +6635,9 @@ A.admshop = async (id) => {
       <div class="dl"><span>Inscrite le</span><span>${fmtDate(String(s.created_at).slice(0,10), true)}</span></div>
       <div class="dl"><span>Dernière activité</span><span>${s.last_activity ? fmtDate(String(s.last_activity).slice(0,10), true) : '—'}</span></div>
       <div class="dl strong"><span>Abonnement</span><span>${esc(i.short)} · ${s.paid_until ? 'jusqu\'au ' + fmtDate(s.paid_until, true) : 'sans limite'}</span></div>
-      ${admOwnN(s) >= 2 ? `<div class="dl"><span>Magasins de ce patron</span><span><b>${admOwnN(s)}</b> · ${esc(priceFor(admOwnN(s)))}</span></div>` : ''}
+      ${admOwnN(s) >= 2 ? `<div class="dl"><span>Magasins de ce patron</span><span><b>${admOwnN(s)}</b> · ${esc(priceFor(admOwnN(s), isPro(s)))}</span></div>` : ''}
+      <div class="dl strong"><span>Formule</span><span>${PLAN_TXT[isPro(s) ? 'pro' : 'simple']} · ${esc(priceFor(admOwnN(s), isPro(s)).replace(' · formule Pro', ''))}</span></div>
+      <div class="btns" style="margin-top:8px"><button class="btn sm ${isPro(s) ? '' : 'primary'}" data-a="admplan" data-id="${id}" data-plan="simple">Simple</button><button class="btn sm ${isPro(s) ? 'primary' : ''}" data-a="admplan" data-id="${id}" data-plan="pro">Pro</button></div>
     </div>
     ${s.status === 'essai' ? `<div class="sec" style="margin-top:4px"><h2>🎯 Messages de suivi d'essai</h2></div>${fuButtons(s)}<div style="height:8px"></div>` : ''}
     <div class="sec" style="margin-top:4px"><h2>Activer / prolonger</h2></div>
@@ -6625,7 +6653,7 @@ A.admshop = async (id) => {
     ${s.status === 'bloque' ? `<button class="btn ghost-bad block" style="margin-bottom:12px" data-a="admdel:${id}">🗑️ Supprimer définitivement cette boutique et son compte</button>` : `<p class="note" style="margin-bottom:12px">Pour supprimer une boutique (ex. compte mal créé), bloquez-la d'abord : le bouton « Supprimer » apparaîtra.</p>`}
     <form id="admf" class="card" style="margin-bottom:12px"><div class="row2">${field('Statut', `<select name="st"><option value="actif" ${s.status==='actif'?'selected':''}>Actif</option><option value="essai" ${s.status==='essai'?'selected':''}>Essai</option><option value="bloque" ${s.status==='bloque'?'selected':''}>Bloqué</option></select>`)}${field('Jusqu\'au (vide = illimité)', `<input name="d" type="date" value="${esc(s.paid_until || '')}">`)}</div><button class="btn block">Enregistrer cette date</button></form>
     <div class="stack">
-      <a class="btn wa block" href="${waLink('+' + (s.owner_phone || ''), `Bonjour ${s.owner_name || ''} 👋\nVotre abonnement Réseau & Vente pour « ${s.name} » ${i.cls === 'bad' ? 'est expiré' : 'se termine le ' + (s.paid_until ? fmtDate(s.paid_until, true) : '—')}.\nPour continuer à enregistrer vos ventes, renouvelez votre abonnement (${priceFor(admOwnN(s))}) par Mobile Money. Merci 🙏\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Rappel de paiement</a>
+      <a class="btn wa block" href="${waLink('+' + (s.owner_phone || ''), `Bonjour ${s.owner_name || ''} 👋\nVotre abonnement Réseau & Vente pour « ${s.name} » ${i.cls === 'bad' ? 'est expiré' : 'se termine le ' + (s.paid_until ? fmtDate(s.paid_until, true) : '—')}.\nPour continuer à enregistrer vos ventes, renouvelez votre abonnement (${priceFor(admOwnN(s), isPro(s))}) par Mobile Money. Merci 🙏\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Rappel de paiement</a>
     </div>
     <div class="sec"><h2>Comptes de cette boutique</h2></div>
     <div class="list" id="admmem"><div class="empty">Chargement…</div></div>`);
