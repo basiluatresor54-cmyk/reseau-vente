@@ -190,6 +190,10 @@ table.tb{width:100%;border-collapse:collapse;font-size:13.5px}
 .sectc:has(input:checked){border-color:var(--brand);background:var(--brand-soft)}
 .upick{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));margin-bottom:0}
 @media (max-width:360px){.sects{grid-template-columns:1fr}}
+.vgrp{display:block}.vgrp>summary{list-style:none;cursor:pointer}.vgrp>summary::-webkit-details-marker{display:none}
+.vgrp .vin{margin:0 0 6px 14px;border-left:3px solid var(--line);padding-left:6px}
+.vmini{border-collapse:collapse;margin-top:6px;font-size:12px}.vmini th,.vmini td{padding:2px 7px;border:1px solid var(--line);text-align:center}.vmini th{font-weight:600;color:var(--muted)}
+.vgrid input{width:64px;min-height:36px;padding:4px 6px;text-align:right}
 .rrow{display:grid;grid-template-columns:26px 1fr 92px;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
 .rrow .t{font-weight:700;font-size:14px;line-height:1.25}.rrow .d{font-size:12.5px;color:var(--muted);margin-top:2px}
 .rck input{width:20px;height:20px;margin:0;accent-color:var(--brand)}
@@ -487,7 +491,7 @@ const byName = (a,b) => a.name.localeCompare(b.name, 'fr');
 const isKit = p => !!(p && p.kit && p.kit.length);
 const sortMoves = arr => arr.sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.ts||0) - (a.ts||0));
 const pic = (p, cls) => p && p.photo ? `<div class="ic pic"><img src="${p.photo}" alt=""></div>` : `<div class="ic ${cls||'c-brand'}">${esc(initials(p ? p.name : '?'))}</div>`;
-const initials = s => (s||'?').trim().split(/\s+/).slice(0,2).map(w => w[0]).join('').toUpperCase();
+const initials = s => (s||'?').trim().split(/\s+/).filter(w => /^[\p{L}\p{N}]/u.test(w)).slice(0,2).map(w => w[0]).join('').toUpperCase() || '?';
 const priceTxt = p => num(p.old) > num(p.sell) ? `${amt(p.sell||0, p.cur)} <s class="note">${amt(p.old, p.cur)}</s> 🏷️` : amt(p.sell||0, p.cur);
 function hexRgb(h){ h = (h||'#0F766E').replace('#',''); if(h.length===3) h = h.split('').map(c=>c+c).join(''); const n = parseInt(h,16); return [n>>16&255, n>>8&255, n&255]; }
 function phoneNorm(p){
@@ -825,7 +829,7 @@ function vHome(){
   <button class="card daycard" data-a="jourset:${today()}"><span>Aujourd'hui : <b>${td.n}</b> vente(s) · <b class="num">${money(td.ca)}</b></span><span class="note">Rapport du jour ›</span></button>
   <button class="card daycard" data-a="cloture:${today()}"><span><b>Clôture de caisse</b> · compter l'argent du jour en $ et en ${esc(LC())}</span><span class="note">Ouvrir ›</span></button>` : '';
   const cv = S.settings.cover ? `<div class="cover" style="background-image:url('${S.settings.cover}')"><div class="cv"><div class="logo">${S.settings.logo ? `<img src="${S.settings.logo}" alt="">` : esc(initials(S.settings.shop))}</div><div><b>${esc(S.settings.shop || '')}</b><span>${greet()} · ${dAbs(today(), 1)}</span></div></div></div>` : '';
-  return `${cv}${gsBar()}${onbCard()}${installCard()}${impHomeCard()}${quick}${goalsCard()}${upcomingCard()}${alertsCard(st, low)}${periodChips(period,'per')}
+  return `${cv}${gsBar()}${onbCard()}${installCard()}${impHomeCard()}${quick}${perimCard(1)}${goalsCard()}${upcomingCard()}${alertsCard(st, low)}${periodChips(period,'per')}
   ${noBuy.length ? `<button class="warnbox" style="margin-top:10px" data-a="nav:stock">⚠️ ${noBuy.length} produit${noBuy.length>1?'s':''} sans prix d'achat : le bénéfice affiché est trop élevé. Touchez ici pour les compléter.</button>` : ''}
   <div class="kpis" style="margin-top:10px">
     <div class="kpi hero"><div class="l">Bénéfice net ${per}</div><div class="v num ${r.net<0?'neg':''}">${money(r.net)}</div><div class="s">sur ${money(r.ca)} de ventes livrées (${r.nv})</div></div>
@@ -863,6 +867,7 @@ function vStock(){
     ${stockAsOf ? `<p class="note" style="margin:8px 0 0">⏪ Vous voyez le stock tel qu'il était <b>à la fin du ${esc(dAbs(stockAsOf, 1))}</b>. <button class="link" data-a="sasof" data-d="">Revenir au stock actuel</button> · <button class="link" data-a="shday" data-d="${stockAsOf}">Mouvements de ce jour ›</button></p>` : ''}</div>
   <input class="search" type="search" placeholder="Rechercher un produit…" value="${esc(stockQ)}" oninput="stockQ=this.value;refreshList('stock')">
   ${stockAsOf || isVendeur() ? '' : (n => n ? `<button class="card daycard" data-a="rachat"><span><b>À racheter</b> · ${n} produit(s) presque fini(s)</span><span class="note">Préparer la commande ›</span></button>` : '')(rachatList().length)}
+  ${perimCard()}
   ${plansCard()}
   ${stockAsOf ? '' : forecastCard()}
   <div id="lst">${stockRows()}</div>
@@ -911,7 +916,7 @@ function stockRows(){
       <div class="kpi"><div class="l">Au dépôt</div><div class="v num">${fmt(dep)}</div><div class="s">pièces chez vous</div></div>
       <div class="kpi"><div class="l">Chez les livreurs</div><div class="v num">${fmt(hand)}</div><div class="s">pièces confiées</div></div>
       <div class="kpi"><div class="l">Déjà vendues</div><div class="v num">${fmt(soldAll)}</div><div class="s">pièces livrées (packs compris)</div></div></div>
-    <div class="list">${simple.length ? simple.map(row).join('') : '<div class="empty">Aucun résultat</div>'}</div>
+    <div class="list">${simple.length ? stockGroupRows(simple, row, st) : '<div class="empty">Aucun résultat</div>'}</div>
     ${kits.length ? `<div class="sec"><h2>Packs</h2><span class="note">le stock vient des produits</span></div><div class="list">${kits.map(krow).join('')}</div>` : ''}`;
 }
 
@@ -1193,7 +1198,7 @@ function vPlus(){
     ['reglages','c-x','set','Réglages',"Boutique, logo, couleur, taux du dollar, sauvegarde"]
   ];
   if(isVendeur()){ const keep = ['clients', 'credits']; for(let i = items.length - 1; i >= 0; i--) if(!keep.includes(items[i][0])) items.splice(i, 1); }
-  else if(impOn()) items.unshift(['import','c-send','box','📦 Commandes import',"Commandes sur demande (Chine…) : acomptes, étapes, reçus, marge"]);
+  else if(impOn()) items.unshift(['import','c-send','box','📦 Commandes import',"Commandes sur demande (" + impFrom() + "…) : acomptes, étapes, reçus, marge"]);
   if(!isStandalone()) items.push(['__install','c-brand','set',"📲 Installer l'application","iPhone, Android ou ordinateur : une icône comme une vraie application"]);
   return `${gsBar()}<div class="list menu">${items.map(([v,c,i,t,d]) => `<button class="it" data-a="${v === '__install' ? 'install' : 'nav:' + v}"><div class="ic ${c}">${ico(i)}</div><div class="m"><div class="t">${t}</div><div class="d" style="white-space:normal">${d}</div></div>${ico('chev')}</button>`).join('')}</div>
   <div class="sec cost"><h2>Raccourcis</h2></div>
@@ -1320,7 +1325,7 @@ function vReglages(){
     <div class="f"><span>Style (sur cet appareil)</span><div class="seg">${[['verre','✨ Verre (élégant)'],['simple','Simple (léger)']].map(([k,l]) => `<button type="button" class="${glassPref()===k?'on':''}" data-a="style:${k}">${l}</button>`).join('')}</div><small class="note">« Simple » est plus rapide sur les petits téléphones.</small></div>
     <div class="f"><span>Apparence (sur cet appareil)</span><div class="seg" id="segTheme">${Object.entries(THEMES).map(([k,l]) => `<button type="button" class="${themePref()===k?'on':''}" data-a="theme:${k}">${l}</button>`).join('')}</div><small class="note">Le mode sombre repose les yeux le soir. Automatique suit le réglage du téléphone.</small></div>
     ${actsField(st, 'Mes activités')}
-    <div class="row2">${field('Pays du fournisseur', `<input name="impFrom" value="${esc(st.impFrom || 'Chine')}">`)}${field('Taux du yuan', `<input name="cny" type="number" step="any" min="0" value="${st.cny || 7.1}">`, '¥ pour 1 $')}</div>
+    <div class="row3">${field('Pays du fournisseur', `<input name="impFrom" value="${esc(st.impFrom || 'Chine')}">`)}${field('Taux du yuan', `<input name="cny" type="number" step="any" min="0" value="${st.cny || 7.1}">`, '¥ pour 1 $')}${field('Taux du dirham', `<input name="aed" type="number" step="any" min="0" value="${st.aed || 3.67}">`, 'AED pour 1 $')}</div>
     ${countryFields(st)}
     ${feeCityHTML(st)}
     <div class="row2">
@@ -2322,7 +2327,7 @@ function quickSale(){
     ${field('Produit *', `<select name="pid" required><option value="">Choisir un produit…</option>${prods.map(p => `<option value="${p.id}">${esc(p.name)} — ${avail(st,'',p.id)} dispo</option>`).join('')}</select>`)}
     <div id="qunit"></div><div class="row2">${field('Quantité *', `<div class="qty"><button type="button" class="btn sm" id="qm">−</button><input name="qty" type="number" min="1" step="1" required value="1"><button type="button" class="btn sm" id="qp">+</button></div>`)}
       ${field('Prix unitaire', `<input name="price" type="number" step="any" min="0">`, '<span id="qcur"></span>')}</div>
-    <div class="tot" id="qtot"></div>
+    <div class="tot" id="qtot"></div><div id="qfefo"></div>
     <div class="f"><span>Payé en</span><div class="seg" id="segP">${PAYS.slice(1).map(x => `<button type="button" data-p="${x}">${x}</button>`).join('')}</div></div>
     <details style="margin-bottom:12px"><summary class="note"><b>Client (optionnel)</b> — pour le reçu et la relance</summary>
       <div class="row2" style="margin-top:8px">${field('Nom', `<input name="client" placeholder="Ex : Mme Nsimba">`)}${field('Téléphone (WhatsApp)', `<input name="phone" type="tel" placeholder="08… ou +243…">${phoneTools()}`)}</div></details>
@@ -2331,7 +2336,7 @@ function quickSale(){
   const U = unitCtl({pid:E.pid, qty:E.qty, price:E.price, box:$('#qunit'), onChange:() => upd()});
   const paintP = () => [...$('#segP').children].forEach(b => b.classList.toggle('on', b.dataset.p === pay)); paintP();
   $('#segP').onclick = e => { const b = e.target.closest('button'); if(b){ pay = b.dataset.p; paintP(); } };
-  const upd = () => { U.hint(); const p = prod(E.pid.value); if(!p){ $('#qtot').innerHTML = ''; return; }
+  const upd = () => { U.hint(); const p = prod(E.pid.value); perimHint($('#qfefo'), p); if(!p){ $('#qtot').innerHTML = ''; return; }
     const q = num(E.qty.value), pr = num(E.price.value), u = toUSD(q*pr, p.cur);
     $('#qcur').textContent = p.cur === 'FC' ? 'en ' + LC() : 'en dollars ($)';
     $('#qtot').innerHTML = `<span>Total à encaisser</span><b class="num">${amt(q*pr, p.cur)}</b><small>${p.cur==='FC' ? '≈ ' + money(u) + ' · ' : ''}<span class="cost">Bénéfice : ${money(u - U.base()*unitCostUSD(p))} · </span>Disponible : ${qv(p, avail(st,'',p.id))}${decUnit(p) ? ' ' + unitOf(p)[1] : ''}</small>`; };
@@ -2554,22 +2559,24 @@ function productForm(id, opt = {}){
       <button type="button" class="btn sm" id="addCity" style="margin-top:4px">+ Autre ville</button></details>
     ${p && isKit(p) ? '' : unitSection(p)}
     ${p && isKit(p) ? '' : `<div id="supw">${supField(p)}</div>`}
+    ${p && isKit(p) ? '' : perimField(p)}
+    ${p && isKit(p) ? '' : varSection(p)}
     ${field('Alerte stock bas', `<input name="alert" type="number" min="0" step="1" value="${p ? p.alert : 3}">`, 'Alerte quand il reste ce nombre de pièces ou moins')}
     <label class="f" style="display:flex;gap:10px;align-items:center"><input type="checkbox" name="show" ${p && p.hide ? '' : 'checked'} style="width:22px;height:22px;min-height:0"><span style="margin:0">Visible dans ma boutique en ligne</span></label>
-    ${p ? '' : `<div id="initw">${field('Stock de départ au dépôt', `<input name="init" type="number" min="0" step="1" placeholder="0">`, 'Dans l\'unité de base (pièces, kg…)')}</div>`}
+    ${p ? '' : `<div id="initw">${field('Stock de départ au dépôt', `<input name="init" type="number" min="0" step="1" placeholder="0">`, 'Dans l\'unité de base (pièces, kg…)')}${perimInit()}</div>`}
     <input type="checkbox" name="iskit" ${packMode ? 'checked' : ''} hidden>
     <button class="btn primary block" style="margin-top:6px">${p ? 'Enregistrer' : 'Ajouter le produit'}</button>
     ${p ? `<button type="button" class="btn ghost-bad block" style="margin-top:8px" data-a="delprod:${p.id}">Supprimer ce produit</button>` : ''}</form>`);
   const f = $('#pf'), E = f.elements;
   let photo = (p && p.photo) || '';
-  unitWire(f); supWire(f);
+  unitWire(f); supWire(f); perimWire(f); varWire(f, p);
   $('#pfPhoto').onchange = e => { const file = e.target.files[0]; if(!file) return; smallImage(file, 240, .72).then(u => { photo = u; $('#pfPrev').innerHTML = `<img src="${u}" alt="">`; $('#pfNoPhoto').hidden = false; }).catch(() => toast('Image illisible')); };
   $('#pfNoPhoto').onclick = () => { photo = ''; $('#pfPrev').textContent = '📷'; $('#pfNoPhoto').hidden = true; };
   // Pack / promo : composition, prix séparé, économie, coût et bénéfice
   let autoOld = !(p && num(p.old)), autoName = !p, autoComm = !(p && (num(p.comm) || (p.commCity && Object.keys(p.commCity).length)));
   const buyBox = E.buy.closest('.row2'), commBox = E.commMode.closest('.row2'), commHome = commBox.nextSibling;
   $('#kitw').insertAdjacentHTML('beforeend', '<div id="kitComm" style="margin-top:10px"><b style="font-size:14px">🛵 Commission du livreur pour cette promo</b></div>');
-  const setKind = pack => { E.iskit.checked = pack; if($('#usec')) $('#usec').hidden = pack; if($('#supw')) $('#supw').hidden = pack; $('#kitw').hidden = !pack; if($('#initw')) $('#initw').hidden = pack; E.buy.required = !pack; E.name.required = !pack; if(buyBox) buyBox.hidden = pack;
+  const setKind = pack => { E.iskit.checked = pack; if($('#usec')) $('#usec').hidden = pack; if($('#supw')) $('#supw').hidden = pack; if($('#perimw')) $('#perimw').hidden = pack; if($('#varw')) $('#varw').hidden = pack; $('#kitw').hidden = !pack; if($('#initw')) $('#initw').hidden = pack; E.buy.required = !pack; E.name.required = !pack; if(buyBox) buyBox.hidden = pack;
     if(pack) $('#kitComm').appendChild(commBox); else commHome.parentNode.insertBefore(commBox, commHome);
     $('#sht').textContent = p ? $('#sht').textContent : (pack ? '🎁 Nouveau pack / promo' : 'Nouveau produit'); E.name.placeholder = pack ? 'Ex : Gamme complète Golden Hair' : 'Ex : Sac de poitrine'; kitSum(); };
   const kitSum = () => { if(!E.iskit.checked){ $('#kitSum').innerHTML = ''; return; }
@@ -2612,12 +2619,18 @@ function productForm(id, opt = {}){
     const data = {name, details:E.details.value.trim(), usage:E.usage ? E.usage.value.trim() : (p && p.usage) || '', cat:E.cat.value.trim(), cur:E.cur.value, sell:num(E.sell.value), old:num(E.old.value) > num(E.sell.value) ? num(E.old.value) : 0, buy:num(E.buy.value), comm:num(E.comm.value), commMode:E.commMode.value, commCity:readCityComm(f), alert:Math.max(0, Math.round(num(E.alert.value))), kit:kitv, photo, hide:!E.show.checked};
     const ux = readUnits(f, p, !!kitv); if(!ux) return; Object.assign(data, ux);
     if(!kitv){ const fid = readSup(f); if(fid === null) return; if(fid !== undefined) data.fid = fid || undefined; }
-    if(p){ Object.assign(p, data); toast('Produit modifié'); }
+    if(!kitv && E.perim) data.perim = E.perim.checked || undefined;
+    if(p){ Object.assign(p, data); const nv = E.varAll && E.varAll.checked ? varShare(p, data) : 0; toast(nv ? 'Produit modifié, ainsi que ' + nv + ' autre(s) taille(s) / couleur(s)' : 'Produit modifié'); }
     else {
+      const vs = kitv ? null : readVariants(f); if(vs === false) return;
+      const lx = !kitv && data.perim && E.iexp ? Object.assign({}, E.ilot.value.trim() ? {lot:E.ilot.value.trim()} : {}, E.iexp.value ? {exp:E.iexp.value} : {}) : {};
+      if(vs && vs.length){ const n = makeVariants(name, data, vs, uid(), 0, lx); toast(n + ' fiche(s) créée(s) : une par taille et couleur'); }
+      else {
       const np = Object.assign({id:uid()}, data); S.products.push(np);
       const init = kitv ? 0 : qr(np, E.init?.value);
-      if(init > 0) S.moves.push({id:uid(), ts:Date.now(), type:'entree', pid:np.id, qty:init, cost:np.buy, date:today(), note:'Stock de départ'});
+      if(init > 0) S.moves.push(Object.assign({id:uid(), ts:Date.now(), type:'entree', pid:np.id, qty:init, cost:np.buy, date:today(), note:'Stock de départ'}, lx));
       toast('Produit ajouté');
+      }
     }
     S.settings.setup = true; save(); closeSheet(); render();
   };
@@ -2646,6 +2659,7 @@ function prodSheet(id){
     ${kit ? `<div class="warnbox" style="background:var(--vio-soft);color:var(--vio)">Pack : ${p.kit.map(c => c.q + ' × ' + esc(pname(c.pid))).join(' + ')}. Les quantités ci-dessous = nombre de packs possibles.</div>` : ''}
     <div class="kv"><div><b class="num">${kit ? avail(st,'',id) : qAt(st,'',id)}</b><span>Au dépôt</span></div><div><b class="num">${kit ? locs.reduce((s,x)=>s+x[1],0) : inHands(st,id)}</b><span>Chez livreurs</span></div><div><b class="num">${kit ? '—' : totalOf(st,id)}</b><span>Total</span></div></div>
     ${locs.length ? `<div class="card" style="margin-bottom:12px">${locs.map(([l,q]) => `<div class="dl"><span>${esc(l.name)} · ${esc(l.city||'')}</span><span class="num">${q}</span></div>`).join('')}</div>` : ''}
+    ${varSheetCard(p, st)}${perimSheetCard(p, st)}
     <div class="card" style="margin-bottom:12px">
       <div class="dl"><span>Prix de vente</span><span class="num">${priceTxt(p)}${p.cur==='FC' ? ' ≈ ' + money(su) : ''}</span></div>
       <div class="dl cost"><span>Prix d'achat</span><span class="num">${num(p.buy)>0 ? amt(p.buy, p.cur) : (kit && cu ? '≈ ' + money(cu) + ' (produits)' : '<span class="red">à compléter</span>')}</span></div>
@@ -2689,8 +2703,8 @@ function moveForm(type, opt = {}){
   if(type === 'perte') h += field('Où se trouve le produit ?', `<select name="loc">${livOpts(true, 'Au dépôt')}</select>`);
   if(type === 'vente') h += field('Livré par', `<select name="loc">${livOpts(true, 'Vente directe (depuis le dépôt)')}</select>`);
   h += field('Produit *', `<select name="pid" required>${pid0 ? '' : '<option value="">Choisir un produit…</option>'}${prods.map(p => `<option value="${p.id}" ${p.id===pid0?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`);
-  h += `<div id="avail"></div><div id="uctl"></div><div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : 1}">`)}`;
-  if(type === 'entree') h += field('Coût unitaire', `<input name="cost" type="number" step="any" min="0" value="${m ? (m.cost ?? '') : ''}">`, '<span id="curl"></span>') + `</div>`;
+  h += `<div id="avail"></div><div id="fefo"></div><div id="uctl"></div><div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : 1}">`)}`;
+  if(type === 'entree') h += field('Coût unitaire', `<input name="cost" type="number" step="any" min="0" value="${m ? (m.cost ?? '') : ''}">`, '<span id="curl"></span>') + `</div>` + perimMoveFields(m);
   else if(type === 'perte') h += field('Motif', `<select name="motif">${MOTIFS.map(x => `<option ${m?.motif===x?'selected':''}>${x}</option>`).join('')}</select>`) + `</div>`;
   else if(type === 'vente') h += field('Prix unitaire', `<input name="price" type="number" step="any" min="0" value="${m ? m.price : ''}">`, '<span id="curl"></span>') + `</div><div class="tot" id="tot"></div>
       ${sibTxt}<div id="xlines"></div><button type="button" class="btn block" id="xadd" style="margin:0 0 14px">➕ Ajouter un autre produit à cette commande</button>
@@ -2722,7 +2736,7 @@ function moveForm(type, opt = {}){
   var xl = [];
   const srcLoc = () => type === 'entree' ? null : type === 'envoi' ? '' : (E.loc ? E.loc.value : '');
   const upd = () => {
-    U.hint(); const p = prod(E.pid.value), loc = srcLoc();
+    U.hint(); const p = prod(E.pid.value), loc = srcLoc(); perimUpd(p, type);
     if(p && loc !== null && type === 'vente'){
       const have = avail(stEx, loc, p.id), pend = S.moves.filter(x => x.type === 'vente' && (!m || x.id !== m.id) && (x.liv || '') === loc && x.pid === p.id && (x.status === 'attente' || x.status === 'encours')).reduce((t, x) => t + x.qty, 0);
       const free = r3(have - pend), want = U.base() || 0;
@@ -2810,7 +2824,7 @@ function moveForm(type, opt = {}){
     const rec = Object.assign({}, m || {id:uid(), ts:Date.now(), type});
     rec.pid = p.id; rec.qty = qty; delete rec.pk; delete rec.pn; delete rec.pq; Object.assign(rec, U.tag()); rec.date = E.date.value || today(); rec.note = E.note.value.trim();
     if(type === 'envoi' || type === 'retour'){ rec.liv = E.loc.value; if(!rec.liv){ toast('Choisissez un livreur'); return; } }
-    if(type === 'entree'){ rec.cost = U.per(E.cost.value); }
+    if(type === 'entree'){ rec.cost = U.per(E.cost.value); if(p.perim && E.exp){ const lt = E.lot.value.trim(); if(lt) rec.lot = lt; else delete rec.lot; if(E.exp.value) rec.exp = E.exp.value; else delete rec.exp; } }
     if(type === 'perte'){ rec.loc = E.loc.value; rec.motif = E.motif.value; if(!m || m.pid !== p.id) rec.costU = unitCostUSD(p); }
     if(type === 'vente'){
       rec.liv = E.loc.value; rec.price = U.per(E.price.value); rec.cur = p.cur;
@@ -3504,15 +3518,15 @@ const STEP_SHORT = {acompte:'💰 Acompte', commande:'🛒 Commandé', entrepot:
 const PLATS = ['Taobao','1688','Alibaba','Pinduoduo','AliExpress','Temu','Shein','WeChat / direct','Autre'];
 const transList = () => S.moves.filter(m => m.type === 'trans').sort((a,b) => (a.name||'').localeCompare(b.name||''));
 const transOf = id => S.moves.find(m => m.id === id && m.type === 'trans');
-const stepOf = k => STEPS.find(s => s[0] === k) || ['annule','Annulée','✖️'];
+const stepOf = k => { syncImpLabels(); return STEPS.find(s => s[0] === k) || ['annule','Annulée','✖️']; };
 const impOn = () => has('imp');
 const impFrom = () => S.settings.impFrom || 'Chine';
 const cny = () => num(S.settings.cny) || 7.1;
-const CURS = () => [['$','$'],['FC',LC()],['¥','¥ (yuan)']];
+const CURS = () => [['$','$'],['FC',LC()],['¥','¥ (yuan)'],['AED','AED (dirham)']];
 const curOpts = (sel, list) => (list || CURS()).map(([v,l]) => `<option value="${v}" ${v===sel?'selected':''}>${esc(l)}</option>`).join('');
-const usdOf = (a, cur) => cur === '¥' ? num(a) / cny() : cur === 'FC' ? num(a) / rate() : num(a);
-const fromUSD = (u, cur) => cur === '¥' ? u * cny() : cur === 'FC' ? u * rate() : u;
-const amtX = (a, cur) => cur === '¥' ? fmt(a) + ' ¥' : amt(a, cur);
+const usdOf = (a, cur) => cur === '¥' ? num(a) / cny() : cur === 'AED' ? num(a) / aed() : cur === 'FC' ? num(a) / rate() : num(a);
+const fromUSD = (u, cur) => cur === '¥' ? u * cny() : cur === 'AED' ? u * aed() : cur === 'FC' ? u * rate() : u;
+const amtX = (a, cur) => cur === '¥' ? fmt(a) + ' ¥' : cur === 'AED' ? fmt(a) + ' AED' : amt(a, cur);
 const cmds = () => S.moves.filter(m => m.type === 'cmd');
 const fourns = () => S.moves.filter(m => m.type === 'fourn').sort((a,b) => (a.name||'').localeCompare(b.name||''));
 const fname = id => (S.moves.find(m => m.id === id && m.type === 'fourn') || {}).name || '';
@@ -3552,6 +3566,7 @@ function cmdRow(c){
     <div class="r"><div class="big num">${amtX(k.total, k.cur)}</div><div class="sm">${k.reste > 0 ? 'reste ' + amtX(k.reste, k.cur) : (c.step === 'annule' ? 'annulée' : 'soldé ✅')}</div></div></button>`;
 }
 function vImport(){
+  syncImpLabels();
   if(!impOn()) return `<div class="card empty"><b>Commandes import</b>Activez « J'importe sur commande » dans Réglages.<div style="margin-top:12px"><button class="btn primary" data-a="nav:reglages">Ouvrir les réglages</button></div></div>`;
   const s = impStats(), L = cmds(), q = impQ.trim().toLowerCase();
   const tabs = [['cours','En cours'], ...Object.entries(STEP_SHORT), ['livre','✅ Livrées'], ['annule','Annulées']];
@@ -3583,6 +3598,7 @@ function cmdForm(id){
     <div class="row2">${field('Téléphone', `<input name="phone" type="tel" value="${esc(c?.phone)}" placeholder="+243 …">`)}${field('Adresse / ville', `<input name="addr" value="${esc(c?.addr)}">`)}</div>
     <div class="sec" style="margin:10px 0 6px"><h2>Produit commandé</h2></div>
     ${field('Produit *', `<input name="title" required maxlength="80" value="${esc(c?.title)}" placeholder="Ex : iPhone 13 Pro 256 Go bleu">`)}
+    ${field('Pays d\'origine', `<input name="orig" list="origDL" maxlength="40" value="${esc(c?.orig || impFrom())}">`, 'Chine, Dubaï, Turquie…')}<datalist id="origDL">${ORIGS.map(x => `<option value="${x}">`).join('')}</datalist>
     <div class="row3">${field('Quantité', `<input name="qty" type="number" min="1" step="1" value="${c ? c.qty : 1}">`)}${field('Prix de vente (pièce) *', `<input name="price" type="number" step="any" min="0" required value="${c ? c.price : ''}">`)}${field('Devise', `<select name="cur">${curOpts(c?.cur || '$', [['$','$'],['FC',LC()]])}</select>`)}</div>
     <div class="f"><span>Photo (optionnel)</span><div style="display:flex;gap:10px;align-items:center"><div id="cmdPh" class="ic pic" style="width:54px;height:54px">${c?.photo ? `<img src="${c.photo}" alt="">` : ''}</div><label class="btn sm" style="cursor:pointer">Choisir une photo<input type="file" accept="image/*" id="cmdPhIn" hidden></label></div></div>
     ${c ? '' : `<div class="sec" style="margin:10px 0 6px"><h2>Acompte reçu aujourd'hui</h2></div>
@@ -3629,7 +3645,7 @@ function cmdForm(id){
     if(tid === '__new'){ const n = E.tnew.value.trim(); if(n){ const T = {id:uid(), type:'trans', date:today(), ts:Date.now(), name:n}; S.moves.push(T); tid = T.id; } else tid = ''; }
     const base = {client:E.client.value.trim(), phone:E.phone.value.trim(), addr:E.addr.value.trim(), title:E.title.value.trim(), qty:Math.max(1, Math.round(num(E.qty.value) || 1)), price:num(E.price.value), cur:E.cur.value, photo,
       fid, supAmt:num(E.supAmt.value), supCur:E.supCur.value, how:E.how.value, eta:E.eta.value, shipAmt:num(E.shipAmt.value), shipCur:E.shipCur.value, dutyAmt:num(E.dutyAmt.value), dutyCur:E.dutyCur.value, extraAmt:num(E.extraAmt.value), extraCur:E.extraCur.value,
-      track:E.track.value.trim(), lot:E.lot.value.trim(), note:E.note.value.trim(), plat:E.plat.value, porder:E.porder.value.trim(), plink:E.plink.value.trim(), tid, tcode:E.tcode.value.trim(), kg:num(E.kg.value)};
+      track:E.track.value.trim(), lot:E.lot.value.trim(), note:E.note.value.trim(), plat:E.plat.value, porder:E.porder.value.trim(), plink:E.plink.value.trim(), tid, tcode:E.tcode.value.trim(), kg:num(E.kg.value), orig:(E.orig ? E.orig.value.trim() : '') || impFrom()};
     if(c){ Object.assign(c, base); save(); closeSheet(); render(); cmdSheet(c.id); toast('Commande modifiée'); return; }
     const rec = Object.assign({id:uid(), type:'cmd', date:today(), ts:Date.now(), step:'acompte', steps:{acompte:today()}, pays:[]}, base);
     if(num(E.depAmt.value) > 0) rec.pays.push({id:uid(), date:today(), amt:num(E.depAmt.value), cur:E.depCur.value, pay:E.depPay.value});
@@ -3646,7 +3662,7 @@ function cmdMsg(c, step){
   const T = {
     acompte: `${hi}\n\nNous avons bien reçu votre paiement ✅\n${ref}\n${money3}${eta}\n\nNous vous informerons à chaque étape.`,
     commande: `${hi}\n\n🛒 Votre commande a été passée auprès de notre fournisseur.\n${ref}${eta}\n\nNous vous prévenons dès l'expédition.`,
-    entrepot: `${hi}\n\n🏭 Votre commande est bien arrivée à notre entrepôt en Chine. Elle partira avec le prochain envoi.\n${ref}${eta}`,
+    entrepot: `${hi}\n\n🏭 Votre commande est bien arrivée à notre entrepôt ${enPays(cOrig(c))}. Elle partira avec le prochain envoi.\n${ref}${eta}`,
     expedie: `${hi}\n\n${how} Bonne nouvelle : votre commande est en route !\n${ref}${eta}${c.track ? '\n🔎 N° de suivi : ' + c.track : ''}`,
     arrive: `${hi}\n\n📦 Votre commande est arrivée et elle est prête !\n${ref}\n${money3}\n\nRépondez-nous pour la livraison ou le retrait.`,
     livre: `${hi}\n\n✅ Merci pour votre confiance ! Votre commande vous a été remise.\n${ref}\n${money3}`,
@@ -3657,7 +3673,7 @@ function cmdMsg(c, step){
 function cmdSheet(id){
   const c = cmds().find(x => x.id === id); if(!c) return;
   const k = cmdCalc(c), i = STEPK.indexOf(c.step), next = i >= 0 && i < STEPK.length - 1 ? STEPS[i + 1] : null;
-  const tl = STEPS.map((s, j) => `<div style="display:flex;gap:10px;align-items:center;padding:5px 0;opacity:${j <= i ? 1 : .45}"><span class="istep" style="${j <= i ? '' : 'background:var(--soft);color:var(--muted)'}">${j <= i ? '✓' : j + 1}</span><span style="flex:1">${s[2]} ${esc(s[1])}</span><span class="note">${(c.steps||{})[s[0]] ? dAbs(c.steps[s[0]]) : ''}</span></div>`).join('');
+  const tl = STEPS.map((s, j) => `<div style="display:flex;gap:10px;align-items:center;padding:5px 0;opacity:${j <= i ? 1 : .45}"><span class="istep" style="${j <= i ? '' : 'background:var(--soft);color:var(--muted)'}">${j <= i ? '✓' : j + 1}</span><span style="flex:1">${s[2]} ${esc(s[0] === 'entrepot' ? 'Chez le transitaire (' + cOrig(c) + ')' : s[1])}</span><span class="note">${(c.steps||{})[s[0]] ? dAbs(c.steps[s[0]]) : ''}</span></div>`).join('');
   const pays = (c.pays || []).map(p => `<div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:4px 0"><span>${dAbs(p.date)}${p.pay ? ' · ' + esc(p.pay) : ''}</span><span><b class="num">${amtX(p.amt, p.cur)}</b> <button class="btn sm" style="padding:2px 8px" data-a="paydel:${c.id}|${p.id}" aria-label="Supprimer">✕</button></span></div>`).join('') || '<p class="note">Aucun paiement enregistré.</p>';
   const F = c.fid ? S.moves.find(m => m.id === c.fid) : null;
   const h = `<div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">${c.photo ? `<div class="ic pic" style="width:64px;height:64px"><img src="${c.photo}" alt=""></div>` : ''}<div><b style="font-size:17px">${esc(c.title)}${num(c.qty) > 1 ? ' × ' + c.qty : ''}</b><div class="note">${cmdNo(c)} · ${esc(c.client)}${c.phone ? ' · ' + esc(c.phone) : ''}</div><div>${stepBadge(c)}</div></div></div>
@@ -3704,11 +3720,11 @@ function fournSheet(){
 }
 function transSheet(){
   const L = transList(), C = cmds();
-  sheet('🔒 Transitaires', `<p class="note" style="margin-bottom:10px">Vos transitaires (Zando, Gombe…) avec leur entrepôt en Chine. Visible seulement par vous.</p>
+  sheet('🔒 Transitaires', `<p class="note" style="margin-bottom:10px">Vos transitaires (Zando, Gombe…) avec leur entrepôt ${enPays(impFrom())}. Visible seulement par vous.</p>
     <div class="list">${L.length ? L.map(t => { const cs = C.filter(c => c.tid === t.id), act = cs.filter(cmdActive).length;
       return `<div class="it" style="cursor:default;align-items:flex-start"><div class="ic c-send">${esc(initials(t.name))}</div><div class="m"><div class="t">${esc(t.name)}</div>
         <div class="d" style="white-space:normal;line-height:1.5">${t.phone ? '📞 ' + esc(t.phone) + '<br>' : ''}${t.addrKin ? '📍 ' + esc(t.addrKin) + '<br>' : ''}${t.addrCn ? '🇨🇳 ' + esc(t.addrCn) + '<br>' : ''}${t.code ? 'Votre code : <b>' + esc(t.code) + '</b><br>' : ''}${num(t.rAir) ? '✈️ ' + money(num(t.rAir)) + '/kg ' : ''}${num(t.rSea) ? '🚢 ' + money(num(t.rSea)) + '/m³ ' : ''}${t.delay ? '· ⏱ ' + esc(t.delay) : ''}<br>${act} commande(s) en cours · ${cs.length} au total</div>
-        <div class="btns" style="margin-top:6px">${t.addrCn ? `<button class="btn sm" data-a="transcopy:${t.id}">📋 Copier l'adresse Chine</button>` : ''}<button class="btn sm" data-a="transedit:${t.id}">Modifier</button><button class="btn sm" data-a="transdel:${t.id}">✕</button></div></div></div>`; }).join('') : '<div class="empty">Aucun transitaire.</div>'}</div>
+        <div class="btns" style="margin-top:6px">${t.addrCn ? `<button class="btn sm" data-a="transcopy:${t.id}">📋 Copier l'adresse de l'entrepôt</button>` : ''}<button class="btn sm" data-a="transedit:${t.id}">Modifier</button><button class="btn sm" data-a="transdel:${t.id}">✕</button></div></div></div>`; }).join('') : '<div class="empty">Aucun transitaire.</div>'}</div>
     <button class="btn primary block" style="margin-top:12px" data-a="transedit:">+ Ajouter un transitaire</button>`);
 }
 function transForm(id){
@@ -3717,7 +3733,7 @@ function transForm(id){
     ${field('Nom *', `<input name="name" required maxlength="60" value="${esc(t?.name)}" placeholder="Ex : Trans Express Zando">`)}
     ${field('Téléphone / WhatsApp', `<input name="phone" value="${esc(t?.phone)}">`)}
     ${field('Adresse à Kinshasa (retrait des colis)', `<input name="addrKin" value="${esc(t?.addrKin)}" placeholder="Ex : Grand marché, Zando, galerie …">`)}
-    ${field('Adresse de l\'entrepôt en Chine', `<textarea name="addrCn" rows="3" placeholder="Adresse à mettre sur Taobao / 1688 (nom, téléphone, adresse en chinois…)">${esc(t?.addrCn)}</textarea>`)}
+    ${field('Adresse de l\'entrepôt ' + enPays(impFrom()), `<textarea name="addrCn" rows="3" placeholder="Adresse à mettre sur Taobao / 1688 (nom, téléphone, adresse en chinois…)">${esc(t?.addrCn)}</textarea>`)}
     ${field('Votre code client / marque', `<input name="code" value="${esc(t?.code)}" placeholder="À écrire sur les colis, ex : BAS-KIN">`)}
     <div class="row3">${field('Tarif avion ($/kg)', `<input name="rAir" type="number" step="any" min="0" value="${t?.rAir || ''}">`)}${field('Tarif bateau ($/m³)', `<input name="rSea" type="number" step="any" min="0" value="${t?.rSea || ''}">`)}${field('Délai', `<input name="delay" value="${esc(t?.delay)}" placeholder="Ex : 10-15 jours">`)}</div>
     <button class="btn primary block">${t ? 'Enregistrer' : 'Ajouter'}</button></form>`);
@@ -3849,7 +3865,7 @@ document.addEventListener('click', e => {
 document.addEventListener('submit', e => {
   const f = e.target, E = f.elements;
   if(f.id === 'setf'){ e.preventDefault();
-    Object.assign(S.settings, {shop:E.shop.value.trim() || 'Ma Boutique', color:E.color.value, country:E.country.value, lc:E.lc.value.trim() || 'FC', rate:num(E.rate.value) || S.settings.rate, fee:num(E.fee.value), feeCur:E.feeCur.value, feeCity:Object.fromEntries([...f.querySelectorAll('[data-feerow]')].map(r => [r.querySelector('[data-fc=c]').value.trim(), r.querySelector('[data-fc=v]').value.trim()]).filter(([c, v]) => c && v !== '').map(([c, v]) => [c, num(v)])), cc:E.cc.value.replace(/\D/g,''), wa:E.wa.value.trim(), ...actsSettings(readActs(E)), impFrom:(E.impFrom ? E.impFrom.value.trim() : '') || 'Chine', cny:num(E.cny && E.cny.value) || 7.1, slogan:E.slogan.value.trim(), addr:E.saddr.value.trim(), tel2:E.tel2.value.trim(), email:E.email.value.trim(), legal:E.legal.value.trim(), invNote:E.invNote.value.trim(), setup:true});
+    Object.assign(S.settings, {shop:E.shop.value.trim() || 'Ma Boutique', color:E.color.value, country:E.country.value, lc:E.lc.value.trim() || 'FC', rate:num(E.rate.value) || S.settings.rate, fee:num(E.fee.value), feeCur:E.feeCur.value, feeCity:Object.fromEntries([...f.querySelectorAll('[data-feerow]')].map(r => [r.querySelector('[data-fc=c]').value.trim(), r.querySelector('[data-fc=v]').value.trim()]).filter(([c, v]) => c && v !== '').map(([c, v]) => [c, num(v)])), cc:E.cc.value.replace(/\D/g,''), wa:E.wa.value.trim(), ...actsSettings(readActs(E)), impFrom:(E.impFrom ? E.impFrom.value.trim() : '') || 'Chine', cny:num(E.cny && E.cny.value) || 7.1, aed:num(E.aed && E.aed.value) || 3.67, slogan:E.slogan.value.trim(), addr:E.saddr.value.trim(), tel2:E.tel2.value.trim(), email:E.email.value.trim(), legal:E.legal.value.trim(), invNote:E.invNote.value.trim(), setup:true});
     save(); render(); toast('Réglages enregistrés'); }
   if(f.id === 'wf'){ e.preventDefault();
     Object.assign(S.settings, {shop:E.shop.value.trim() || 'Ma Boutique', country:E.country.value, lc:E.lc.value.trim() || 'FC', rate:num(E.rate.value) || 2300, cc:E.cc.value.replace(/\D/g,''), wa:E.wa.value.trim(), ...actsSettings(readActs(E)), setup:true});
@@ -4190,7 +4206,11 @@ const IMP_COLS = [
   ['alert', "Seuil d'alerte", /(alerte|seuil|minimum|^min)/],
   ['qty', 'Stock (quantité)', /(stock|quantit|^qte|^qt|^nombre|^nb|qty|restant)/],
   ['cat', 'Catégorie ou rayon', /(categ|rayon|famille|^type|groupe)/],
-  ['sell', 'Prix de vente *', /(vente|^pv$|^p\.?v\.?$|^prix|price|^p\.?u)/]
+  ['sell', 'Prix de vente *', /(vente|^pv$|^p\.?v\.?$|^prix|price|^p\.?u)/],
+  ['taille', 'Taille ou pointure', /(taille|pointure|^size)/],
+  ['couleur', 'Couleur', /(couleur|colou?r|teinte)/],
+  ['lot', 'N° de lot', /(^lot|lot$|batch)/],
+  ['exp', 'Date de péremption', /(perem|expir|^exp|^dlc|^dluo)/]
 ];
 const colIdx = s => { let n = 0; for(const ch of String(s).toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
 const colName = i => { let s = ''; i++; while(i > 0){ const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };
@@ -4285,11 +4305,11 @@ function importRows(){
   for(const r of data){
     const name = g(r, 'name').replace(/\s+/g, ' ').trim().slice(0, 80);
     if(!name){ skip.noname++; continue; }
-    const key = norm(name);
+    const vt = String(g(r, 'taille')).trim().slice(0, 24), vc = String(g(r, 'couleur')).trim().slice(0, 24), key = norm(vt || vc ? varName(name, vt, vc) : name);
     if(have.has(key) || seen.has(key)){ skip.dup++; continue; }
     const sell = numx(g(r, 'sell')); if(!(sell > 0)){ skip.noprice++; continue; }
     seen.add(key);
-    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:g(r, 'cat').slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert'))))});
+    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:String(g(r, 'cat')).slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert')))), vt, vc, lot:String(g(r, 'lot')).trim().slice(0, 30), exp:dateX(g(r, 'exp'))});
   }
   return {ok, skip};
 }
@@ -4298,23 +4318,251 @@ function importStep(){
   const opts = sel => `<option value="">— Aucune —</option>${Array.from({length:width}, (_, i) => `<option value="${i}" ${String(sel) === String(i) ? 'selected' : ''}>${esc(colName(i) + (head && head[i] ? ' · ' + head[i] : ''))}</option>`).join('')}`;
   const sk = [skip.dup ? skip.dup + ' déjà présent(s) ou en double' : '', skip.noprice ? skip.noprice + ' sans prix de vente' : '', skip.noname ? skip.noname + ' sans nom' : ''].filter(Boolean).join(' · ');
   $('#impStep').innerHTML = `<div class="sec" style="margin-top:16px"><h2>Vérifiez les colonnes</h2></div>
-    <form id="impMap" class="card" style="margin-bottom:12px">${['name', 'sell', 'buy', 'qty', 'cat', 'alert'].map(k => IMP_COLS.find(c => c[0] === k)).map(([k, l]) => `<label class="f" style="margin-bottom:8px"><span>${l}</span><select data-col="${k}">${opts(map[k] ?? '')}</select></label>`).join('')}
+    <form id="impMap" class="card" style="margin-bottom:12px">${['name', 'sell', 'buy', 'qty', 'cat', 'alert', 'taille', 'couleur', 'lot', 'exp'].map(k => IMP_COLS.find(c => c[0] === k)).map(([k, l]) => `<label class="f" style="margin-bottom:8px"><span>${l}</span><select data-col="${k}">${opts(map[k] ?? '')}</select></label>`).join('')}
       ${field('Devise des prix', `<select data-cur><option value="$" ${IMPX.cur === '$' ? 'selected' : ''}>Dollar ($)</option><option value="FC" ${IMPX.cur === 'FC' ? 'selected' : ''}>Monnaie locale (${esc(LC())})</option></select>`)}</form>
     <div class="card tbw" style="margin-bottom:10px"><b>${ok.length} produit(s) prêt(s)</b>${sk ? `<p class="note" style="margin-top:4px">Ignorés : ${esc(sk)}</p>` : ''}
-      ${ok.length ? `<table class="tb" style="margin-top:8px"><tr><th>Produit</th><th class="rt">Vente</th><th class="rt">Achat</th><th class="rt">Stock</th><th>Rayon</th></tr>${ok.slice(0, 8).map(x => `<tr><td>${esc(x.name)}</td><td class="rt num">${fmt(x.sell)}</td><td class="rt num">${x.buy ? fmt(x.buy) : '—'}</td><td class="rt num">${x.qty || '—'}</td><td>${esc(x.cat || '—')}</td></tr>`).join('')}</table>${ok.length > 8 ? `<p class="note" style="margin-top:6px">… et ${ok.length - 8} autre(s)</p>` : ''}` : ''}</div>
+      ${ok.length ? `<table class="tb" style="margin-top:8px"><tr><th>Produit</th><th class="rt">Vente</th><th class="rt">Achat</th><th class="rt">Stock</th><th>Rayon</th></tr>${ok.slice(0, 8).map(x => `<tr><td>${esc(x.vt || x.vc ? varName(x.name, x.vt, x.vc) : x.name)}${x.exp ? '<br><small class="note">' + esc(fmtDate(x.exp)) + '</small>' : ''}</td><td class="rt num">${fmt(x.sell)}</td><td class="rt num">${x.buy ? fmt(x.buy) : '—'}</td><td class="rt num">${x.qty || '—'}</td><td>${esc(x.cat || '—')}</td></tr>`).join('')}</table>${ok.length > 8 ? `<p class="note" style="margin-top:6px">… et ${ok.length - 8} autre(s)</p>` : ''}` : ''}</div>
     <button class="btn primary block" id="impGo" ${ok.length ? '' : 'disabled'}>Ajouter ${ok.length} produit(s)</button>
     <p class="note" style="margin-top:8px">Le stock est ajouté au dépôt comme « Stock de départ ». Vous pourrez ensuite compléter chaque fiche (photo, cartons, fournisseur…).</p>`;
   $('#impMap').onchange = e => { const t = e.target; if(t.dataset.col) IMPX.map[t.dataset.col] = t.value === '' ? '' : +t.value; if(t.hasAttribute('data-cur')) IMPX.cur = t.value; importStep(); };
   $('#impGo').onclick = async () => { const {ok} = importRows(); if(!ok.length) return;
     if(!await ask(`Ajouter ${ok.length} produit(s) à votre stock ?`, 'Ajouter', false)) return;
     const t = today(), ts = Date.now();
-    ok.forEach((x, i) => { const np = {id:uid(), name:x.name, details:'', usage:'', cat:x.cat, cur:IMPX.cur, sell:x.sell, old:0, buy:x.buy, comm:0, commMode:'fixe', commCity:null, alert:x.alert, kit:null, photo:'', hide:false};
+    const G = {};
+    ok.forEach((x, i) => { const vv = x.vt || x.vc; const np = {id:uid(), name:vv ? varName(x.name, x.vt, x.vc) : x.name, details:'', usage:'', cat:x.cat, cur:IMPX.cur, sell:x.sell, old:0, buy:x.buy, comm:0, commMode:'fixe', commCity:null, alert:x.alert, kit:null, photo:'', hide:false};
+      if(vv){ const gk = norm(x.name), gg = G[gk] = G[gk] || {id:uid(), n:0}; Object.assign(np, {base:x.name, grp:gg.id, vi:gg.n++}); if(x.vt) np.vt = x.vt; if(x.vc) np.vc = x.vc; }
+      if(x.exp || x.lot) np.perim = true;
       S.products.push(np);
-      if(x.qty > 0) S.moves.push({id:uid(), ts:ts + i, type:'entree', pid:np.id, qty:x.qty, cost:np.buy, date:t, note:'Stock de départ (import)'}); });
+      if(x.qty > 0) S.moves.push(Object.assign({id:uid(), ts:ts + i, type:'entree', pid:np.id, qty:x.qty, cost:np.buy, date:t, note:'Stock de départ (import)'}, x.lot ? {lot:x.lot} : {}, x.exp ? {exp:x.exp} : {})); });
     S.settings.setup = true; save(); closeSheet(); render(); toast(ok.length + ' produit(s) ajouté(s)'); };
   $('#impStep').scrollIntoView({behavior:'smooth', block:'start'});
 }
 Object.assign(A, {rachat: () => rachatSheet(), importxl: () => importSheet()});
+
+/* ---------- Secteurs : rayons proposés en plus (vêtements, chaussures, cosmétiques, quincaillerie, pharmacie…) ---------- */
+Object.assign(SECT_CATS, {
+  vet: ['Hommes', 'Femmes', 'Enfants', 'Bébé', 'Pagnes et tissus', 'Sous-vêtements', 'Accessoires', 'Sacs'],
+  chaus: ['Chaussures hommes', 'Chaussures femmes', 'Chaussures enfants', 'Sandales et babouches', 'Baskets'],
+  cosm: ['Soins visage', 'Soins corps', 'Cheveux', 'Maquillage', 'Parfums', 'Savons'],
+  quinc: ['Électricité', 'Plomberie', 'Peinture', 'Outillage', 'Ciment et matériaux', 'Visserie et clous', 'Quincaillerie générale'],
+  pharma: ['Douleur et fièvre', 'Antibiotiques', 'Antipaludiques', 'Vitamines et compléments', 'Toux et rhume', 'Pansements et soins', 'Hygiène et parapharmacie', 'Bébé et maman', 'Matériel médical']
+});
+['Flacon', 'Tube', 'Paire', 'Rame'].forEach(n => { if(!PACK_NAMES.includes(n)) PACK_NAMES.push(n); });
+
+/* ---------- Tailles et couleurs (vêtements, chaussures…) ----------
+   Un article à tailles / couleurs = un groupe de produits (p.grp) : une fiche par taille × couleur (p.vt, p.vc, p.base).
+   Le stock, les ventes, les livreurs, les rapports et « À racheter » restent ceux de produits normaux. */
+const VAR_PRESETS = [['Lettres', 'XS, S, M, L, XL, XXL'], ['Pointures', '36, 37, 38, 39, 40, 41, 42, 43, 44, 45'], ['Enfants', '2 ans, 4 ans, 6 ans, 8 ans, 10 ans, 12 ans'], ['Taille unique', '']];
+const VAR_SHARED = ['details', 'usage', 'cat', 'cur', 'sell', 'old', 'buy', 'comm', 'commMode', 'commCity', 'alert', 'hide', 'photo', 'unit', 'packs', 'fid', 'perim'];
+const splitList = s => { const seen = new Set(); return String(s || '').split(/[,;\n]+/).map(x => x.trim().slice(0, 24)).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase())).slice(0, 20); };
+const varName = (base, t, c) => base + ' — ' + [t, c].filter(Boolean).join(' · ');
+const grpOf = g => S.products.filter(p => p.grp && p.grp === g).sort((a, b) => (a.vi ?? 0) - (b.vi ?? 0) || byName(a, b));
+const varTitle = p => (p && (p.base || p.name)) || '';
+const varLab = p => [p.vt, p.vc].filter(Boolean).join(' · ') || 'Taille unique';
+function varSection(p){
+  if(p) return p.grp ? `<div class="card" style="margin-bottom:12px"><b>Taille et couleur</b><p class="note" style="margin:4px 0 8px">Cette fiche est ${esc([p.vt && 'la taille ' + p.vt, p.vc && 'la couleur ' + p.vc].filter(Boolean).join(', ') || 'une variante')} de « ${esc(varTitle(p))} ».</p>
+    <label class="f" style="display:flex;gap:10px;align-items:center;margin:0"><input type="checkbox" name="varAll" checked style="width:22px;height:22px;min-height:0"><span style="margin:0">Appliquer les prix, la catégorie, l'alerte, les unités et la photo à toutes les tailles et couleurs de cet article</span></label>
+    <button type="button" class="btn sm" style="margin-top:8px" data-a="addvar:${p.grp}">+ Ajouter des tailles ou des couleurs</button></div>` : '';
+  const open = hasSect('vet') || hasSect('chaus');
+  return `<details class="card" id="varw" style="margin-bottom:12px" ${open ? 'open' : ''}><summary><b>Tailles et couleurs</b> <span class="note">(vêtements, chaussures… optionnel)</span></summary>
+    <p class="note" style="margin:8px 0">Une fiche est créée pour chaque taille et chaque couleur : le stock de chacune est compté à part. Laissez vide pour un produit simple.</p>
+    <div class="chips" id="varPre" style="margin-bottom:6px">${VAR_PRESETS.map(([l, v]) => `<button type="button" class="chip" data-vp="${esc(v)}">${l}</button>`).join('')}</div>
+    ${field('Tailles', `<input name="vtl" maxlength="300" placeholder="Ex : S, M, L, XL">`, 'Séparées par des virgules')}
+    ${field('Couleurs', `<input name="vcl" maxlength="300" placeholder="Ex : Noir, Blanc, Bleu">`, 'Séparées par des virgules. Laissez vide s\'il n\'y a qu\'une couleur.')}
+    <div id="varGrid"></div></details>`;
+}
+// Tableau « stock de départ » taille × couleur (exists : combinaisons déjà présentes, non modifiables)
+function varGridWire(f, exists, onToggle){
+  const E = f.elements, keep = {};
+  const draw = () => {
+    f.querySelectorAll('[data-vq]').forEach(i => keep[i.dataset.vq] = i.value);
+    const T = splitList(E.vtl.value), C = splitList(E.vcl.value), on = T.length + C.length > 0;
+    if(onToggle) onToggle(on);
+    const box = f.querySelector('#varGrid'); if(!on){ box.innerHTML = ''; return; }
+    const tt = T.length ? T : [''], cc = C.length ? C : [''];
+    const n = tt.length * cc.length - (exists ? tt.reduce((s, t) => s + cc.filter(c => exists.has(t + '|' + c)).length, 0) : 0);
+    box.innerHTML = `<p class="note" style="margin:6px 0">${n > 120 ? '<span class="red">120 au maximum</span>' : n + ' fiche(s) ' + (exists ? 'nouvelle(s)' : 'seront créées')}. Stock de départ au dépôt :</p>
+      <div class="tbw"><table class="tb vgrid"><tr><th></th>${cc.map(c => `<th>${esc(c || 'Quantité')}</th>`).join('')}</tr>${tt.map(t => `<tr><th>${esc(t || 'Taille unique')}</th>${cc.map(c => { const k = t + '|' + c;
+        return exists && exists.has(k) ? '<td class="note">déjà là</td>' : `<td><input type="number" min="0" step="any" data-vq="${esc(k)}" value="${esc(keep[k] || '')}" placeholder="0"></td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  };
+  const pre = f.querySelector('#varPre'); if(pre) pre.onclick = e => { const b = e.target.closest('[data-vp]'); if(!b) return; E.vtl.value = b.dataset.vp; draw(); };
+  E.vtl.addEventListener('input', draw); E.vcl.addEventListener('input', draw); draw();
+}
+function varWire(f, p){
+  const E = f.elements; if(p || !E.vtl) return;
+  varGridWire(f, null, on => { const iw = f.querySelector('#initw'); if(iw) iw.hidden = on || E.iskit.checked; });
+}
+function readVariants(f, exists){
+  const E = f.elements; if(!E.vtl) return null;
+  const T = splitList(E.vtl.value), C = splitList(E.vcl.value); if(!T.length && !C.length) return null;
+  const q = {}; f.querySelectorAll('[data-vq]').forEach(i => q[i.dataset.vq] = i.value);
+  const out = []; (T.length ? T : ['']).forEach(t => (C.length ? C : ['']).forEach(c => { if(!exists || !exists.has(t + '|' + c)) out.push({t, c, q:q[t + '|' + c] || ''}); }));
+  if(out.length > 120){ toast('120 tailles × couleurs au maximum'); return false; }
+  return out;
+}
+// Crée les fiches d'un groupe à partir d'un modèle (data) ; renvoie le nombre créé
+function makeVariants(base, data, vs, g, vi0, extra){
+  const t = today(), ts = Date.now(); let n = 0;
+  vs.forEach((v, i) => {
+    const np = Object.assign({}, data, {id:uid(), name:varName(base, v.t, v.c), base, grp:g, vi:vi0 + i});
+    if(v.t) np.vt = v.t; else delete np.vt;
+    if(v.c) np.vc = v.c; else delete np.vc;
+    S.products.push(np); n++;
+    const q0 = qr(np, v.q); if(q0 > 0) S.moves.push(Object.assign({id:uid(), ts:ts + i, type:'entree', pid:np.id, qty:q0, cost:np.buy, date:t, note:'Stock de départ'}, extra || {}));
+  });
+  return n;
+}
+function varShare(p, data){ // modification d'une fiche : appliquer les éléments communs aux autres tailles / couleurs
+  if(!p || !p.grp) return 0; let n = 0;
+  grpOf(p.grp).forEach(x => { if(x === p) return; n++;
+    VAR_SHARED.forEach(k => { if(!(k in data)) return; if(k === 'unit' && S.moves.some(m => m.pid === x.id)) return; if(data[k] === undefined) delete x[k]; else x[k] = data[k]; }); });
+  return n;
+}
+function addVarSheet(g){
+  const L = grpOf(g); if(!L.length) return; const p0 = L[0], base = varTitle(p0);
+  const T0 = [...new Set(L.map(x => x.vt).filter(Boolean))], C0 = [...new Set(L.map(x => x.vc).filter(Boolean))];
+  const exists = new Set(L.map(x => (x.vt || '') + '|' + (x.vc || '')));
+  sheet('Ajouter des tailles ou des couleurs', `<form id="avf"><p class="note" style="margin-bottom:10px">« ${esc(base)} » existe en : <b>${esc(L.map(varLab).join(', '))}</b>. Ajoutez des tailles ou des couleurs à la liste : seules les nouvelles fiches sont créées, avec les mêmes prix et la même catégorie.</p>
+    ${field('Tailles', `<input name="vtl" maxlength="300" value="${esc(T0.join(', '))}">`, 'Toutes les tailles de l\'article, séparées par des virgules')}
+    ${field('Couleurs', `<input name="vcl" maxlength="300" value="${esc(C0.join(', '))}">`, 'Toutes les couleurs de l\'article')}
+    <div id="varGrid"></div><button class="btn primary block">Ajouter</button></form>`);
+  const f = $('#avf'); varGridWire(f, exists);
+  f.onsubmit = e => { e.preventDefault();
+    const vs = readVariants(f, exists); if(vs === false) return;
+    if(!vs || !vs.length){ toast('Ajoutez une nouvelle taille ou une nouvelle couleur'); return; }
+    const data = {}; Object.keys(p0).forEach(k => { if(!['id', 'name', 'vt', 'vc', 'vi', 'grp', 'base'].includes(k)) data[k] = p0[k]; });
+    const vi0 = Math.max(...L.map(x => x.vi ?? 0)) + 1;
+    // Les fiches sans taille (ou sans couleur) prennent la nouvelle valeur seulement si l'article n'en avait aucune
+    const n = makeVariants(base, data, vs, g, vi0);
+    save(); closeSheet(); render(); toast(n + ' taille(s) / couleur(s) ajoutée(s)');
+  };
+}
+// Stock : un article à tailles / couleurs = une ligne repliable avec son tableau
+function varGridHTML(L, st){
+  const T = [...new Set(L.map(x => x.vt || ''))], C = [...new Set(L.map(x => x.vc || ''))];
+  const cell = (t, c) => { const x = L.find(y => (y.vt || '') === t && (y.vc || '') === c); if(!x) return '<td class="note">·</td>';
+    const q = totalOf(st, x.id); return `<td class="num ${q <= 0 ? 'qty-zero' : q <= (x.alert || 0) ? 'qty-low' : ''}">${qv(x, q)}</td>`; };
+  return `<div class="tbw"><table class="vmini"><tr><th></th>${C.map(c => `<th>${esc(c || 'Stock')}</th>`).join('')}</tr>${T.map(t => `<tr><th>${esc(t || 'Unique')}</th>${C.map(c => cell(t, c)).join('')}</tr>`).join('')}</table></div>`;
+}
+function stockGroupRows(list, row, st){
+  const done = new Set(); let h = '';
+  for(const p of list){
+    if(!p.grp){ h += row(p); continue; }
+    if(done.has(p.grp)) continue; done.add(p.grp);
+    const L = list.filter(x => x.grp === p.grp).sort((a, b) => (a.vi ?? 0) - (b.vi ?? 0));
+    const tot = r3(L.reduce((t, x) => t + totalOf(st, x.id), 0)), low = L.filter(x => totalOf(st, x.id) <= (x.alert || 0)).length;
+    h += `<details class="vgrp"><summary class="it">${pic(L[0])}<div class="m"><div class="t">${esc(varTitle(L[0]))}</div><div class="d">${L.length} taille(s) / couleur(s)${low ? ` · <span class="red">${low} presque fini(e)s</span>` : ''} · toucher pour le détail</div>${varGridHTML(L, st)}</div>
+      <div class="r"><div class="big num ${tot <= 0 ? 'qty-zero' : ''}">${qv(L[0], tot)}</div><div class="sm">total</div></div></summary><div class="vin">${L.map(row).join('')}</div></details>`;
+  }
+  return h;
+}
+function varSheetCard(p, st){
+  if(!p || !p.grp) return ''; const L = grpOf(p.grp);
+  return `<div class="card" style="margin-bottom:12px"><b>${esc(varTitle(p))} : toutes les tailles et couleurs</b>${varGridHTML(L, st)}
+    <div class="chips" style="margin-top:8px">${L.map(x => `<button class="chip ${x.id === p.id ? 'on' : ''}" data-a="prod:${x.id}">${esc(varLab(x))}</button>`).join('')}</div>
+    <button class="btn sm" style="margin-top:8px" data-a="addvar:${p.grp}">+ Ajouter des tailles ou des couleurs</button></div>`;
+}
+
+/* ---------- Lots et dates de péremption (pharmacie, alimentation…) ----------
+   Une entrée de stock peut porter un lot (m.lot) et une date de péremption (m.exp). On vend d'abord ce qui périme le plus tôt :
+   on rejoue les entrées et les sorties dans l'ordre : une vente prend le lot encore bon qui périme le plus tôt ; une sortie « Périmé » prend d'abord les lots périmés. */
+let perimTab = '90';
+function perimField(p){
+  const on = p ? !!p.perim : hasSect('pharma');
+  return `<label class="f" id="perimw" style="display:flex;gap:10px;align-items:center"><input type="checkbox" name="perim" ${on ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Suivre les lots et les dates de péremption <small class="note">(médicaments, aliments, cosmétiques…)</small></span></label>`;
+}
+const perimInit = () => `<div class="row2" id="initPerim" hidden>${field('N° de lot', '<input name="ilot" maxlength="30" placeholder="Optionnel">')}${field('Date de péremption', '<input name="iexp" type="date">')}</div>`;
+function perimWire(f){
+  const E = f.elements; if(!E.perim) return;
+  const sh = () => { const b = f.querySelector('#initPerim'); if(b) b.hidden = !E.perim.checked; };
+  E.perim.addEventListener('change', sh); sh();
+}
+const perimMoveFields = m => `<div class="row2" id="perimIn" hidden>${field('N° de lot', `<input name="lot" maxlength="30" value="${esc(m?.lot || '')}" placeholder="Optionnel">`)}${field('Date de péremption', `<input name="exp" type="date" value="${esc(m?.exp || '')}">`)}</div>`;
+const daysTo = d => Math.round((new Date(d + 'T12:00:00') - new Date(today() + 'T12:00:00')) / 864e5);
+function perimLots(p){ // rejoue les mouvements dans l'ordre des dates : chaque sortie prend le lot encore bon qui périme le plus tôt
+  if(!p || !p.perim || isKit(p)) return [];
+  const lots = [], byK = {}, ev = [];
+  for(const m of S.moves){ if(!m.pid) continue;
+    for(const [pid, q] of lines(m.pid, m.qty)){ if(pid !== p.id) continue;
+      if(m.type === 'entree' || m.type === 'ajust') ev.push({d:mday(m) || '', ts:m.ts || 0, q:num(q), lot:m.type === 'entree' ? (m.lot || '') : '', exp:m.type === 'entree' ? (m.exp || '') : ''});
+      else if(isOutSale(m)) ev.push({d:mday(m) || '', ts:m.ts || 0, q:-num(q)});
+      else if(m.type === 'perte') ev.push({d:mday(m) || '', ts:m.ts || 0, q:-num(q), per:m.motif === 'Périmé'});
+    } }
+  ev.sort((a, b) => a.d.localeCompare(b.d) || (b.q > 0) - (a.q > 0) || a.ts - b.ts);
+  const asc = (a, b) => (a.exp || '0000').localeCompare(b.exp || '0000');
+  for(const e of ev){
+    if(e.q > 0){ const k = e.exp + '|' + e.lot; let L = byK[k]; if(!L){ L = byK[k] = {lot:e.lot, exp:e.exp, q:0}; lots.push(L); } L.q = r3(L.q + e.q); continue; }
+    let need = -e.q;
+    const good = L => L.q > 0 && (!L.exp || L.exp >= e.d), bad = L => L.q > 0 && L.exp && L.exp < e.d;
+    const order = e.per ? lots.filter(bad).sort(asc).concat(lots.filter(good).sort(asc)) : lots.filter(good).sort(asc).concat(lots.filter(bad).sort(asc));
+    for(const L of order){ if(need <= 0) break; const t = Math.min(L.q, need); L.q = r3(L.q - t); need = r3(need - t); }
+  }
+  return lots.filter(L => L.q > 0).map(L => Object.assign(L, {days:L.exp ? daysTo(L.exp) : null})).sort((a, b) => (a.exp || '9999').localeCompare(b.exp || '9999'));
+}
+function perimAll(st){ st = st || stockAt();
+  return S.products.filter(p => p.perim && !isKit(p)).flatMap(p => perimLots(p, st).filter(L => L.exp).map(L => Object.assign({p}, L))).sort((a, b) => a.exp.localeCompare(b.exp)); }
+const perimTxt = L => L.days < 0 ? `<span class="red">périmé depuis ${-L.days} jour(s)</span>` : L.days === 0 ? `<span class="red">périme aujourd'hui</span>` : `périme dans <b>${L.days}</b> jour(s)`;
+function perimCard(home){
+  if(stockAsOf) return ''; const all = perimAll(), late = all.filter(x => x.days < 0), soon = all.filter(x => x.days >= 0 && x.days <= (home ? 30 : 90));
+  if(!late.length && !soon.length) return '';
+  return `<button class="card daycard" data-a="perim"><span><b>Péremption</b> · ${late.length ? `<span class="red">${late.length} lot(s) périmé(s)</span>` : ''}${late.length && soon.length ? ' · ' : ''}${soon.length ? soon.length + ' lot(s) périment dans moins de ' + (home ? 30 : 90) + ' jours' : ''}</span><span class="note">Voir les lots ›</span></button>`;
+}
+function perimSheet(){
+  const all = perimAll(), late = all.filter(x => x.days < 0);
+  const tabs = [['late', 'Périmés (' + late.length + ')'], ['30', '30 jours'], ['60', '60 jours'], ['90', '90 jours'], ['tous', 'Tous les lots']];
+  const L = perimTab === 'late' ? late : perimTab === 'tous' ? all : all.filter(x => x.days <= +perimTab);
+  const can = !isVendeur();
+  sheet('Lots et péremption', `<p class="note" style="margin-bottom:8px">Chaque vente est comptée sur le lot encore bon qui périme le plus tôt. Les lots périmés restent en stock jusqu'à leur retrait.</p>
+    <div class="chips" style="margin-bottom:10px">${tabs.map(([k, l]) => `<button class="chip ${perimTab === k ? 'on' : ''}" data-a="perimtab:${k}">${l}</button>`).join('')}</div>
+    <div class="list">${L.length ? L.map(x => `<div class="it" style="cursor:default">${pic(x.p)}<div class="m"><div class="t">${esc(x.p.name)}</div><div class="d">${x.lot ? 'Lot ' + esc(x.lot) + ' · ' : ''}${esc(fmtDate(x.exp))} · ${perimTxt(x)}</div>
+      ${x.days < 0 && can ? `<button class="btn sm" style="margin-top:6px" data-a="perimout:${x.p.id}|${x.q}|${esc(x.lot)}">Retirer du stock</button>` : ''}</div><div class="r"><div class="big num ${x.days < 0 ? 'qty-zero' : x.days <= 30 ? 'qty-low' : ''}">${qv(x.p, x.q)}</div><div class="sm">${esc(uLab(x.p))}</div></div></div>`).join('') : '<div class="empty">Aucun lot dans cette liste.</div>'}</div>
+    <p class="note" style="margin-top:10px">Pour suivre un produit : dans sa fiche, cochez « Suivre les lots et les dates de péremption », puis notez le lot et la date à chaque entrée de stock.</p>`);
+}
+function perimSheetCard(p, st){
+  if(!p || !p.perim || isKit(p)) return '';
+  const L = perimLots(p, st);
+  return `<div class="card" style="margin-bottom:12px"><b>Lots en stock</b>${L.length ? L.map(x => `<div class="dl"><span>${x.lot ? 'Lot ' + esc(x.lot) : 'Sans n° de lot'}${x.exp ? ' · ' + esc(fmtDate(x.exp)) : ' · sans date'}${x.exp ? '<br><small>' + perimTxt(x) + '</small>' : ''}</span><span class="num">${qv(p, x.q)}</span></div>`).join('') : '<p class="note" style="margin-top:6px">Aucun lot en stock.</p>'}</div>`;
+}
+// Formulaires : lot / date à l'entrée, lot à vendre d'abord à la sortie
+function perimHint(el, p){
+  if(!el) return; const L = p && p.perim ? perimLots(p).filter(x => x.exp) : [];
+  if(!L.length){ el.innerHTML = ''; return; }
+  const late = L.filter(x => x.days < 0), first = L.find(x => x.days >= 0);
+  el.innerHTML = `<p class="note" style="margin:-4px 0 10px">${first ? `Lot à vendre d'abord : <b>${first.lot ? esc(first.lot) : 'sans n°'}</b> · ${esc(fmtDate(first.exp))} (${perimTxt(first)})` : ''}${late.length ? `${first ? '<br>' : ''}<span class="red">Attention : ${late.reduce((t, x) => t + x.q, 0)} ${esc(uLab(p))} périmé(s) en stock, à ne pas vendre.</span>` : ''}</p>`;
+}
+function perimUpd(p, type){
+  const b = $('#perimIn'); if(b) b.hidden = !(type === 'entree' && p && p.perim);
+  perimHint($('#fefo'), type === 'vente' || type === 'envoi' ? p : null);
+}
+Object.assign(A, {
+  addvar: g => addVarSheet(g),
+  perim: () => perimSheet(),
+  perimtab: k => { perimTab = k; perimSheet(); },
+  perimout: v => { const [pid, q, lot] = String(v).split('|'); moveForm('perte', {pid});
+    const E = $('#mf') && $('#mf').elements; if(!E) return;
+    if(E.motif) E.motif.value = 'Périmé'; E.qty.value = q; if(E.note) E.note.value = lot ? 'Lot ' + lot + ' périmé' : 'Produit périmé';
+    E.qty.dispatchEvent(new Event('input', {bubbles:true})); }
+});
+
+/* ---------- Import : pays d'origine (Chine, Dubaï, Turquie…) et dirham ---------- */
+const ORIGS = ['Chine', 'Dubaï', 'Turquie', 'Inde', 'Nigeria', 'Thaïlande', 'États-Unis', 'France', 'Belgique', 'Afrique du Sud'];
+const cOrig = c => (c && c.orig) || impFrom();
+function enPays(p){ const k = norm(p).trim();
+  const M = {chine:'en Chine', dubai:'à Dubaï', turquie:'en Turquie', inde:'en Inde', nigeria:'au Nigeria', thailande:'en Thaïlande', 'etats-unis':'aux États-Unis', usa:'aux États-Unis', france:'en France', belgique:'en Belgique', 'afrique du sud':'en Afrique du Sud', emirats:'aux Émirats', 'emirats arabes unis':'aux Émirats', japon:'au Japon', coree:'en Corée', angola:'en Angola', tanzanie:'en Tanzanie', ouganda:'en Ouganda', kenya:'au Kenya', zambie:'en Zambie'};
+  return M[k] || '(' + p + ')'; }
+function syncImpLabels(){ const o = impFrom(); STEPS[2][1] = 'Chez le transitaire (' + o + ')'; STEP_SHORT.entrepot = '🏭 Entrepôt ' + o; }
+const aed = () => num(S.settings.aed) || 3.67;
+
+// Date de péremption lue dans Excel : nombre de jours Excel, 2027-06-30, 30/06/2027, 06/2027 (fin du mois)
+function dateX(v){
+  if(v == null || v === '') return ''; const s = String(v).trim(), n = Number(s);
+  const ok = (y, m, d) => y > 1990 && y < 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31 ? y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0') : '';
+  if(/^\d{5}(\.\d+)?$/.test(s) && n > 30000 && n < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 864e5).toISOString().slice(0, 10);
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/); if(m) return ok(+m[1], +m[2], +m[3]);
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/); if(m) return ok(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2], +m[1]);
+  m = s.match(/^(\d{1,2})[-\/.](\d{4})$/); if(m && +m[1] >= 1 && +m[1] <= 12) return new Date(Date.UTC(+m[2], +m[1], 0)).toISOString().slice(0, 10);
+  return '';
+}
 
 /* ---------- Formulaires : fonctionnent même dans un aperçu restreint (sans envoi de formulaire) ---------- */
 document.addEventListener('click', e => {
@@ -4845,7 +5093,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '8a3d4df2b4';
+const APP_BUILD = 'c1e4a5b4ae';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
