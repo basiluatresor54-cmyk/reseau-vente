@@ -874,7 +874,7 @@ function vStock(){
   ${stockAsOf ? '' : forecastCard()}
   <div id="lst">${stockRows()}</div>
   ${recentStockHTML()}
-  <div class="btns" style="margin-top:12px"><button class="btn" data-a="new:entree">+ Entrée de stock</button><button class="btn" data-a="new:envoi">Envoyer à un livreur</button></div>
+  <button class="btn wa block" style="margin-top:12px" data-a="sharep">${ico('wa')} Partager des produits sur WhatsApp</button><div class="btns" style="margin-top:12px"><button class="btn" data-a="new:entree">+ Entrée de stock</button><button class="btn" data-a="new:envoi">Envoyer à un livreur</button></div>
   <div class="btns" style="margin-top:8px"><button class="btn" data-a="new:produit">+ Nouveau produit</button><button class="btn" data-a="newpack">🎁 Nouveau pack / promo</button></div>
   <div class="btns" style="margin-top:8px"><button class="btn primary" data-a="stockupd">📦 Mettre mon stock à jour</button><button class="btn" data-a="invform:">📋 Contrôle du dépôt</button></div>
   ${isVendeur() ? '' : '<div class="btns" style="margin-top:8px"><button class="btn" data-a="importxl">Importer des produits (Excel)</button><button class="btn" data-a="rachat">À racheter</button></div>'}
@@ -1633,7 +1633,8 @@ function catalogSection(){
     <div class="f" style="margin-top:12px"><span>Votre lien (${nb} produit${nb>1?'s':''} visible${nb>1?'s':''})</span><input readonly value="${esc(url)}" onclick="this.select()" style="font-size:13px"></div>
     <label class="f"><span>Phrase d'accueil</span><input id="catIntro" maxlength="90" value="${esc(st.catIntro || '')}" placeholder="Ex : Produits capillaires 100 % naturels"></label>
     <div class="btns"><button class="btn" data-a="catcopy">📋 Copier le lien</button><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">👁️ Voir ma boutique</a></div>
-    <a class="btn wa block" style="margin-top:8px" href="${waLink('', share)}" target="_blank" rel="noopener">${ico('wa')} Partager sur WhatsApp</a>
+    <a class="btn wa block" style="margin-top:8px" href="${waLink('', share)}" target="_blank" rel="noopener">${ico('wa')} Partager le lien de la boutique</a>
+    <button class="btn wa block" style="margin-top:8px" data-a="sharep">${ico('wa')} Partager des produits (photo, prix, lien)</button>
     <p class="note" style="margin-top:8px">Mettez ce lien dans vos pubs Facebook, votre statut et votre bio. Pour cacher un produit : Stock → produit → Modifier → décochez « Visible dans ma boutique en ligne ».</p>` : ''}
   </div>`;
 }
@@ -2668,7 +2669,7 @@ function prodSheet(id){
     ${kit ? `<div class="warnbox" style="background:var(--vio-soft);color:var(--vio)">Pack : ${p.kit.map(c => c.q + ' × ' + esc(pname(c.pid))).join(' + ')}. Les quantités ci-dessous = nombre de packs possibles.</div>` : ''}
     <div class="kv"><div><b class="num">${kit ? avail(st,'',id) : qAt(st,'',id)}</b><span>Au dépôt</span></div><div><b class="num">${kit ? locs.reduce((s,x)=>s+x[1],0) : inHands(st,id)}</b><span>Chez livreurs</span></div><div><b class="num">${kit ? '—' : totalOf(st,id)}</b><span>Total</span></div></div>
     ${locs.length ? `<div class="card" style="margin-bottom:12px">${locs.map(([l,q]) => `<div class="dl"><span>${esc(l.name)} · ${esc(l.city||'')}</span><span class="num">${q}</span></div>`).join('')}</div>` : ''}
-    ${codeCard(p)}${caracCard(p)}${varSheetCard(p, st)}${perimSheetCard(p, st)}
+    ${shareBtn(p)}${codeCard(p)}${caracCard(p)}${varSheetCard(p, st)}${perimSheetCard(p, st)}
     <div class="card" style="margin-bottom:12px">
       <div class="dl"><span>Prix de vente</span><span class="num">${priceTxt(p)}${p.cur==='FC' ? ' ≈ ' + money(su) : ''}</span></div>
       <div class="dl cost"><span>Prix d'achat</span><span class="num">${num(p.buy)>0 ? amt(p.buy, p.cur) : (kit && cu ? '≈ ' + money(cu) + ' (produits)' : '<span class="red">à compléter</span>')}</span></div>
@@ -5465,6 +5466,91 @@ Object.assign(A, {
   fidgive: (_, el) => fidGive(el.dataset.k)
 });
 
+/* ---------- Partager des produits sur WhatsApp (discussion ou statut) : la photo du produit + le prix + le lien qui ouvre ce produit dans la boutique ----------
+   Le téléphone partage une image (carte du produit) avec un texte. Le lien ouvre la boutique en ligne directement sur le produit (« Ajouter au panier »).
+   Si la boutique en ligne est fermée, le lien ouvre une discussion WhatsApp avec la boutique. */
+const shopOnline = () => typeof ONLINE !== 'undefined' && ONLINE && ONLINE.shop && S.settings.catalog;
+const prodLink = p => shopOnline() && !p.hide ? BOUTIQUE_URL + '?s=' + ONLINE.shop.id + '&p=' + encodeURIComponent(p.id) : (S.settings.wa ? waLink(S.settings.wa, 'Bonjour, je veux commander : ' + p.name) : '');
+const shopLink = () => shopOnline() ? BOUTIQUE_URL + '?s=' + ONLINE.shop.id : (S.settings.wa ? waLink(S.settings.wa, 'Bonjour, je veux commander') : '');
+const promoOf = p => num(p.old) > num(p.sell) && num(p.sell) > 0 ? Math.round((1 - num(p.sell) / num(p.old)) * 100) : 0;
+function shareText(L){
+  const st = S.settings, one = L.length === 1, p = L[0];
+  const price = x => amt(num(x.sell), x.cur) + (promoOf(x) ? ` (au lieu de ${amt(num(x.old), x.cur)})` : '');
+  const body = one ? `🛍️ *${p.name}*\n💵 Prix : *${price(p)}*${promoOf(p) ? ` 🔥 -${promoOf(p)} %` : ''}${p.details ? '\n' + String(p.details).slice(0, 200) : ''}${prodLink(p) ? '\n\n👉 Commandez ici : ' + prodLink(p) : ''}`
+    : `🛍️ *Nos produits*\n\n${L.map(x => `• ${x.name} : *${price(x)}*`).join('\n')}${shopLink() ? '\n\n👉 Commandez ici : ' + shopLink() : ''}`;
+  return `${body}\n\n🛵 Livraison rapide · 💵 Paiement à la livraison\n${st.shop || ''}${st.wa ? ' · WhatsApp ' + st.wa : ''}`;
+}
+// Carte du produit en image (720 × 900)
+async function prodCard(p){
+  const st = S.settings, W = 720, H = 900, c = document.createElement('canvas'), x = c.getContext('2d'); c.width = W; c.height = H;
+  const brand = st.color || '#0F766E', [r, g, b] = hexRgb(brand), F = (w, s) => `${w} ${s}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+  const rr = (X, Y, w, h, R) => { x.beginPath(); x.moveTo(X + R, Y); x.arcTo(X + w, Y, X + w, Y + h, R); x.arcTo(X + w, Y + h, X, Y + h, R); x.arcTo(X, Y + h, X, Y, R); x.arcTo(X, Y, X + w, Y, R); x.closePath(); };
+  const T = (t, X, Y, f, col, al) => { x.font = f; x.fillStyle = col; x.textAlign = al || 'left'; x.fillText(t, X, Y); x.textAlign = 'left'; };
+  const [ph, logo] = await Promise.all([loadImg(p.photo), loadImg(st.logo)]);
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+  const grad = x.createLinearGradient(0, 0, W, 0); grad.addColorStop(0, brand); grad.addColorStop(1, `rgb(${Math.round(r * .7)},${Math.round(g * .7)},${Math.round(b * .7)})`);
+  x.fillStyle = grad; x.fillRect(0, 0, W, 96);
+  if(logo){ x.save(); rr(28, 18, 60, 60, 16); x.clip(); x.drawImage(logo, 28, 18, 60, 60); x.restore(); }
+  T(String(st.shop || '').slice(0, 30), logo ? 104 : 32, 60, F(800, 30), '#fff');
+  // Photo (ou initiales)
+  const P = 430, px = (W - P) / 2, py = 124;
+  x.save(); rr(px, py, P, P, 32); x.clip(); x.fillStyle = `rgba(${r},${g},${b},.1)`; x.fillRect(px, py, P, P);
+  if(ph){ const k = Math.max(P / ph.width, P / ph.height); x.imageSmoothingQuality = 'high'; x.drawImage(ph, px + (P - ph.width * k) / 2, py + (P - ph.height * k) / 2, ph.width * k, ph.height * k); }
+  else T(initials(p.name), W / 2, py + P / 2 + 50, F(800, 150), brand, 'center');
+  x.restore();
+  const pc = promoOf(p); if(pc){ x.fillStyle = '#dc2626'; rr(px + P - 150, py + 18, 132, 56, 28); x.fill(); T('-' + pc + ' %', px + P - 84, py + 57, F(850, 32), '#fff', 'center'); }
+  // Nom, prix
+  let y = py + P + 56; x.font = F(800, 38);
+  wrapText(x, p.name, W - 80).slice(0, 2).forEach(l => { T(l, W / 2, y, F(800, 38), '#16181d', 'center'); y += 46; });
+  y += 22; const pr = amt(num(p.sell), p.cur);
+  if(pc){ // prix barré à droite du prix
+    const old = amt(num(p.old), p.cur); x.font = F(900, 60); const w1 = x.measureText(pr).width; x.font = F(600, 30); const w2 = x.measureText(old).width, gap = 22, x0 = (W - w1 - gap - w2) / 2;
+    T(pr, x0, y, F(900, 60), brand); T(old, x0 + w1 + gap, y - 8, F(600, 30), '#9aa1ac'); x.fillStyle = '#9aa1ac'; x.fillRect(x0 + w1 + gap, y - 18, w2, 3);
+  } else T(pr, W / 2, y, F(900, 60), brand, 'center');
+  // Bas : commander
+  x.fillStyle = brand; rr(40, H - 112, W - 80, 76, 38); x.fill();
+  T(shopOnline() && !p.hide ? 'Commandez en ligne · lien dans le message' : 'Commandez sur WhatsApp' + (st.wa ? ' · ' + st.wa : ''), W / 2, H - 63, F(750, 26), '#fff', 'center');
+  T('Livraison rapide · Paiement à la livraison', W / 2, H - 132, F(600, 24), '#6b7280', 'center');
+  return new Promise(res => c.toBlob(bl => res(bl), 'image/jpeg', .9));
+}
+const fileName = s => String(s || 'produit').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'produit';
+async function shareProducts(L){
+  L = L.filter(Boolean).slice(0, 10); if(!L.length) return;
+  const text = shareText(L);
+  toast('Préparation de l\'image…');
+  let files = [];
+  try{ files = (await Promise.all(L.map(prodCard))).map((bl, i) => new File([bl], fileName(L[i].name) + '.jpg', {type:'image/jpeg'})); }catch(_){ files = []; }
+  try{
+    if(files.length && navigator.canShare && navigator.canShare({files})){ await navigator.share({files, text}); return 'share'; }
+  }catch(e){ if(e && e.name === 'AbortError') return 'abort'; }
+  // Sans partage d'images (ordinateur, ancien téléphone) : on enregistre les images et on ouvre WhatsApp avec le texte
+  shareFallback(L, files, text); return 'fallback';
+}
+function shareFallback(L, files, text){
+  const urls = files.map(f => URL.createObjectURL(f));
+  sheet('Partager sur WhatsApp', `<p class="note" style="margin-bottom:10px">Ce téléphone ne peut pas envoyer l'image directement. 1) Enregistrez l'image ; 2) ouvrez WhatsApp avec le texte prêt, puis ajoutez l'image (ou mettez-la en statut).</p>
+    ${urls.map((u, i) => `<a href="${u}" download="${esc(files[i].name)}" class="card" style="display:block;margin-bottom:8px;text-align:center"><img src="${u}" alt="" style="max-width:220px;width:100%;border-radius:12px"><div class="btn sm" style="margin-top:6px">Enregistrer l'image</div></a>`).join('')}
+    <a class="btn wa block" href="${waLink('', text)}" target="_blank" rel="noopener">${ico('wa')} Ouvrir WhatsApp avec le texte</a>
+    <button class="btn block" style="margin-top:8px" id="shCopy">Copier le texte</button>`);
+  $('#shCopy').onclick = () => copyText(text);
+}
+// Plusieurs produits : on coche, on partage (jusqu'à 10 images)
+let shSel = new Set();
+function shareSheet(){
+  const L = S.products.slice().sort((a, b) => (b.photo ? 1 : 0) - (a.photo ? 1 : 0) || byName(a, b));
+  sheet('Partager des produits sur WhatsApp', `<p class="note" style="margin-bottom:10px">Cochez jusqu'à 10 produits : chacun devient une image (photo, nom, prix) à envoyer à un client, dans un groupe ou sur votre statut. Le message contient le lien pour commander.</p>
+    ${shopOnline() ? '' : `<div class="warnbox" style="margin-bottom:10px">Votre boutique en ligne est fermée : le lien ouvrira une discussion WhatsApp avec vous. Pour que le client ajoute au panier, ouvrez-la dans Réglages → Ma boutique en ligne.</div>`}
+    <div class="list" id="shL">${L.map(p => `<label class="it" style="cursor:pointer">${pic(p)}<div class="m"><div class="t">${esc(p.name)}</div><div class="d">${esc(amt(num(p.sell), p.cur))}${p.photo ? '' : ' · sans photo'}${p.hide ? ' · caché de la boutique' : ''}</div></div><input type="checkbox" data-sp="${p.id}" ${shSel.has(p.id) ? 'checked' : ''} style="width:24px;height:24px;min-height:0;flex:none"></label>`).join('') || '<div class="empty">Aucun produit</div>'}</div>
+    <p class="note" id="shN" style="margin:10px 0"></p>
+    <button class="btn wa block" id="shGo">${ico('wa')} Partager</button>`);
+  const cnt = () => { $('#shN').textContent = shSel.size ? shSel.size + ' produit(s) choisi(s)' + (shSel.size > 10 ? ' : 10 au maximum' : '') : 'Cochez les produits à partager'; };
+  $('#shL').onchange = e => { const i = e.target.closest('[data-sp]'); if(!i) return; if(i.checked) shSel.add(i.dataset.sp); else shSel.delete(i.dataset.sp); cnt(); };
+  $('#shGo').onclick = () => { if(!shSel.size) return toast('Cochez au moins un produit'); if(shSel.size > 10) return toast('10 produits au maximum à la fois'); shareProducts([...shSel].map(prod)); };
+  cnt();
+}
+const shareBtn = p => p ? `<button class="btn wa block" style="margin-bottom:12px" data-a="pshare:${p.id}">${ico('wa')} Partager sur WhatsApp (photo + lien)</button>` : '';
+Object.assign(A, {pshare: id => shareProducts([prod(id)]), sharep: () => shareSheet()});
+
 /* ---------- Formulaires : fonctionnent même dans un aperçu restreint (sans envoi de formulaire) ---------- */
 document.addEventListener('click', e => {
   const b = e.target.closest('form button:not([type=button])'); if(!b) return;
@@ -6015,7 +6101,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'a6e5e39fbf';
+const APP_BUILD = 'fbf7df0580';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;

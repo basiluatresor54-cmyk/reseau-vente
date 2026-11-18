@@ -6,6 +6,12 @@
 <title>Boutique</title>
 <meta name="theme-color" content="#0F766E">
 <meta name="description" content="Commandez en ligne, livraison rapide. Paiement à la livraison.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Boutique en ligne — commandez en 1 minute">
+<meta property="og:description" content="Choisissez vos produits, ajoutez au panier, la commande part sur WhatsApp. Livraison rapide, paiement à la livraison.">
+<meta property="og:image" content="https://basiluatresor54-cmyk.github.io/reseau-vente/boutique/apercu.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <style>
 :root{--brand:#0F766E;--brand-rgb:15,118,110;--bg:#f4f5f7;--card:rgba(255,255,255,.72);--ink:#16181d;--muted:#6b7280;--line:#e7e9ee;--ok:#15803d}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:rgba(32,35,43,.66);--ink:#e8eaed;--muted:#9aa1ac;--line:#2c313a}}
@@ -93,6 +99,8 @@ async function boot(){
   document.title = (SHOP.shop || SHOP.name) + ' — Boutique en ligne';
   try{ CART = JSON.parse(localStorage.getItem('cart_' + shopId) || '{}'); }catch(_){}
   render();
+  // Lien partagé d'un produit (…&p=identifiant) : on ouvre directement sa fiche, prête à ajouter au panier
+  const pid = new URLSearchParams(location.search).get('p'); if(pid && PRODS.some(p => String(p.id) === pid)) openDetail(pid);
 }
 const saveCart = () => { try{ localStorage.setItem('cart_' + shopId, JSON.stringify(CART)); }catch(_){} };
 function render(){
