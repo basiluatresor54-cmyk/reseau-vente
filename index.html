@@ -6101,7 +6101,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'ba85644c7f';
+const APP_BUILD = '431f6efb11';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -7767,7 +7767,7 @@ A.admrefmm = async uid => { if(!await ask('Effacer le numéro Mobile Money de ce
 (() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
   const main = $('#main'); if(!main || !ONLINE.shop) return;
   if(view === 'admin' && ONLINE.admin){ if(Date.now() - ADMR.t > 60000) loadAdmRef();
-    const pf = main.querySelector('#pricef'); if(pf && ADMR.d){ pf.closest('.card').insertAdjacentHTML('beforebegin', admRefBlock()); admRefWire(); } return; }
+    const pf = main.querySelector('#pricef'); if(pf && ADMR.d){ pf.closest('.card').insertAdjacentHTML('beforebegin', admRefCompact()); } return; }
   if(!refOwner()) return;
   refAttachSaved().then(() => loadRef());
   const paid = REF.d ? REF.d.paid : ONLINE.shop.status === 'actif', c = refCfg();
@@ -7776,6 +7776,123 @@ A.admrefmm = async uid => { if(!await ask('Effacer le numéro Mobile Money de ce
     main.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:12px;border:2px dashed var(--brand)"><b>Gagnez de l'argent avec Réseau &amp; Vente</b><p class="note" style="margin:4px 0 10px">Dès votre abonnement payé, vous devenez ambassadeur : invitez d'autres commerçants et gagnez <b>${c.pct1} %</b> de leur abonnement, puis <b>${c.pct2} %</b> à chaque renouvellement.</p><div class="btns"><button class="btn sm primary" data-a="amb">Voir comment</button><button class="btn sm" data-a="amblater">Plus tard</button></div></div>`); }
 }catch(e){ console.error(e); } }; })();
 A.amblater = () => { try{ localStorage.setItem('stock_amb_later', today()); }catch(_){} render(); };
+
+/* ---------- Espace BASILUA TECH : tableau complet des ambassadeurs (tout calculé automatiquement) ---------- */
+CSUB.ambadmin = 'Tableau des ambassadeurs';
+const AMBT = {q:'', f:'tous', sort:'payants', det:{}};
+const ambSolde = x => Math.round((num(x.gagne) - num(x.retire) - num(x.en_cours)) * 100) / 100;
+function ambTotals(L){ const s = k => L.reduce((t, x) => t + num(x[k]), 0);
+  return {n:L.length, actifs:L.filter(x => x.status === 'actif' && x.accepted).length, filleuls:s('filleuls'), payants:s('payants'), ca:s('ca'), gagne:s('gagne'), bonus:s('bonus'), attente:s('attente'), retire:s('retire'), en_cours:s('en_cours'), apayer:L.reduce((t, x) => t + Math.max(0, ambSolde(x)) + num(x.en_cours), 0)}; }
+function ambPayCards(d){ const pend = (d.payouts || []).filter(p => p.status === 'demande');
+  return pend.length ? `<p class="note" style="margin:0 2px 8px"><b>${pend.length} retrait(s) à payer</b> : envoyez l'argent depuis votre téléphone, puis touchez « Argent envoyé ». Tout le reste est calculé automatiquement.</p>${pend.map(p => `<div class="card" style="margin-bottom:8px;border:2px solid var(--brand)"><div style="display:flex;justify-content:space-between"><b>${esc(p.name || '—')}</b><b class="num">${usd(p.amount)}</b></div>
+    <div class="note">${esc(telPretty(p.phone || ''))} · demandé ${esc(fmtDate(String(p.at).slice(0, 10)))}</div>
+    ${p.method === 'mm' ? `<div class="dl"><span>${esc(p.op)}</span><span><b class="num" style="font-size:17px">${esc(p.num)}</b> <button class="btn sm" data-a="copypay" data-v="${esc(p.num)}">Copier</button></span></div>${p.mm_name ? `<div class="dl"><span>Au nom de</span><span>${esc(p.mm_name)}</span></div>` : ''}` : '<div class="dl"><span>Choix</span><span>Jours gratuits (ajoutés tout seuls)</span></div>'}
+    <div class="btns" style="margin-top:8px"><button class="btn primary" data-a="admrefok:${p.id}">${p.method === 'mm' ? 'Argent envoyé' : 'Ajouter les jours'}</button><button class="btn ghost-bad" data-a="admrefko:${p.id}">Refuser</button></div></div>`).join('')}` : '<div class="card empty" style="margin-bottom:8px">Aucun retrait à payer.</div>'; }
+// Carte courte dans l'Espace BASILUA TECH
+function admRefCompact(){ const d = ADMR.d; if(!d) return ''; const T = ambTotals(d.ambassadors || []);
+  return `<div class="sec"><h2>Programme Ambassadeur</h2><button class="link" data-a="admrefreload">Actualiser</button></div>
+    ${ambPayCards(d)}
+    <button class="card" data-a="nav:ambadmin" style="width:100%;text-align:left;margin-bottom:12px;border:2px solid var(--brand);cursor:pointer;font:inherit;color:inherit"><b>Ouvrir le tableau des ambassadeurs</b><div class="note" style="margin-top:4px">${T.actifs} ambassadeur(s) · ${T.payants} filleul(s) payant(s) · ${usd(T.ca)} apportés · ${usd(T.apayer)} à payer</div></button>`; }
+function ambRow(x){ const so = ambSolde(x);
+  return `<button class="it" data-a="ambdet:${x.user_id}"><div class="ic c-brand">${esc(initials(x.name || x.code))}</div><div class="m"><div class="t">${esc(x.name || '—')} · ${esc(x.code)}${x.status !== 'actif' ? ' · ' + esc(x.status) : !x.accepted ? ' · pas encore accepté' : ''}</div>
+    <div class="d">${x.filleuls} filleul(s), ${x.payants} payant(s) · ${usd(x.ca)} apportés · gagné ${usd(x.gagne)}${num(x.attente) ? ' (+' + usd(x.attente) + ' en attente)' : ''}</div>
+    <div class="d">${esc(telPretty(x.phone || ''))}${x.mm_num ? ' · paie sur ' + esc(x.mm_op) + ' ' + esc(x.mm_num) : ' · pas de numéro'}${x.client_actif ? '' : ' · abonnement expiré'}</div></div>
+    <div class="r"><b class="num">${usd(so)}</b><div class="sm">${num(x.en_cours) ? 'retrait demandé' : 'solde'}</div></div></button>`; }
+function ambList(){ const d = ADMR.d || {}, q = norm0(AMBT.q);
+  let L = (d.ambassadors || []).filter(x => !q || norm0([x.name, x.code, x.phone, x.mm_num].join(' ')).includes(q));
+  if(AMBT.f === 'apayer') L = L.filter(x => num(x.en_cours) > 0 || ambSolde(x) >= num((d.cfg || {}).min || 5));
+  else if(AMBT.f === 'suspendus') L = L.filter(x => x.status !== 'actif');
+  else if(AMBT.f === 'mois') L = L.filter(x => num(x.mois) > 0);
+  const key = {payants:x => num(x.payants), solde:x => ambSolde(x) + num(x.en_cours), ca:x => num(x.ca), recent:x => Date.parse(x.created_at) || 0}[AMBT.sort];
+  L.sort((a, b) => key(b) - key(a));
+  return L.map(ambRow).join('') || '<div class="empty">Aucun ambassadeur.</div>'; }
+CUSTOM.ambadmin = () => {
+  if(!ONLINE.admin) return `<div class="card empty">Accès réservé.</div>`;
+  const d = ADMR.d; if(!d) return `<div class="card empty">Chargement…</div>`;
+  const T = ambTotals(d.ambassadors || []), c = Object.assign({}, REF_DEF, d.cfg || {}), last = (d.top || [])[0], garde = T.ca - T.gagne - T.attente;
+  return `<div class="kpis">
+    <div class="kpi"><div class="l">Ambassadeurs</div><div class="v num">${T.actifs}</div><div class="s">actifs sur ${T.n}</div></div>
+    <div class="kpi"><div class="l">Filleuls</div><div class="v num">${T.payants}</div><div class="s">payants sur ${T.filleuls}</div></div>
+    <div class="kpi"><div class="l">Argent apporté</div><div class="v num pos">${usd(T.ca)}</div><div class="s">abonnements des filleuls</div></div>
+    <div class="kpi"><div class="l">Commissions</div><div class="v num">${usd(T.gagne)}</div><div class="s">dont bonus ${usd(T.bonus)}${T.attente ? ' · ' + usd(T.attente) + ' en attente' : ''}</div></div>
+    <div class="kpi"><div class="l">Déjà payé</div><div class="v num">${usd(T.retire)}</div><div class="s">aux ambassadeurs</div></div>
+    <div class="kpi"><div class="l">Reste à payer</div><div class="v num neg">${usd(T.apayer)}</div><div class="s">soldes + retraits demandés</div></div>
+    <div class="kpi"><div class="l">Ce que vous gardez</div><div class="v num pos">${usd(garde)}</div><div class="s">argent apporté − commissions</div></div>
+  </div>
+  <div class="sec"><h2>À faire</h2><button class="link" data-a="admrefreload">Actualiser</button></div>
+  ${ambPayCards(d)}
+  ${last && last.n >= num(c.bonus_min) && !last.bonus_done && num(c.bonus) > 0 ? `<div class="card" style="margin-bottom:8px;border:2px solid var(--brand)"><b>Gagnant du concours du mois dernier : ${esc(last.name)}</b><p class="note">${last.n} filleuls payants (minimum ${c.bonus_min}).</p><button class="btn primary block" style="margin-top:8px" data-a="admrefbonus:${last.user_id}">Donner le bonus de ${usd(c.bonus)}</button></div>` : ''}
+  <div class="sec"><h2>Tous les ambassadeurs</h2></div>
+  <input class="search" type="search" placeholder="Nom, code, téléphone…" value="${esc(AMBT.q)}" oninput="AMBT.q=this.value;document.getElementById('ambL').innerHTML=ambList()">
+  <div class="chips wrapc" style="margin:8px 0">${[['tous','Tous'],['apayer','À payer'],['mois','Actifs ce mois'],['suspendus','Suspendus']].map(([k, t]) => `<button class="chip ${AMBT.f === k ? 'on' : ''}" data-a="ambf:${k}">${t}</button>`).join('')}</div>
+  <div class="chips wrapc" style="margin:0 0 8px">${[['payants','Plus de filleuls payants'],['solde','Plus gros solde'],['ca','Plus d\'argent apporté'],['recent','Plus récents']].map(([k, t]) => `<button class="chip ${AMBT.sort === k ? 'on' : ''}" data-a="ambs:${k}">${t}</button>`).join('')}</div>
+  <div class="list" id="ambL">${ambList()}</div>
+  <div class="sec"><h2>Classement</h2></div>
+  <div class="card" style="margin-bottom:8px"><b>Ce mois</b>${(d.top_now || []).map((t, i) => `<div class="dl"><span>${i + 1}. ${esc(t.name || '—')}</span><span>${t.n} payant(s) · ${usd(num(t.g))}</span></div>`).join('') || '<p class="note">Personne pour le moment.</p>'}
+    <b style="display:block;margin-top:10px">Mois dernier</b>${(d.top || []).map((t, i) => `<div class="dl"><span>${i + 1}. ${esc(t.name || '—')}${t.bonus_done ? ' · bonus donné' : ''}</span><span>${t.n} payant(s)</span></div>`).join('') || '<p class="note">Personne.</p>'}</div>
+  <details class="card" style="margin-bottom:8px"><summary><b>Derniers gains</b></summary><div class="list" style="margin-top:8px">${(d.earnings || []).map(e => `<div class="it" style="cursor:default"><div class="m"><div class="t">${esc(e.parrain || '—')} · +${usd(e.amount)}</div><div class="d">${e.kind === 'premier' ? 'Premier paiement' : e.kind === 'bonus' ? 'Bonus' : 'Renouvellement'}${e.filleul ? ' de ' + esc(e.filleul) : ''} · ${esc(fmtDate(String(e.at).slice(0, 10)))}</div></div><div class="r"><span class="pill ${(REF_ST[e.status] || [])[1] || ''}">${(REF_ST[e.status] || [e.status])[0]}</span>${e.status !== 'annule' ? `<button class="btn sm" style="margin-top:4px" data-a="admrefcancel:${e.id}">Annuler</button>` : ''}</div></div>`).join('') || '<div class="empty">Aucun gain.</div>'}</div></details>
+  <div class="sec"><h2>Outils</h2></div>
+  <form id="ambAssign" class="card" style="margin-bottom:8px"><b>Rattacher un commerçant à un ambassadeur</b><p class="note" style="margin:4px 0 8px">Quand un commerçant a oublié le code. Si son premier paiement date de moins de 30 jours, la commission est ajoutée tout de suite.</p>
+    <div class="row2">${field('Téléphone du commerçant', `<input name="ph" type="tel" required placeholder="08…">`)}${field('Code de l\'ambassadeur', `<input name="code" required autocapitalize="characters" placeholder="MARIE07">`)}</div><button class="btn block">Rattacher</button></form>
+  <button class="btn block" style="margin-bottom:8px" data-a="ambxlsx">Télécharger tout le tableau (Excel)</button>
+  ${admRefSettings(c)}`;
+};
+function admRefSettings(c){ return `<details class="card" style="margin-bottom:12px"><summary><b>Réglages du programme</b></summary><form id="refCfgF" style="margin-top:8px">
+      <label class="f" style="display:flex;gap:10px;align-items:center;margin:0 0 10px"><input type="checkbox" name="on" ${c.on ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Programme ouvert (nouvelles commissions)</span></label>
+      <div class="row2">${field('Premier paiement (%)', `<input name="pct1" type="number" step="0.1" min="0" max="90" value="${esc(c.pct1)}">`)}${field('Renouvellements (%)', `<input name="pct2" type="number" step="0.1" min="0" max="90" value="${esc(c.pct2)}">`)}</div>
+      <div class="row2">${field('Renouvellements pendant (mois)', `<input name="months" type="number" min="0" max="60" value="${esc(c.months)}">`)}${field('Retrait minimum ($)', `<input name="min" type="number" step="0.5" min="0" value="${esc(c.min)}">`)}</div>
+      <div class="row2">${field('Bonus du mois ($)', `<input name="bonus" type="number" step="0.5" min="0" value="${esc(c.bonus)}">`)}${field('Filleuls payants minimum', `<input name="bonus_min" type="number" min="0" value="${esc(c.bonus_min)}">`)}</div>
+      <div class="row2">${field('Filleul qui paie dans les (jours)', `<input name="fast_days" type="number" min="0" max="30" value="${esc(c.fast_days)}">`)}${field('reçoit en plus (jours)', `<input name="fast_bonus" type="number" min="0" max="60" value="${esc(c.fast_bonus)}">`)}</div>
+      <button class="btn block">Enregistrer les réglages</button></form></details>`; }
+CUSTOM_AFTER.ambadmin = () => {
+  const bk = $('#main .back'); if(bk){ bk.dataset.a = 'nav:admin'; bk.textContent = '‹ Espace BASILUA TECH'; }
+  if(!ADMR.d || Date.now() - ADMR.t > 60000) loadAdmRef();
+  admRefWire();
+  const f = $('#ambAssign'); if(f) f.onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements;
+    if(!await ask(`Rattacher le commerçant ${esc(E.ph.value.trim())} à l'ambassadeur ${esc(E.code.value.trim().toUpperCase())} ?`, 'Rattacher', false)) return;
+    const {data, error} = await sb.rpc('admin_ref_assign', {p_phone:E.ph.value.trim(), p_code:E.code.value.trim()}); if(error) return toast(rpcErr(error));
+    toast(`${data.filleul || 'Commerçant'} rattaché à ${data.parrain || 'l\'ambassadeur'}${num(data.commission) ? ' · +' + usd(data.commission) : ''}`); loadAdmRef(); };
+};
+{ const l0 = loadAdmRef; loadAdmRef = async function(){ await l0(); if(view === 'ambadmin') render(); }; }
+A.ambf = k => { AMBT.f = k; render(); };
+A.ambs = k => { AMBT.sort = k; render(); };
+A.ambdet = async uid => { const x = ((ADMR.d || {}).ambassadors || []).find(y => y.user_id === uid); if(!x) return;
+  sheet(x.name || x.code, '<div class="empty">Chargement…</div>');
+  const {data, error} = await sb.rpc('admin_ref_detail', {p_user:uid}); if(error){ toast(rpcErr(error)); return; }
+  AMBT.det[uid] = data; const F = data.filleuls || [], E = data.earnings || [], P = data.payouts || [], so = ambSolde(x);
+  sheet(x.name || x.code, `<div class="card" style="margin-bottom:10px"><div class="dl"><span>Code</span><span><b>${esc(x.code)}</b>${x.status !== 'actif' ? ' · ' + esc(x.status) : ''}</span></div>
+      <div class="dl"><span>Téléphone</span><span>${esc(telPretty(x.phone || ''))}</span></div>
+      <div class="dl"><span>Payé sur</span><span>${x.mm_num ? esc(x.mm_op) + ' ' + esc(x.mm_num) + (x.mm_name ? ' (' + esc(x.mm_name) + ')' : '') : 'pas de numéro'}</span></div>
+      <div class="dl"><span>Règlement accepté</span><span>${x.accepted_at ? esc(fmtDate(String(x.accepted_at).slice(0, 10), true)) : 'non'}</span></div>
+      <div class="dl"><span>Son abonnement</span><span>${x.client_actif ? 'payé, en cours' : 'expiré : nouveaux gains en attente'}</span></div></div>
+    <div class="kpis"><div class="kpi"><div class="l">Filleuls</div><div class="v num">${x.payants}/${x.filleuls}</div><div class="s">payants / inscrits</div></div><div class="kpi"><div class="l">Argent apporté</div><div class="v num pos">${usd(x.ca)}</div></div>
+      <div class="kpi"><div class="l">Gagné</div><div class="v num">${usd(x.gagne)}</div><div class="s">${num(x.attente) ? usd(x.attente) + ' en attente' : 'commissions + bonus'}</div></div><div class="kpi"><div class="l">Solde</div><div class="v num">${usd(so)}</div><div class="s">${num(x.en_cours) ? usd(x.en_cours) + ' demandé' : 'retiré ' + usd(x.retire)}</div></div></div>
+    <div class="btns" style="margin-top:10px">${x.phone ? `<a class="btn wa" href="${waLink(x.phone, `Bonjour ${x.name || ''} 👋\n`)}" target="_blank" rel="noopener">${ico('wa')} Écrire</a>` : ''}<button class="btn" data-a="admrefst:${x.user_id}|${x.status === 'actif' ? 'suspendu' : 'actif'}">${x.status === 'actif' ? 'Suspendre' : 'Réactiver'}</button>${x.mm_num ? `<button class="btn" data-a="admrefmm:${x.user_id}">Effacer le numéro</button>` : ''}</div>
+    <form id="ambBonus" class="card" style="margin-top:10px"><b>Ajouter un gain (bonus, correction)</b><div class="row2" style="margin-top:6px">${field('Montant ($)', `<input name="amt" type="number" step="0.01" min="0.01" required>`)}${field('Raison', `<input name="note" required placeholder="Ex : correction, bonus spécial">`)}</div><button class="btn block">Ajouter</button></form>
+    <div class="sec"><h2>Ses filleuls (${F.length})</h2></div>
+    <div class="list">${F.map(f => `<div class="it" style="cursor:default"><div class="m"><div class="t">${esc(f.name || '—')}${f.shop ? ' · ' + esc(f.shop) : ''}</div><div class="d">${esc(telPretty(f.phone || ''))} · inscrit ${esc(fmtDate(String(f.at).slice(0, 10)))}${f.paid_until ? ' · jusqu\'au ' + esc(fmtDate(f.paid_until)) : ''}</div><div class="d">${(f.pays || []).length ? (f.pays || []).map(p => `${fmtDate(String(p.at).slice(0, 10))} : ${usd(p.amount)} (${p.months} mois, ${esc(p.code)})`).join(' · ') : 'aucun paiement'}</div></div><div class="r"><span class="pill ${(f.pays || []).length ? 'p-livre' : 'p-attente'}">${(f.pays || []).length ? 'A payé' : esc(f.shop_status || 'essai')}</span><div class="sm">${usd(f.gain)}</div></div></div>`).join('') || '<div class="empty">Aucun filleul.</div>'}</div>
+    <div class="sec"><h2>Ses gains</h2></div>
+    <div class="list">${E.map(e => `<div class="it" style="cursor:default"><div class="m"><div class="t">+${usd(e.amount)} · ${e.kind === 'premier' ? 'Premier paiement' : e.kind === 'bonus' ? 'Bonus' : 'Renouvellement'}${e.filleul ? ' de ' + esc(e.filleul) : ''}</div><div class="d">${esc(fmtDate(String(e.at).slice(0, 10)))}${num(e.pct) ? ' · ' + e.pct + ' % de ' + usd(e.base) : ''}${e.note ? ' · ' + esc(e.note) : ''}</div></div><div class="r"><span class="pill ${(REF_ST[e.status] || [])[1] || ''}">${(REF_ST[e.status] || [e.status])[0]}</span>${e.status !== 'annule' ? `<button class="btn sm" style="margin-top:4px" data-a="admrefcancel:${e.id}">Annuler</button>` : ''}</div></div>`).join('') || '<div class="empty">Aucun gain.</div>'}</div>
+    <div class="sec"><h2>Ses retraits</h2></div>
+    <div class="list">${P.map(p => `<div class="it" style="cursor:default"><div class="m"><div class="t">${usd(p.amount)} · ${p.method === 'mm' ? esc(p.op) + ' ' + esc(p.num) : 'jours gratuits' + (p.days ? ' (' + p.days + ' j)' : '')}</div><div class="d">demandé ${esc(fmtDate(String(p.at).slice(0, 10)))}${p.decided_at ? ' · traité ' + esc(fmtDate(String(p.decided_at).slice(0, 10))) : ''}</div></div><div class="r"><span class="pill ${(REF_ST[p.status] || [])[1] || ''}">${(REF_ST[p.status] || [p.status])[0]}</span></div></div>`).join('') || '<div class="empty">Aucun retrait.</div>'}</div>`);
+  $('#ambBonus').onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements, v = num(E.amt.value); if(!(v > 0)) return toast('Montant invalide');
+    if(!await ask(`Ajouter ${usd(v)} à ${esc(x.name || x.code)} (${esc(E.note.value.trim())}) ?`, 'Ajouter', false)) return;
+    const {error} = await sb.rpc('admin_ref_bonus', {p_user:uid, p_amount:v, p_note:E.note.value.trim()}); if(error) return toast(rpcErr(error)); toast('Gain ajouté'); await loadAdmRef(); A.ambdet(uid); };
+};
+A.ambxlsx = async () => { const d = ADMR.d; if(!d) return; toast('Préparation du fichier…');
+  const L = d.ambassadors || [], P = d.payouts || [];
+  const blob = xlsxBlob([
+    {name:'Ambassadeurs', widths:[22,12,16,10,18,16,10,10,14,14,12,12,12,12,14], rows:[['Nom','Code','Téléphone','Statut','Réseau','Numéro de paiement','Filleuls','Payants','Argent apporté ($)','Gagné ($)','Dont bonus ($)','En attente ($)','Retiré ($)','Demandé ($)','Solde ($)'],
+      ...L.map(x => [x.name || '', x.code, x.phone || '', x.status, x.mm_op || '', x.mm_num || '', +x.filleuls, +x.payants, num(x.ca), num(x.gagne), num(x.bonus), num(x.attente), num(x.retire), num(x.en_cours), ambSolde(x)])]},
+    {name:'Retraits', widths:[22,12,10,14,18,16,12,14], rows:[['Ambassadeur','Montant ($)','Mode','Réseau','Numéro','Statut','Demandé le','Traité le'],
+      ...P.map(p => [p.name || '', num(p.amount), p.method === 'mm' ? 'Mobile Money' : 'Jours gratuits', p.op || '', p.num || '', (REF_ST[p.status] || [p.status])[0], String(p.at).slice(0, 10), String(p.decided_at || '').slice(0, 10)])]},
+    {name:'Gains', widths:[22,22,16,12,12,12], rows:[['Ambassadeur','Filleul','Type','Montant ($)','Statut','Date'],
+      ...(d.earnings || []).map(e => [e.parrain || '', e.filleul || '', e.kind === 'premier' ? 'Premier paiement' : e.kind === 'bonus' ? 'Bonus' : 'Renouvellement', num(e.amount), (REF_ST[e.status] || [e.status])[0], String(e.at).slice(0, 10)])]}]);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ambassadeurs-' + today() + '.xlsx'; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500); };
+// Menu Plus de BASILUA TECH
+(() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
+  if(view === 'plus' && ONLINE.admin){ const m = $('#main [data-a="nav:admin"]'); if(m) m.insertAdjacentHTML('afterend', `<button class="it" data-a="nav:ambadmin"><div class="ic c-in">${ico('user')}</div><div class="m"><div class="t">Tableau des ambassadeurs</div><div class="d" style="white-space:normal">Filleuls, gains, retraits à payer, réglages</div></div>${ico('chev')}</button>`); }
+}catch(e){ console.error(e); } }; })();
 
 </script>
 </body>
