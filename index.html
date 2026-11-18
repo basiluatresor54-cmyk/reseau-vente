@@ -866,6 +866,7 @@ function vStock(){
     <div class="chips" style="margin:8px 0 0"><button class="chip ${!stockAsOf ? 'on' : ''}" data-a="sasof" data-d="">Aujourd'hui (actuel)</button><button class="chip ${stockAsOf === addDays(t, -1) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -1)}">Hier soir</button><button class="chip ${stockAsOf === addDays(t, -7) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -7)}">Il y a 7 jours</button></div>
     ${stockAsOf ? `<p class="note" style="margin:8px 0 0">⏪ Vous voyez le stock tel qu'il était <b>à la fin du ${esc(dAbs(stockAsOf, 1))}</b>. <button class="link" data-a="sasof" data-d="">Revenir au stock actuel</button> · <button class="link" data-a="shday" data-d="${stockAsOf}">Mouvements de ce jour ›</button></p>` : ''}</div>
   <input class="search" type="search" placeholder="Rechercher un produit…" value="${esc(stockQ)}" oninput="stockQ=this.value;refreshList('stock')">
+  <div id="sfilw">${stockFiltChips()}</div>
   ${stockAsOf || isVendeur() ? '' : (n => n ? `<button class="card daycard" data-a="rachat"><span><b>À racheter</b> · ${n} produit(s) presque fini(s)</span><span class="note">Préparer la commande ›</span></button>` : '')(rachatList().length)}
   ${perimCard()}
   ${plansCard()}
@@ -898,7 +899,7 @@ function stockRows(){
   if(!S.products.length) return `<div class="list"><div class="empty"><b>Aucun produit</b>Ajoutez votre premier produit.</div></div>`;
   const MV = stockAsOf ? S.moves.filter(m => (mday(m) || '') <= stockAsOf && !(m.type === 'vente' && m.status !== 'livre' && (m.date || '') > stockAsOf)) : S.moves;
   const st = stockAt(MV), q = stockQ.trim().toLowerCase();
-  const match = p => !q || (p.name + ' ' + (p.cat||'')).toLowerCase().includes(q);
+  const match = p => stockFilt(p) && (!q || (p.name + ' ' + (p.cat||'') + ' ' + caracTxt(p)).toLowerCase().includes(q));
   const simple = S.products.filter(p => !isKit(p) && match(p)).sort(byName);
   const kits = S.products.filter(p => isKit(p) && match(p)).sort(byName);
   let units = 0, dep = 0, hand = 0, soldAll = 0;
@@ -907,7 +908,7 @@ function stockRows(){
   const fl = id => { const f = F[id] || {}, P = prod(id), Q = v => qv(P, r3(v || 0)); return `<div class="d">Entré <b>${Q(f.in)}</b> · <span class="green">Vendu <b>${Q(f.sold)}</b></span>${f.pend ? ' · En cours <b>' + Q(f.pend) + '</b>' : ''}${f.lost ? ' · Perdu <b>' + Q(f.lost) + '</b>' : ''}</div>`; };
   const row = p => { const tot = totalOf(st,p.id), cls = tot<=0 ? 'qty-zero' : tot<=(p.alert||0) ? 'qty-low' : '';
     return `<button class="it" data-a="prod:${p.id}">${pic(p)}
-      <div class="m"><div class="t">${esc(p.name)}</div><div class="d">Dépôt <b>${qv(p, qAt(st,'',p.id))}</b> · Chez livreurs <b>${qv(p, inHands(st,p.id))}</b></div>${packSplit(p, tot) ? `<div class="d">Soit ${packSplit(p, tot)}</div>` : ''}${fl(p.id)}<div class="d">${priceTxt(p)} · achat ${num(p.buy)>0 ? amt(p.buy, p.cur) : '?'} · commission ${commTxt(p)}${num(p.buy)>0?'':' · <span class="red">prix d\'achat ?</span>'}</div></div>
+      <div class="m"><div class="t">${esc(p.name)}</div>${caracLine(p)}<div class="d">Dépôt <b>${qv(p, qAt(st,'',p.id))}</b> · Chez livreurs <b>${qv(p, inHands(st,p.id))}</b></div>${packSplit(p, tot) ? `<div class="d">Soit ${packSplit(p, tot)}</div>` : ''}${fl(p.id)}<div class="d">${priceTxt(p)} · achat ${num(p.buy)>0 ? amt(p.buy, p.cur) : '?'} · commission ${commTxt(p)}${num(p.buy)>0?'':' · <span class="red">prix d\'achat ?</span>'}</div></div>
       <div class="r"><div class="big num ${cls}">${qv(p, tot)}</div><div class="sm">${decUnit(p) ? unitOf(p)[1] + ' ' : ''}total</div></div></button>`; };
   const krow = p => `<button class="it" data-a="prod:${p.id}">${p.photo ? pic(p) : `<div class="ic c-send">${ico('tag')}</div>`}
       <div class="m"><div class="t">${esc(p.name)}</div><div class="d">Pack : ${p.kit.map(c => c.q + ' × ' + esc(pname(c.pid))).join(' + ')}</div><div class="d"><span class="green">Vendus <b>${(F[p.id] || {}).packs || 0}</b> pack(s)</span></div><div class="d">${priceTxt(p)} · commission ${commTxt(p)}</div></div>
@@ -936,6 +937,7 @@ function vVentes(){
   ${cs.length > 1 ? `<div class="chips" style="margin-top:6px"><button class="chip ${!saleCity?'on':''}" data-a="scity:">Toutes les villes</button>${cs.map(c => `<button class="chip ${saleCity===c?'on':''}" data-a="scity:${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}
   <div style="height:10px"></div>
   <input class="search" type="search" placeholder="Rechercher client, produit, livreur…" value="${esc(saleQ)}" oninput="saleQ=this.value;refreshList('ventes')">
+  ${snOn() ? '<button class="link" data-a="imei" style="margin:-4px 0 10px">Vérifier un IMEI ou un numéro de série</button>' : ''}
   ${saleTab === 'attente' || saleTab === 'encours' ? `<p class="note" style="margin:0 0 8px">👆 Astuce : glissez une vente vers la droite → <b>Livré</b>, vers la gauche → <b>Annulé</b>.</p>` : ''}
   <div class="list swwrap" id="lst">${saleRows()}</div>
   <div style="margin-top:12px"><button class="btn primary block" data-a="new:vente">+ Nouvelle vente</button></div>`;
@@ -946,7 +948,7 @@ const cityOfSale = m => m.liv ? (liv(m.liv)?.city || 'Sans ville') : 'Dépôt';
 function saleRows(){
   const q = saleQ.trim().toLowerCase();
   const list = sortMoves(S.moves.filter(m => m.type === 'vente' && (saleTab === 'tous' || m.status === saleTab) && (!saleDay || saleDayOf(m) === saleDay) && (!saleCity || cityOfSale(m) === saleCity) &&
-    (!q || [pname(m.pid), m.client, m.phone, m.addr, lname(m.liv)].join(' ').toLowerCase().includes(q))));
+    (!q || [pname(m.pid), m.client, m.phone, m.addr, lname(m.liv), m.sn].join(' ').toLowerCase().includes(q))));
   if(saleTab === 'attente' || saleTab === 'encours') list.sort((a,b) => ((a.ddate||a.date) + (a.dtime||'99')).localeCompare((b.ddate||b.date) + (b.dtime||'99')));
   if(!list.length) return `<div class="empty"><b>Aucune vente${saleTab === 'tous' ? '' : ' « ' + STATUS[saleTab] + ' »'}${saleDay ? ' le ' + esc(dAbs(saleDay, 1)) : ''}</b>${saleTab==='attente' && !saleDay ?'Les commandes à livrer apparaîtront ici.':''}</div>`;
   const tot = list.reduce((s,m) => s + saleUSD(m), 0);
@@ -1199,8 +1201,9 @@ function vPlus(){
   ];
   if(isVendeur()){ const keep = ['clients', 'credits']; for(let i = items.length - 1; i >= 0; i--) if(!keep.includes(items[i][0])) items.splice(i, 1); }
   else if(impOn()) items.unshift(['import','c-send','box','📦 Commandes import',"Commandes sur demande (" + impFrom() + "…) : acomptes, étapes, reçus, marge"]);
+  if(snOn()) items.push(['__imei','c-out','tag','Vérifier un IMEI',"Retrouver la vente d'un téléphone, d'un ordinateur… et sa garantie"]);
   if(!isStandalone()) items.push(['__install','c-brand','set',"📲 Installer l'application","iPhone, Android ou ordinateur : une icône comme une vraie application"]);
-  return `${gsBar()}<div class="list menu">${items.map(([v,c,i,t,d]) => `<button class="it" data-a="${v === '__install' ? 'install' : 'nav:' + v}"><div class="ic ${c}">${ico(i)}</div><div class="m"><div class="t">${t}</div><div class="d" style="white-space:normal">${d}</div></div>${ico('chev')}</button>`).join('')}</div>
+  return `${gsBar()}<div class="list menu">${items.map(([v,c,i,t,d]) => `<button class="it" data-a="${v === '__install' ? 'install' : v === '__imei' ? 'imei' : 'nav:' + v}"><div class="ic ${c}">${ico(i)}</div><div class="m"><div class="t">${t}</div><div class="d" style="white-space:normal">${d}</div></div>${ico('chev')}</button>`).join('')}</div>
   <div class="sec cost"><h2>Raccourcis</h2></div>
   <div class="btns cost"><button class="btn" data-a="money:depense">+ Dépense</button><button class="btn" data-a="money:versement">+ Versement livreur</button><button class="btn" data-a="new:perte">− Sortie / perte</button><button class="btn" data-a="backup">Sauvegarde</button><button class="btn" data-a="soir">🌙 Point du soir</button><button class="btn" data-a="style:${glassPref()==='verre'?'simple':'verre'}">${glassPref()==='verre' ? 'Style simple' : '✨ Style verre'}</button><button class="btn" data-a="themetoggle">${isDark() ? '☀️ Mode clair' : '🌗 Mode sombre'}</button></div>
   <div style="margin-top:8px"><button class="btn block" data-a="tpl">📋 Modèle de commande pour WhatsApp</button></div>`;
@@ -1460,7 +1463,7 @@ function whenTxt(m){ const d = m.ddate || m.date; return fmtDate(d, true) + (m.d
 function receiptClient(m){
   const st = S.settings, L = liv(m.liv), fee = L && feeTxt(m) ? feeTxt(m) : '', items = orderLines(m), done = items.every(x => x.status === 'livre');
   const tot = {}; items.forEach(it => tot[it.cur] = (tot[it.cur] || 0) + it.qty*it.price);
-  const lines = items.length > 1 ? items.map(it => `• ${pname(it.pid)} × ${mvQty(it)} — ${amt(it.qty*it.price, it.cur)}`).join('\n') : `📦 Produit : ${pname(m.pid)}\n🔢 Quantité : ${mvQty(m)}\n💵 ${m.pk && num(m.pq) ? 'Prix par ' + plural(m.pk, 1) + ' : ' + amt(r4(m.price * num(m.pq)), m.cur) : 'Prix unitaire : ' + amt(m.price, m.cur)}`;
+  const lines = items.length > 1 ? items.map(it => `• ${pname(it.pid)} × ${mvQty(it)} — ${amt(it.qty*it.price, it.cur)}${snLine(it, '\n   ')}`).join('\n') : `📦 Produit : ${pname(m.pid)}\n🔢 Quantité : ${mvQty(m)}${snLine(m, '\n')}\n💵 ${m.pk && num(m.pq) ? 'Prix par ' + plural(m.pk, 1) + ' : ' + amt(r4(m.price * num(m.pq)), m.cur) : 'Prix unitaire : ' + amt(m.price, m.cur)}`;
   const head = [st.slogan, st.addr ? '📍 ' + st.addr : '', st.wa ? '📞 ' + st.wa + (st.tel2 ? ' · ' + st.tel2 : '') : '', st.email ? '✉️ ' + st.email : '', st.legal].filter(Boolean).join('\n');
   return `*${st.shop}* 🧾${head ? '\n' + head : ''}\n\n*${done || m.pre ? 'FACTURE — PAYÉE' : 'FACTURE PRO FORMA'}*\nN° ${invNo(m)} · ${new Date((m.date || today()) + 'T12:00:00').toLocaleDateString('fr-FR')}\n\nBonjour ${m.client || ''} 👋\n${done ? 'Merci pour votre achat !' : 'Votre commande est bien enregistrée.'}\n\n${lines}\n${(() => { const sh = shipOf(m); if(!sh) return ''; return `\n🚚 Expédition vers ${shipLine(sh)} : ${amt(num(sh.fee), sh.cur)}`; })()}\n*${done || m.pre ? 'Total payé' : 'Total à payer'} : ${(() => { const sh = shipOf(m), t2 = Object.assign({}, tot); if(sh && num(sh.fee)) t2[sh.cur] = (t2[sh.cur] || 0) + num(sh.fee); return Object.entries(t2).map(([cu,v]) => amt(v, cu)).join(' + '); })()}*${m.pre ? '\n✅ Payé par Mobile Money' : ''}${items.some(it => it.credit) ? (() => { const c = creditInfo(m); return `\n💳 Vente à crédit — déjà payé : ${amt(c.paid, c.cur)} · *reste à payer : ${amt(c.reste, c.cur)}*${c.due ? ' avant le ' + dAbs(c.due) : ''}`; })() : ''}${fee && !shipOf(m) ? '\n🛵 Frais de livraison : ' + fee + ' (à remettre au livreur)' : ''}${(items.find(it => it.pay) || {}).pay && !m.pre ? '\n💳 Paiement : ' + items.find(it => it.pay).pay : ''}\n\n📅 ${shipOf(m) ? 'Expédition' : 'Livraison'} : ${whenTxt(m)}${shipOf(m) ? '\n🚚 Colis envoyé par ' + (shipOf(m).co || 'l\'agence') + ' vers ' + (shipOf(m).city || '') + ' : retirez-le à l\'agence' : ''}\n📍 Adresse : ${m.addr || '-'}${L ? '\n🛵 Livreur : ' + L.name + (L.phone ? ' — ' + L.phone : '') : ''}${st.invNote ? '\n\n_' + st.invNote + '_' : ''}\n\nMerci pour votre confiance 🙏\n${st.shop}${st.wa ? ' · ' + st.wa : ''}`;
 }
@@ -1565,7 +1568,7 @@ async function receiptImage(m){
   y += 64;
   const tot = {}; items.forEach((it, i) => {
     const P = prod(it.pid) || {}, ph = imgs[i + 1]; x.font = F(600, 28);
-    const nl = wrapText(x, pname(it.pid), cols[1] - pad - (ph ? 130 : 40)).slice(0, 2), rh = Math.max(110, 40 + nl.length*38);
+    const nl = wrapText(x, pname(it.pid), cols[1] - pad - (ph ? 130 : 40)).slice(0, 2).concat(snImg(it).flatMap(t => wrapText(x, t, cols[1] - pad - (ph ? 130 : 40)))), rh = Math.max(110, 40 + nl.length*38);
     if(i % 2) { x.fillStyle = '#fafbfc'; x.fillRect(pad, y, W - pad*2, rh); }
     let tx = pad + 24; if(ph){ x.save(); rr(pad + 20, y + (rh-84)/2, 84, 84, 16); x.clip(); x.drawImage(ph, pad + 20, y + (rh-84)/2, 84, 84); x.restore(); tx = pad + 124; }
     nl.forEach((l,k) => T(l, tx, y + rh/2 - (nl.length-1)*19 + k*38 + 10, F(600, 28)));
@@ -2327,7 +2330,7 @@ function quickSale(){
     ${field('Produit *', `<select name="pid" required><option value="">Choisir un produit…</option>${prods.map(p => `<option value="${p.id}">${esc(p.name)} — ${avail(st,'',p.id)} dispo</option>`).join('')}</select>`)}
     <div id="qunit"></div><div class="row2">${field('Quantité *', `<div class="qty"><button type="button" class="btn sm" id="qm">−</button><input name="qty" type="number" min="1" step="1" required value="1"><button type="button" class="btn sm" id="qp">+</button></div>`)}
       ${field('Prix unitaire', `<input name="price" type="number" step="any" min="0">`, '<span id="qcur"></span>')}</div>
-    <div class="tot" id="qtot"></div><div id="qfefo"></div>
+    <div class="tot" id="qtot"></div><div id="qfefo"></div>${snField(null)}
     <div class="f"><span>Payé en</span><div class="seg" id="segP">${PAYS.slice(1).map(x => `<button type="button" data-p="${x}">${x}</button>`).join('')}</div></div>
     <details style="margin-bottom:12px"><summary class="note"><b>Client (optionnel)</b> — pour le reçu et la relance</summary>
       <div class="row2" style="margin-top:8px">${field('Nom', `<input name="client" placeholder="Ex : Mme Nsimba">`)}${field('Téléphone (WhatsApp)', `<input name="phone" type="tel" placeholder="08… ou +243…">${phoneTools()}`)}</div></details>
@@ -2336,7 +2339,7 @@ function quickSale(){
   const U = unitCtl({pid:E.pid, qty:E.qty, price:E.price, box:$('#qunit'), onChange:() => upd()});
   const paintP = () => [...$('#segP').children].forEach(b => b.classList.toggle('on', b.dataset.p === pay)); paintP();
   $('#segP').onclick = e => { const b = e.target.closest('button'); if(b){ pay = b.dataset.p; paintP(); } };
-  const upd = () => { U.hint(); const p = prod(E.pid.value); perimHint($('#qfefo'), p); if(!p){ $('#qtot').innerHTML = ''; return; }
+  const upd = () => { U.hint(); const p = prod(E.pid.value); perimHint($('#qfefo'), p); snShow(p, true); if(!p){ $('#qtot').innerHTML = ''; return; }
     const q = num(E.qty.value), pr = num(E.price.value), u = toUSD(q*pr, p.cur);
     $('#qcur').textContent = p.cur === 'FC' ? 'en ' + LC() : 'en dollars ($)';
     $('#qtot').innerHTML = `<span>Total à encaisser</span><b class="num">${amt(q*pr, p.cur)}</b><small>${p.cur==='FC' ? '≈ ' + money(u) + ' · ' : ''}<span class="cost">Bénéfice : ${money(u - U.base()*unitCostUSD(p))} · </span>Disponible : ${qv(p, avail(st,'',p.id))}${decUnit(p) ? ' ' + unitOf(p)[1] : ''}</small>`; };
@@ -2349,7 +2352,7 @@ function quickSale(){
     const qty = U.base(); if(!(qty > 0)){ toast('Quantité invalide'); return; }
     const now = new Date(), t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
     const rec = {id:uid(), ts:Date.now(), type:'vente', quick:true, ...U.tag(), pid:p.id, qty, price:U.per(E.price.value), cur:p.cur, rate:rate(), costU:unitCostUSD(p), commU:0, liv:'', status:'livre', pay,
-      client:E.client.value.trim(), phone:E.phone.value.trim(), addr:'', date:today(), ddate:today(), dtime:t, note:''};
+      client:E.client.value.trim(), phone:E.phone.value.trim(), addr:'', date:today(), ddate:today(), dtime:t, note:'', ...snRec(p, E)};
     const next = S.moves.concat([rec]), err = checkStock(next, [p.id]);
     if(err){ toast(err); return; }
     S.moves = next; S.settings.setup = true; save(); lastQuick = rec.id;
@@ -2548,7 +2551,7 @@ function productForm(id, opt = {}){
       <button type="button" class="btn sm" id="pfNoPhoto" ${p && p.photo ? '' : 'hidden'}>Retirer</button></div></div>
     ${field('Détails', `<textarea name="details" placeholder="Description, taille, couleur, contenance…">${esc(p?.details)}</textarea>`)}
     ${field("📖 Mode d'emploi (optionnel)", `<textarea name="usage" placeholder="Comment l'utiliser, combien de fois par jour, les précautions… Il sera prêt à envoyer au client après la livraison.">${esc(p?.usage)}</textarea>`)}
-    <div class="row2">${field('Catégorie', pickSel('cat', [...new Set(DEF_CATS.concat(sectCats(), cats))].sort(byFr), p?.cat || '', 'Choisir la catégorie…', '✏️ Autre catégorie…', 'Tapez la catégorie'))}
+    <div class="row2">${field('Catégorie', catPick(p?.cat || '', cats))}
       ${field('Devise du prix', `<select name="cur"><option value="$" ${p?.cur!=='FC'?'selected':''}>Dollar ($)</option><option value="FC" ${p?.cur==='FC'?'selected':''}>Monnaie locale (${esc(LC())})</option></select>`)}</div>
     <div class="row2">${field('Prix de vente *', `<input name="sell" type="number" step="any" min="0" required value="${p ? p.sell : ''}" placeholder="0">`)}${field('Prix normal avant promo', `<input name="old" type="number" step="any" min="0" value="${p && num(p.old) ? p.old : ''}" placeholder="Optionnel">`, 'Si rempli et plus haut : promo affichée (prix barré)')}</div>
     <div class="row2">${field("Prix d'achat *", `<input name="buy" type="number" step="any" min="0" value="${p && num(p.buy) ? p.buy : ''}" placeholder="0">`, 'Coût par pièce (même devise)')}</div>
@@ -2557,6 +2560,7 @@ function productForm(id, opt = {}){
       <p class="note" style="margin:8px 0">Laissez vide pour utiliser la commission générale ci-dessus. <span id="cityUnit"></span></p>
       <div id="cityRows">${cityCommRows(p)}</div>
       <button type="button" class="btn sm" id="addCity" style="margin-top:4px">+ Autre ville</button></details>
+    ${p && isKit(p) ? '' : caracSection(p)}
     ${p && isKit(p) ? '' : unitSection(p)}
     ${p && isKit(p) ? '' : `<div id="supw">${supField(p)}</div>`}
     ${p && isKit(p) ? '' : perimField(p)}
@@ -2569,14 +2573,14 @@ function productForm(id, opt = {}){
     ${p ? `<button type="button" class="btn ghost-bad block" style="margin-top:8px" data-a="delprod:${p.id}">Supprimer ce produit</button>` : ''}</form>`);
   const f = $('#pf'), E = f.elements;
   let photo = (p && p.photo) || '';
-  unitWire(f); supWire(f); perimWire(f); varWire(f, p);
+  unitWire(f); supWire(f); perimWire(f); varWire(f, p); caracWire(f); snWire(f, p);
   $('#pfPhoto').onchange = e => { const file = e.target.files[0]; if(!file) return; smallImage(file, 240, .72).then(u => { photo = u; $('#pfPrev').innerHTML = `<img src="${u}" alt="">`; $('#pfNoPhoto').hidden = false; }).catch(() => toast('Image illisible')); };
   $('#pfNoPhoto').onclick = () => { photo = ''; $('#pfPrev').textContent = '📷'; $('#pfNoPhoto').hidden = true; };
   // Pack / promo : composition, prix séparé, économie, coût et bénéfice
   let autoOld = !(p && num(p.old)), autoName = !p, autoComm = !(p && (num(p.comm) || (p.commCity && Object.keys(p.commCity).length)));
   const buyBox = E.buy.closest('.row2'), commBox = E.commMode.closest('.row2'), commHome = commBox.nextSibling;
   $('#kitw').insertAdjacentHTML('beforeend', '<div id="kitComm" style="margin-top:10px"><b style="font-size:14px">🛵 Commission du livreur pour cette promo</b></div>');
-  const setKind = pack => { E.iskit.checked = pack; if($('#usec')) $('#usec').hidden = pack; if($('#supw')) $('#supw').hidden = pack; if($('#perimw')) $('#perimw').hidden = pack; if($('#varw')) $('#varw').hidden = pack; $('#kitw').hidden = !pack; if($('#initw')) $('#initw').hidden = pack; E.buy.required = !pack; E.name.required = !pack; if(buyBox) buyBox.hidden = pack;
+  const setKind = pack => { E.iskit.checked = pack; if($('#usec')) $('#usec').hidden = pack; if($('#supw')) $('#supw').hidden = pack; if($('#perimw')) $('#perimw').hidden = pack; if($('#varw')) $('#varw').hidden = pack; if($('#caracw')) $('#caracw').hidden = pack; $('#kitw').hidden = !pack; if($('#initw')) $('#initw').hidden = pack; E.buy.required = !pack; E.name.required = !pack; if(buyBox) buyBox.hidden = pack;
     if(pack) $('#kitComm').appendChild(commBox); else commHome.parentNode.insertBefore(commBox, commHome);
     $('#sht').textContent = p ? $('#sht').textContent : (pack ? '🎁 Nouveau pack / promo' : 'Nouveau produit'); E.name.placeholder = pack ? 'Ex : Gamme complète Golden Hair' : 'Ex : Sac de poitrine'; kitSum(); };
   const kitSum = () => { if(!E.iskit.checked){ $('#kitSum').innerHTML = ''; return; }
@@ -2620,6 +2624,7 @@ function productForm(id, opt = {}){
     const ux = readUnits(f, p, !!kitv); if(!ux) return; Object.assign(data, ux);
     if(!kitv){ const fid = readSup(f); if(fid === null) return; if(fid !== undefined) data.fid = fid || undefined; }
     if(!kitv && E.perim) data.perim = E.perim.checked || undefined;
+    if(!kitv) Object.assign(data, readCarac(f));
     if(p){ Object.assign(p, data); const nv = E.varAll && E.varAll.checked ? varShare(p, data) : 0; toast(nv ? 'Produit modifié, ainsi que ' + nv + ' autre(s) taille(s) / couleur(s)' : 'Produit modifié'); }
     else {
       const vs = kitv ? null : readVariants(f); if(vs === false) return;
@@ -2659,7 +2664,7 @@ function prodSheet(id){
     ${kit ? `<div class="warnbox" style="background:var(--vio-soft);color:var(--vio)">Pack : ${p.kit.map(c => c.q + ' × ' + esc(pname(c.pid))).join(' + ')}. Les quantités ci-dessous = nombre de packs possibles.</div>` : ''}
     <div class="kv"><div><b class="num">${kit ? avail(st,'',id) : qAt(st,'',id)}</b><span>Au dépôt</span></div><div><b class="num">${kit ? locs.reduce((s,x)=>s+x[1],0) : inHands(st,id)}</b><span>Chez livreurs</span></div><div><b class="num">${kit ? '—' : totalOf(st,id)}</b><span>Total</span></div></div>
     ${locs.length ? `<div class="card" style="margin-bottom:12px">${locs.map(([l,q]) => `<div class="dl"><span>${esc(l.name)} · ${esc(l.city||'')}</span><span class="num">${q}</span></div>`).join('')}</div>` : ''}
-    ${varSheetCard(p, st)}${perimSheetCard(p, st)}
+    ${caracCard(p)}${varSheetCard(p, st)}${perimSheetCard(p, st)}
     <div class="card" style="margin-bottom:12px">
       <div class="dl"><span>Prix de vente</span><span class="num">${priceTxt(p)}${p.cur==='FC' ? ' ≈ ' + money(su) : ''}</span></div>
       <div class="dl cost"><span>Prix d'achat</span><span class="num">${num(p.buy)>0 ? amt(p.buy, p.cur) : (kit && cu ? '≈ ' + money(cu) + ' (produits)' : '<span class="red">à compléter</span>')}</span></div>
@@ -2703,7 +2708,7 @@ function moveForm(type, opt = {}){
   if(type === 'perte') h += field('Où se trouve le produit ?', `<select name="loc">${livOpts(true, 'Au dépôt')}</select>`);
   if(type === 'vente') h += field('Livré par', `<select name="loc">${livOpts(true, 'Vente directe (depuis le dépôt)')}</select>`);
   h += field('Produit *', `<select name="pid" required>${pid0 ? '' : '<option value="">Choisir un produit…</option>'}${prods.map(p => `<option value="${p.id}" ${p.id===pid0?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`);
-  h += `<div id="avail"></div><div id="fefo"></div><div id="uctl"></div><div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : 1}">`)}`;
+  h += `<div id="avail"></div><div id="fefo"></div>${type === 'vente' ? snField(m) : ''}<div id="uctl"></div><div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : 1}">`)}`;
   if(type === 'entree') h += field('Coût unitaire', `<input name="cost" type="number" step="any" min="0" value="${m ? (m.cost ?? '') : ''}">`, '<span id="curl"></span>') + `</div>` + perimMoveFields(m);
   else if(type === 'perte') h += field('Motif', `<select name="motif">${MOTIFS.map(x => `<option ${m?.motif===x?'selected':''}>${x}</option>`).join('')}</select>`) + `</div>`;
   else if(type === 'vente') h += field('Prix unitaire', `<input name="price" type="number" step="any" min="0" value="${m ? m.price : ''}">`, '<span id="curl"></span>') + `</div><div class="tot" id="tot"></div>
@@ -2831,7 +2836,7 @@ function moveForm(type, opt = {}){
       if(!m || m.pid !== p.id) rec.costU = unitCostUSD(p);
       if(!m || m.pid !== p.id || m.liv !== rec.liv || m.price !== rec.price) rec.commU = commUFor(p, liv(rec.liv), toUSD(rec.price, p.cur, m && m.cur === p.cur ? m.rate : rate()));
       if(!m || m.pid !== p.id || m.cur !== p.cur) rec.rate = rate();
-      rec.client = E.client.value.trim(); rec.phone = E.phone.value.trim(); rec.addr = E.addr.value.trim(); rec.status = status;
+      rec.client = E.client.value.trim(); snApply(rec, p, E); rec.phone = E.phone.value.trim(); rec.addr = E.addr.value.trim(); rec.status = status;
       if(E.credit && E.credit.checked){ rec.credit = true; if(!m || m.creditMain || !m.credit){ rec.creditMain = true; rec.acompte = num(E.acompte.value); rec.dueDate = E.dueDate.value || ''; } }
       else if(E.credit){ delete rec.credit; delete rec.creditMain; delete rec.acompte; delete rec.dueDate; delete rec.cpays; }
       rec.ddate = E.ddate.value || rec.date; rec.dtime = E.dtime.value; if(E.rem && E.rem.value) rec.rem = E.rem.value.slice(0, 13) + ':00'; else delete rec.rem; rec.pay = E.pay ? E.pay.value : (rec.pay || '');
@@ -2920,7 +2925,7 @@ function saleSheet(id, fresh){
     </div>
     ${(() => { const ol = orderLines(m); if(ol.length < 2) return ''; const tot = {}; ol.forEach(it => tot[it.cur] = (tot[it.cur] || 0) + it.qty*it.price);
       return `<div class="card" style="margin-bottom:12px"><b>🛒 Commande de ${ol.length} produits</b><div class="list" style="margin-top:8px">${ol.map(it => `<button class="it" data-a="sale:${it.id}" style="${it.id === m.id ? 'background:var(--brand-soft,#eef)' : ''}"><div class="m"><div class="t">${esc(pname(it.pid))} × ${it.qty}</div><div class="d">${amt(it.qty*it.price, it.cur)} · ${STATUS[it.status] || ''}</div></div></button>`).join('')}</div><div class="dl strong" style="margin-top:6px"><span>Total de la commande</span><span class="num">${Object.entries(tot).map(([cu, v]) => amt(v, cu)).join(' + ')}</span></div></div>`; })()}
-    ${m.credit ? (() => { const c = creditInfo(m); return `<button class="card" data-a="credsheet:${c.M.id}" style="width:100%;text-align:left;margin-bottom:12px;${c.done ? '' : 'border:2px solid var(--bad,#dc2626)'}"><b>💳 Vente à crédit</b> — ${c.done ? '✅ réglée' : `reste à payer <b class="red">${amt(c.reste, c.cur)}</b> sur ${amt(c.total, c.cur)}${c.due ? ' · promis le ' + fmtDate(c.due) : ''}`}<br><span class="note">Touchez pour encaisser un paiement ou envoyer un rappel</span></button>`; })() : ''}
+    ${snCard(m)}${m.credit ? (() => { const c = creditInfo(m); return `<button class="card" data-a="credsheet:${c.M.id}" style="width:100%;text-align:left;margin-bottom:12px;${c.done ? '' : 'border:2px solid var(--bad,#dc2626)'}"><b>💳 Vente à crédit</b> — ${c.done ? '✅ réglée' : `reste à payer <b class="red">${amt(c.reste, c.cur)}</b> sur ${amt(c.total, c.cur)}${c.due ? ' · promis le ' + fmtDate(c.due) : ''}`}<br><span class="note">Touchez pour encaisser un paiement ou envoyer un rappel</span></button>`; })() : ''}
     <div class="sec" style="margin-top:4px"><h2>Envoyer les reçus par WhatsApp</h2></div>
     <div class="stack" style="margin-bottom:6px">
       ${L ? `<a class="btn wa block" href="${waLink(L.phone, rl)}" target="_blank" rel="noopener">${ico('wa')} 1. Bon de livraison → ${esc(L.name)}${L.phone ? '' : ' (choisir le contact)'}</a>` : ''}
@@ -4210,8 +4215,14 @@ const IMP_COLS = [
   ['taille', 'Taille ou pointure', /(taille|pointure|^size)/],
   ['couleur', 'Couleur', /(couleur|colou?r|teinte)/],
   ['lot', 'N° de lot', /(^lot|lot$|batch)/],
-  ['exp', 'Date de péremption', /(perem|expir|^exp|^dlc|^dluo)/]
+  ['exp', 'Date de péremption', /(perem|expir|^exp|^dlc|^dluo)/],
+  ['marque', 'Marque', /(marque|brand|labo|fabricant)/],
+  ['qual', 'Qualité ou état', /(qualit|^etat|condition)/],
+  ['mat', 'Matière', /(^mati|metal|carat)/],
+  ['forme', 'Forme', /(^forme|galen)/],
+  ['gar', 'Garantie', /(garant|warrant)/]
 ];
+const impKeys = () => ['name', 'sell', 'buy', 'qty', 'cat', 'alert', 'taille', 'couleur', 'lot', 'exp'].concat(['marque', 'qual', 'mat', 'forme', 'gar'].filter(k => caracOn(k) || (IMPX.map && IMPX.map[k] != null && IMPX.map[k] !== '')));
 const colIdx = s => { let n = 0; for(const ch of String(s).toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
 const colName = i => { let s = ''; i++; while(i > 0){ const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };
 // « 1 500,50 », « 1,500.50 », « 15 $ », « 2 500 FC » → nombre
@@ -4309,7 +4320,7 @@ function importRows(){
     if(have.has(key) || seen.has(key)){ skip.dup++; continue; }
     const sell = numx(g(r, 'sell')); if(!(sell > 0)){ skip.noprice++; continue; }
     seen.add(key);
-    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:String(g(r, 'cat')).slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert')))), vt, vc, lot:String(g(r, 'lot')).trim().slice(0, 30), exp:dateX(g(r, 'exp'))});
+    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:String(g(r, 'cat')).slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert')))), vt, vc, lot:String(g(r, 'lot')).trim().slice(0, 30), exp:dateX(g(r, 'exp')), ...Object.fromEntries(['marque', 'qual', 'mat', 'forme', 'gar'].map(k => [k, String(g(r, k)).replace(/\s+/g, ' ').trim().slice(0, 40)]).filter(e => e[1]))});
   }
   return {ok, skip};
 }
@@ -4318,10 +4329,10 @@ function importStep(){
   const opts = sel => `<option value="">— Aucune —</option>${Array.from({length:width}, (_, i) => `<option value="${i}" ${String(sel) === String(i) ? 'selected' : ''}>${esc(colName(i) + (head && head[i] ? ' · ' + head[i] : ''))}</option>`).join('')}`;
   const sk = [skip.dup ? skip.dup + ' déjà présent(s) ou en double' : '', skip.noprice ? skip.noprice + ' sans prix de vente' : '', skip.noname ? skip.noname + ' sans nom' : ''].filter(Boolean).join(' · ');
   $('#impStep').innerHTML = `<div class="sec" style="margin-top:16px"><h2>Vérifiez les colonnes</h2></div>
-    <form id="impMap" class="card" style="margin-bottom:12px">${['name', 'sell', 'buy', 'qty', 'cat', 'alert', 'taille', 'couleur', 'lot', 'exp'].map(k => IMP_COLS.find(c => c[0] === k)).map(([k, l]) => `<label class="f" style="margin-bottom:8px"><span>${l}</span><select data-col="${k}">${opts(map[k] ?? '')}</select></label>`).join('')}
+    <form id="impMap" class="card" style="margin-bottom:12px">${impKeys().map(k => IMP_COLS.find(c => c[0] === k)).map(([k, l]) => `<label class="f" style="margin-bottom:8px"><span>${l}</span><select data-col="${k}">${opts(map[k] ?? '')}</select></label>`).join('')}
       ${field('Devise des prix', `<select data-cur><option value="$" ${IMPX.cur === '$' ? 'selected' : ''}>Dollar ($)</option><option value="FC" ${IMPX.cur === 'FC' ? 'selected' : ''}>Monnaie locale (${esc(LC())})</option></select>`)}</form>
     <div class="card tbw" style="margin-bottom:10px"><b>${ok.length} produit(s) prêt(s)</b>${sk ? `<p class="note" style="margin-top:4px">Ignorés : ${esc(sk)}</p>` : ''}
-      ${ok.length ? `<table class="tb" style="margin-top:8px"><tr><th>Produit</th><th class="rt">Vente</th><th class="rt">Achat</th><th class="rt">Stock</th><th>Rayon</th></tr>${ok.slice(0, 8).map(x => `<tr><td>${esc(x.vt || x.vc ? varName(x.name, x.vt, x.vc) : x.name)}${x.exp ? '<br><small class="note">' + esc(fmtDate(x.exp)) + '</small>' : ''}</td><td class="rt num">${fmt(x.sell)}</td><td class="rt num">${x.buy ? fmt(x.buy) : '—'}</td><td class="rt num">${x.qty || '—'}</td><td>${esc(x.cat || '—')}</td></tr>`).join('')}</table>${ok.length > 8 ? `<p class="note" style="margin-top:6px">… et ${ok.length - 8} autre(s)</p>` : ''}` : ''}</div>
+      ${ok.length ? `<table class="tb" style="margin-top:8px"><tr><th>Produit</th><th class="rt">Vente</th><th class="rt">Achat</th><th class="rt">Stock</th><th>Rayon</th></tr>${ok.slice(0, 8).map(x => `<tr><td>${esc(x.vt || x.vc ? varName(x.name, x.vt, x.vc) : x.name)}${caracTxt(x) ? '<br><small class="note">' + esc(caracTxt(x)) + '</small>' : ''}${x.exp ? '<br><small class="note">' + esc(fmtDate(x.exp)) + '</small>' : ''}</td><td class="rt num">${fmt(x.sell)}</td><td class="rt num">${x.buy ? fmt(x.buy) : '—'}</td><td class="rt num">${x.qty || '—'}</td><td>${esc(x.cat || '—')}</td></tr>`).join('')}</table>${ok.length > 8 ? `<p class="note" style="margin-top:6px">… et ${ok.length - 8} autre(s)</p>` : ''}` : ''}</div>
     <button class="btn primary block" id="impGo" ${ok.length ? '' : 'disabled'}>Ajouter ${ok.length} produit(s)</button>
     <p class="note" style="margin-top:8px">Le stock est ajouté au dépôt comme « Stock de départ ». Vous pourrez ensuite compléter chaque fiche (photo, cartons, fournisseur…).</p>`;
   $('#impMap').onchange = e => { const t = e.target; if(t.dataset.col) IMPX.map[t.dataset.col] = t.value === '' ? '' : +t.value; if(t.hasAttribute('data-cur')) IMPX.cur = t.value; importStep(); };
@@ -4331,6 +4342,7 @@ function importStep(){
     const G = {};
     ok.forEach((x, i) => { const vv = x.vt || x.vc; const np = {id:uid(), name:vv ? varName(x.name, x.vt, x.vc) : x.name, details:'', usage:'', cat:x.cat, cur:IMPX.cur, sell:x.sell, old:0, buy:x.buy, comm:0, commMode:'fixe', commCity:null, alert:x.alert, kit:null, photo:'', hide:false};
       if(vv){ const gk = norm(x.name), gg = G[gk] = G[gk] || {id:uid(), n:0}; Object.assign(np, {base:x.name, grp:gg.id, vi:gg.n++}); if(x.vt) np.vt = x.vt; if(x.vc) np.vc = x.vc; }
+      CARAC.forEach(([k]) => { if(x[k]) np[k] = x[k]; });
       if(x.exp || x.lot) np.perim = true;
       S.products.push(np);
       if(x.qty > 0) S.moves.push(Object.assign({id:uid(), ts:ts + i, type:'entree', pid:np.id, qty:x.qty, cost:np.buy, date:t, note:'Stock de départ (import)'}, x.lot ? {lot:x.lot} : {}, x.exp ? {exp:x.exp} : {})); });
@@ -4366,8 +4378,7 @@ function varSection(p){
   const open = hasSect('vet') || hasSect('chaus');
   return `<details class="card" id="varw" style="margin-bottom:12px" ${open ? 'open' : ''}><summary><b>Tailles et couleurs</b> <span class="note">(vêtements, chaussures… optionnel)</span></summary>
     <p class="note" style="margin:8px 0">Une fiche est créée pour chaque taille et chaque couleur : le stock de chacune est compté à part. Laissez vide pour un produit simple.</p>
-    <div class="chips" id="varPre" style="margin-bottom:6px">${VAR_PRESETS.map(([l, v]) => `<button type="button" class="chip" data-vp="${esc(v)}">${l}</button>`).join('')}</div>
-    ${field('Tailles', `<input name="vtl" maxlength="300" placeholder="Ex : S, M, L, XL">`, 'Séparées par des virgules')}
+    ${field('Tailles, pointures ou mémoire', `<input name="vtl" maxlength="300" placeholder="Ex : S, M, L ou 40, 41, 42">`, 'Séparées par des virgules')}
     ${field('Couleurs', `<input name="vcl" maxlength="300" placeholder="Ex : Noir, Blanc, Bleu">`, 'Séparées par des virgules. Laissez vide s\'il n\'y a qu\'une couleur.')}
     <div id="varGrid"></div></details>`;
 }
@@ -4385,7 +4396,7 @@ function varGridWire(f, exists, onToggle){
       <div class="tbw"><table class="tb vgrid"><tr><th></th>${cc.map(c => `<th>${esc(c || 'Quantité')}</th>`).join('')}</tr>${tt.map(t => `<tr><th>${esc(t || 'Taille unique')}</th>${cc.map(c => { const k = t + '|' + c;
         return exists && exists.has(k) ? '<td class="note">déjà là</td>' : `<td><input type="number" min="0" step="any" data-vq="${esc(k)}" value="${esc(keep[k] || '')}" placeholder="0"></td>`; }).join('')}</tr>`).join('')}</table></div>`;
   };
-  const pre = f.querySelector('#varPre'); if(pre) pre.onclick = e => { const b = e.target.closest('[data-vp]'); if(!b) return; E.vtl.value = b.dataset.vp; draw(); };
+  varPickWire(f, draw);
   E.vtl.addEventListener('input', draw); E.vcl.addEventListener('input', draw); draw();
 }
 function varWire(f, p){
@@ -4423,7 +4434,7 @@ function addVarSheet(g){
   const T0 = [...new Set(L.map(x => x.vt).filter(Boolean))], C0 = [...new Set(L.map(x => x.vc).filter(Boolean))];
   const exists = new Set(L.map(x => (x.vt || '') + '|' + (x.vc || '')));
   sheet('Ajouter des tailles ou des couleurs', `<form id="avf"><p class="note" style="margin-bottom:10px">« ${esc(base)} » existe en : <b>${esc(L.map(varLab).join(', '))}</b>. Ajoutez des tailles ou des couleurs à la liste : seules les nouvelles fiches sont créées, avec les mêmes prix et la même catégorie.</p>
-    ${field('Tailles', `<input name="vtl" maxlength="300" value="${esc(T0.join(', '))}">`, 'Toutes les tailles de l\'article, séparées par des virgules')}
+    ${field('Tailles, pointures ou mémoire', `<input name="vtl" maxlength="300" value="${esc(T0.join(', '))}">`, 'Toutes les tailles de l\'article, séparées par des virgules')}
     ${field('Couleurs', `<input name="vcl" maxlength="300" value="${esc(C0.join(', '))}">`, 'Toutes les couleurs de l\'article')}
     <div id="varGrid"></div><button class="btn primary block">Ajouter</button></form>`);
   const f = $('#avf'); varGridWire(f, exists);
@@ -4451,8 +4462,8 @@ function stockGroupRows(list, row, st){
     if(done.has(p.grp)) continue; done.add(p.grp);
     const L = list.filter(x => x.grp === p.grp).sort((a, b) => (a.vi ?? 0) - (b.vi ?? 0));
     const tot = r3(L.reduce((t, x) => t + totalOf(st, x.id), 0)), low = L.filter(x => totalOf(st, x.id) <= (x.alert || 0)).length;
-    h += `<details class="vgrp"><summary class="it">${pic(L[0])}<div class="m"><div class="t">${esc(varTitle(L[0]))}</div><div class="d">${L.length} taille(s) / couleur(s)${low ? ` · <span class="red">${low} presque fini(e)s</span>` : ''} · toucher pour le détail</div>${varGridHTML(L, st)}</div>
-      <div class="r"><div class="big num ${tot <= 0 ? 'qty-zero' : ''}">${qv(L[0], tot)}</div><div class="sm">total</div></div></summary><div class="vin">${L.map(row).join('')}</div></details>`;
+    h += `<details class="vgrp"><summary class="it">${pic(L[0])}<div class="m"><div class="t">${esc(varTitle(L[0]))}</div>${caracLine(L[0])}<div class="d">${L.length} taille(s) / couleur(s)${low ? ` · <span class="red">${low} presque fini(e)s</span>` : ''} · toucher pour le détail</div>${varGridHTML(L, st)}</div>
+      <div class="r"><div class="big num ${tot <= 0 ? 'qty-zero' : ''}">${qv(L[0], tot)}</div><div class="sm">total</div></div></summary><div class="vin"><button class="btn sm" style="margin:6px 0" data-a="grpin:${p.grp}">Entrée de stock par taille</button>${L.map(row).join('')}</div></details>`;
   }
   return h;
 }
@@ -4460,7 +4471,7 @@ function varSheetCard(p, st){
   if(!p || !p.grp) return ''; const L = grpOf(p.grp);
   return `<div class="card" style="margin-bottom:12px"><b>${esc(varTitle(p))} : toutes les tailles et couleurs</b>${varGridHTML(L, st)}
     <div class="chips" style="margin-top:8px">${L.map(x => `<button class="chip ${x.id === p.id ? 'on' : ''}" data-a="prod:${x.id}">${esc(varLab(x))}</button>`).join('')}</div>
-    <button class="btn sm" style="margin-top:8px" data-a="addvar:${p.grp}">+ Ajouter des tailles ou des couleurs</button></div>`;
+    <button class="btn sm" style="margin-top:8px" data-a="grpin:${p.grp}">Entrée de stock par taille</button> <button class="btn sm" style="margin-top:8px" data-a="addvar:${p.grp}">+ Ajouter des tailles ou des couleurs</button></div>`;
 }
 
 /* ---------- Lots et dates de péremption (pharmacie, alimentation…) ----------
@@ -4533,6 +4544,8 @@ function perimHint(el, p){
 function perimUpd(p, type){
   const b = $('#perimIn'); if(b) b.hidden = !(type === 'entree' && p && p.perim);
   perimHint($('#fefo'), type === 'vente' || type === 'envoi' ? p : null);
+  grpHint(p, type);
+  snShow(p, type === 'vente');
 }
 Object.assign(A, {
   addvar: g => addVarSheet(g),
@@ -4563,6 +4576,291 @@ function dateX(v){
   m = s.match(/^(\d{1,2})[-\/.](\d{4})$/); if(m && +m[1] >= 1 && +m[1] <= 12) return new Date(Date.UTC(+m[2], +m[1], 0)).toISOString().slice(0, 10);
   return '';
 }
+
+/* ---------- Métiers (suite) : bijouterie et montres, téléphones et ordinateurs, rayons détaillés,
+   marque / qualité / matière / forme / garantie, choix des tailles par cases, entrée de stock par taille ---------- */
+document.head.insertAdjacentHTML('beforeend', '<style>.chips.wrapc{flex-wrap:wrap;overflow:visible;gap:6px}.chips.wrapc .chip{padding:6px 11px;font-size:13px;min-height:0}</style>');
+SECTEURS.splice(Math.max(0, SECTEURS.findIndex(s => s[0] === 'autre')), 0, ['bijou', 'Bijouterie et montres'], ['tel', 'Téléphones, accessoires et ordinateurs']);
+if(!UNITS.some(u => u[0] === 'g')) UNITS.push(['g', 'g', 'g', 'Gramme (g) : or, argent…']);
+// Rayons : on complète les listes, sans rien retirer
+const addCats = (k, L) => { const c = SECT_CATS[k] || (SECT_CATS[k] = []); L.forEach(x => { if(!c.includes(x)) c.push(x); }); };
+addCats('vet', ['Chemises', 'T-shirts et polos', 'Pantalons et jeans', 'Culottes et shorts', 'Robes', 'Jupes', 'Costumes et vestes', 'Ensembles', 'Pagnes et wax', 'Bazin et dentelle', 'Tenues traditionnelles', 'Pyjamas et nuisettes', 'Tenues de sport', 'Uniformes scolaires', 'Friperie (balles)', 'Casquettes et chapeaux', 'Ceintures et cravates']);
+addCats('chaus', ['Chaussures de ville', 'Mocassins', 'Escarpins et talons', 'Bottes et bottines', 'Chaussures de sport', 'Tongs et babouches', 'Chaussures de sécurité', 'Chaussettes', 'Entretien des chaussures']);
+addCats('pharma', ['Typhoïde', 'Vermifuges et antiparasitaires', 'Désinfectants et antiseptiques', 'Estomac et digestion', 'Diarrhée et réhydratation', 'Tension et cœur', 'Diabète', 'Santé de la femme', 'Contraception', "Santé de l'homme", 'Peau et dermatologie', 'Yeux et oreilles', 'Injectables et perfusions', 'Tests rapides (paludisme, grossesse…)', 'Médicaments spécialisés', 'Médicaments importés', 'Médicaments génériques', 'Produits naturels']);
+addCats('quinc', ['Pièces de rechange moto', 'Pièces de rechange auto', 'Pneus et chambres à air', 'Moteurs et groupes électrogènes', 'Huiles et lubrifiants', 'Batteries', 'Serrurerie', 'Fer à béton et tôles', 'Bois et contreplaqué', 'Carrelage et sanitaires', 'Solaire et câbles']);
+addCats('bijou', ['Chaînes et chaînettes', 'Colliers et pendentifs', "Boucles d'oreilles", 'Bracelets', 'Bagues', 'Alliances et fiançailles', 'Gourmettes', 'Parures (ensembles)', 'Piercings', 'Bijoux enfants', 'Montres hommes', 'Montres femmes', 'Montres connectées', 'Bracelets de montre', 'Coffrets cadeau', 'Réparation et entretien']);
+addCats('tel', ['Smartphones', 'Téléphones simples', 'Tablettes', 'Ordinateurs portables', 'Ordinateurs de bureau', 'Écouteurs et AirPods', 'Casques audio', 'Chargeurs et câbles', 'Batteries externes (power bank)', 'Coques et protections', 'Écrans de protection', 'Montres connectées', 'Cartes mémoire et clés USB', 'Enceintes', 'Souris, claviers et accessoires PC', 'Imprimantes et encre', 'Pièces et réparation']);
+addCats('cosm', ['Éclaircissants et laits', 'Huiles et beurres (karité…)', 'Déodorants', 'Ongles', 'Perruques et mèches']);
+
+/* Caractéristiques d'un produit : chacune a sa liste de propositions selon le secteur ; on peut toujours écrire autre chose. */
+const CARAC = [['marque', 'Marque'], ['qual', 'Qualité ou état'], ['mat', 'Matière'], ['forme', 'Forme'], ['gar', 'Garantie']];
+const CARAC_SUG = {
+  marque: {
+    vet: ['Adidas', 'Nike', 'Puma', 'Fila', 'Gucci', 'Louis Vuitton', 'Versace', 'Dior', 'Balenciaga', 'Zara', 'H&M', 'Lacoste', 'Tommy Hilfiger', 'Ralph Lauren', 'Hugo Boss', 'Armani', 'Calvin Klein', "Levi's", 'Dolce & Gabbana', 'Prada', 'Burberry', 'Vlisco', 'Woodin', 'Uniwax', 'Hitarget', 'Shein', 'Sans marque'],
+    chaus: ['Nike', 'Adidas', 'Puma', 'Fila', 'Jordan', 'New Balance', 'Reebok', 'Converse', 'Vans', 'Timberland', 'Clarks', 'Skechers', 'Crocs', 'Gucci', 'Louis Vuitton', 'Balenciaga', 'Bata', 'Sans marque'],
+    bijou: ['Rolex', 'Casio', 'Seiko', 'Citizen', 'Tissot', 'Omega', 'Patek Philippe', 'Audemars Piguet', 'Cartier', 'Michael Kors', 'Fossil', 'Guess', 'Curren', 'Naviforce', 'Poedagar', 'Apple Watch', 'Samsung', 'Pandora', 'Swarovski', 'Sans marque'],
+    tel: ['Apple', 'Samsung', 'Tecno', 'Itel', 'Infinix', 'Xiaomi', 'Redmi', 'Oppo', 'Huawei', 'Honor', 'Realme', 'Vivo', 'Nokia', 'Google Pixel', 'Oraimo', 'JBL', 'Anker', 'HP', 'Dell', 'Lenovo', 'Asus', 'Acer', 'Toshiba', 'Microsoft'],
+    quinc: ['Honda', 'Yamaha', 'TVS', 'Bajaj', 'Haojue', 'Lifan', 'Suzuki', 'Toyota', 'Michelin', 'Dunlop', 'Total', 'Shell', 'Bosch', 'Makita', 'Stanley', 'Ingco', 'Tolsen', 'Legrand', 'Schneider', 'Dangote', 'CILU'],
+    pharma: ['Shalina', 'Pharmakina', 'Cipla', 'Sanofi', 'Pfizer', 'GSK', 'Novartis', 'Bayer', 'Ajanta', 'Sun Pharma', 'Ipca', 'Teva', 'Biogaran'],
+    cosm: ["L'Oréal", 'Nivea', 'Garnier', 'Dove', 'Vaseline', 'Neutrogena', 'Fair & White', 'Caro White', 'Carotone', 'Shea Moisture', 'Mixa', 'Cantu', 'Dark and Lovely', 'Sans marque'],
+    meub: ['Ikea', 'Fabrication locale', 'Importé (Chine)', 'Importé (Turquie)', 'Importé (Dubaï)']
+  },
+  qual: {
+    _: ['Qualité supérieure', 'Qualité moyenne', 'Original', 'Copie (réplique)'],
+    vet: ['Qualité supérieure', 'Qualité moyenne', 'Premier choix', 'Original', 'Copie (réplique)', 'Neuf', 'Friperie (seconde main)'],
+    chaus: ['Qualité supérieure', 'Qualité moyenne', 'Premier choix', 'Original', 'Copie (réplique)', 'Neuf', 'Friperie (seconde main)'],
+    bijou: ['Qualité supérieure', 'Qualité moyenne', 'Original', 'Copie (réplique)'],
+    tel: ['Neuf (scellé)', 'Venant (occasion)', 'Reconditionné', 'Occasion', 'Original', 'Copie'],
+    quinc: ['Neuf', 'Occasion', 'Original', 'Adaptable', 'Qualité supérieure', 'Qualité moyenne'],
+    pharma: ['Original (princeps)', 'Générique', 'Importé', 'Fabriqué localement'],
+    cosm: ['Original', 'Copie', 'Qualité supérieure', 'Qualité moyenne']
+  },
+  mat: {
+    vet: ['Coton', 'Lin', 'Soie', 'Polyester', 'Jean', 'Laine', 'Cuir', 'Wax', 'Bazin', 'Dentelle', 'Velours'],
+    chaus: ['Cuir', 'Daim', 'Toile', 'Synthétique', 'Caoutchouc', 'Plastique'],
+    bijou: ['Or 18 carats', 'Or 24 carats', 'Or 14 carats', 'Plaqué or', 'Argent 925', 'Acier inoxydable', 'Titane', 'Fantaisie', 'Perles', 'Diamant', 'Cuir'],
+    meub: ['Bois massif', 'Contreplaqué', 'Métal', 'Plastique', 'Verre', 'Tissu', 'Cuir']
+  },
+  forme: {
+    pharma: ['Comprimés', 'Gélules', 'Sirop', 'Suspension', 'Injectable', 'Perfusion', 'Pommade ou crème', 'Gel', 'Suppositoire', 'Ovule', 'Gouttes', 'Collyre', 'Sachet', 'Spray']
+  },
+  gar: {
+    tel: ['Sans garantie', '7 jours', '1 mois', '3 mois', '6 mois', '1 an', '2 ans'],
+    bijou: ['Sans garantie', '1 mois', '3 mois', '6 mois', '1 an', '2 ans'],
+    quinc: ['Sans garantie', '7 jours', '1 mois', '3 mois', '6 mois', '1 an'],
+    meub: ['Sans garantie', '3 mois', '6 mois', '1 an']
+  }
+};
+CARAC.forEach(([k]) => { if(!VAR_SHARED.includes(k)) VAR_SHARED.push(k); });
+const caracSects = () => secteurs().filter(k => k !== 'autre');
+const caracSug = k => { const T = CARAC_SUG[k] || {}, ss = caracSects(); const L = ss.reduce((t, s) => t.concat(T[s] || []), []);
+  return [...new Set(L.length ? L : (T._ || []))]; };
+// Puces : d'abord vos valeurs, puis les premières de chaque secteur, à tour de rôle (la liste complète reste dans les suggestions)
+const caracChips = (k, mine) => { const T = CARAC_SUG[k] || {}, ss = caracSects(), Ls = ss.map(s => T[s] || []).filter(L => L.length), out = [...mine];
+  if(!Ls.length && T._) Ls.push(T._);
+  for(let i = 0; out.length < 20 + mine.length && Ls.some(L => i < L.length); i++) Ls.forEach(L => { if(i < L.length && !out.includes(L[i])) out.push(L[i]); });
+  return [...new Set(out)].slice(0, Math.max(20, mine.length)); };
+const caracOn = (k, p) => k === 'marque' || k === 'qual' || !!(p && p[k]) || caracSects().some(s => (CARAC_SUG[k] || {})[s]);
+const caracLabel = k => k === 'marque' && hasSect('pharma') ? 'Marque ou laboratoire' : (CARAC.find(c => c[0] === k) || [])[1];
+const caracTxt = p => p ? [p.marque, p.qual, p.mat, p.forme, p.gar ? (/garantie/i.test(p.gar) ? p.gar : 'garantie ' + p.gar) : ''].filter(Boolean).join(' · ') : '';
+const caracLine = p => { const t = caracTxt(p); return t ? `<div class="d">${esc(t)}</div>` : ''; };
+function caracSection(p){
+  const ks = CARAC.filter(([k]) => caracOn(k, p)), any = p && CARAC.some(([k]) => p[k]);
+  const open = any || caracSects().some(s => ['vet', 'chaus', 'bijou', 'tel', 'quinc', 'pharma', 'cosm'].includes(s));
+  const mine = k => [...new Set(S.products.map(x => x[k]).filter(Boolean))];
+  return `<details class="card" id="caracw" style="margin-bottom:12px" ${open ? 'open' : ''}><summary><b>Marque, qualité…</b> <span class="note">(optionnel)</span></summary>
+    <p class="note" style="margin:8px 0">Touchez une proposition ou écrivez vous-même. Elles s'affichent dans le stock et servent à la recherche.</p>
+    ${ks.map(([k]) => { const sug = [...new Set(mine(k).concat(caracSug(k)))];
+      return `<div class="f"><span>${esc(caracLabel(k))}</span><input name="c_${k}" maxlength="40" list="cdl_${k}" value="${esc(p && p[k] || '')}" placeholder="${k === 'marque' ? 'Ex : ' + esc((sug[0] || 'Adidas')) : 'Écrire…'}" autocomplete="off">
+        <datalist id="cdl_${k}">${sug.map(v => `<option value="${esc(v)}">`).join('')}</datalist>
+        ${sug.length ? `<div class="chips wrapc cpk" data-ck="${k}" style="margin-top:6px">${caracChips(k, mine(k).slice(0, 8)).map(v => `<button type="button" class="chip ${p && p[k] === v ? 'on' : ''}" data-cv="${esc(v)}">${esc(v)}</button>`).join('')}</div>` : ''}</div>`; }).join('')}${snBox(p)}</details>`;
+}
+function caracWire(f){
+  f.querySelectorAll('.cpk').forEach(box => { const inp = f.elements['c_' + box.dataset.ck];
+    const sync = () => box.querySelectorAll('[data-cv]').forEach(b => b.classList.toggle('on', b.dataset.cv === inp.value.trim()));
+    box.onclick = e => { const b = e.target.closest('[data-cv]'); if(!b) return; inp.value = inp.value.trim() === b.dataset.cv ? '' : b.dataset.cv; sync(); };
+    inp.addEventListener('input', sync); });
+}
+function readCarac(f){
+  const E = f.elements, o = {}; let seen = false;
+  CARAC.forEach(([k]) => { const i = E['c_' + k]; if(!i) return; seen = true; o[k] = i.value.replace(/\s+/g, ' ').trim().slice(0, 40) || undefined; });
+  if(E.c_sn){ seen = true; o.sn = E.c_sn.checked || undefined; }
+  return seen ? o : {};
+}
+function caracCard(p){
+  if(!p || !(p.sn || CARAC.some(([k]) => p[k]))) return '';
+  return `<div class="card" style="margin-bottom:12px">${CARAC.filter(([k]) => p[k]).map(([k]) => `<div class="dl"><span>${esc(caracLabel(k))}</span><span>${esc(p[k])}</span></div>`).join('')}${p.sn ? '<div class="dl"><span>IMEI / n° de série</span><span>noté à chaque vente</span></div>' : ''}</div>`;
+}
+
+/* Catégorie : d'abord les rayons du secteur, puis les catégories déjà utilisées, puis les autres */
+function catPick(val, used){
+  const sc = [...new Set(sectCats())];
+  if(!sc.length) return pickSel('cat', [...new Set(DEF_CATS.concat(used))].sort(byFr), val, 'Choisir la catégorie…', '✏️ Autre catégorie…', 'Tapez la catégorie');
+  const u = used.filter(c => !sc.includes(c)).sort(byFr), rest = DEF_CATS.filter(c => !sc.includes(c) && !u.includes(c)).sort(byFr);
+  const all = sc.concat(u, rest), known = !val || all.includes(val);
+  const og = (l, L) => L.length ? `<optgroup label="${esc(l)}">${L.map(o => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</optgroup>` : '';
+  return `<select data-pick="cat"><option value="">Choisir la catégorie…</option>${og('Votre secteur', sc.slice().sort(byFr))}${og('Vos catégories', u)}${og('Autres catégories', rest)}<option value="__new" ${known ? '' : 'selected'}>✏️ Autre catégorie…</option></select><input name="cat" value="${esc(val || '')}" placeholder="Tapez la catégorie" style="margin-top:8px;${known ? 'display:none' : ''}">`;
+}
+
+/* Tailles par cases : un modèle (lettres, pointures, tour de taille, mémoire…), puis on coche celles qu'on a. On peut aussi écrire. */
+const VAR_GROUPS = [
+  ['Lettres (S, M, L…)', 'XS, S, M, L, XL, XXL, 3XL, 4XL, 5XL', 'vet'],
+  ['Pantalons (tour de taille)', '26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 38, 40, 42, 44', 'vet'],
+  ['Chemises (tour de cou)', '37, 38, 39, 40, 41, 42, 43, 44, 45', 'vet'],
+  ['Enfants (âge)', '0-3 mois, 3-6 mois, 6-12 mois, 1 an, 2 ans, 3 ans, 4 ans, 5 ans, 6 ans, 8 ans, 10 ans, 12 ans, 14 ans, 16 ans', 'vet'],
+  ['Pointures adultes', '35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47', 'chaus'],
+  ['Pointures enfants', '18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34', 'chaus'],
+  ['Bagues', '48, 50, 52, 54, 56, 58, 60, 62, 64, 66', 'bijou'],
+  ['Chaînes (longueur)', '40 cm, 45 cm, 50 cm, 55 cm, 60 cm, 70 cm', 'bijou'],
+  ['Mémoire (téléphones)', '16 Go, 32 Go, 64 Go, 128 Go, 256 Go, 512 Go, 1 To', 'tel'],
+  ['Ordinateurs (RAM / disque)', '4 Go / 128 Go, 4 Go / 256 Go, 8 Go / 256 Go, 8 Go / 512 Go, 16 Go / 512 Go, 16 Go / 1 To', 'tel'],
+  ['Taille unique', '', '']
+];
+const VAR_COLORS = ['Noir', 'Blanc', 'Bleu', 'Bleu marine', 'Rouge', 'Vert', 'Jaune', 'Rose', 'Gris', 'Marron', 'Beige', 'Bordeaux', 'Orange', 'Violet', 'Kaki', 'Doré', 'Argenté', 'Multicolore'];
+function varPickWire(f, draw){
+  const E = f.elements; if(!E.vtl || f.querySelector('#varPre')) return;
+  const ss = caracSects(), rel = VAR_GROUPS.map((g, i) => [g, i]).filter(([g]) => g[2] && ss.includes(g[2]));
+  const first = rel.length ? rel.concat(VAR_GROUPS.map((g, i) => [g, i]).filter(([g]) => !g[2])) : VAR_GROUPS.map((g, i) => [g, i]);
+  const more = VAR_GROUPS.map((g, i) => [g, i]).filter(x => !first.some(y => y[1] === x[1]));
+  const chip = ([g, i], hid) => `<button type="button" class="chip" data-vg="${i}" ${hid ? 'hidden' : ''}>${esc(g[0])}</button>`;
+  E.vtl.closest('.f').insertAdjacentHTML('beforebegin', `<div class="vpk" style="margin-bottom:8px"><span class="note">Choisissez un modèle, puis touchez les tailles que vous avez (ou écrivez-les en dessous) :</span>
+    <div class="chips wrapc" id="varPre" style="margin:6px 0 0">${first.map(x => chip(x)).join('')}${more.map(x => chip(x, 1)).join('')}${more.length ? '<button type="button" class="chip" data-vgmore>Autres modèles…</button>' : ''}</div>
+    <div class="chips wrapc" id="varVals" style="margin:6px 0 0" hidden></div></div>`);
+  E.vcl.closest('.f').insertAdjacentHTML('afterend', `<div class="chips wrapc vpk" id="varCols" style="margin:-4px 0 10px">${VAR_COLORS.map(c => `<button type="button" class="chip" data-vcol="${esc(c)}">${esc(c)}</button>`).join('')}</div>`);
+  let grp = null;
+  const lo = s => s.toLowerCase(), has = (L, v) => L.some(x => lo(x) === lo(v));
+  const sync = () => {
+    const T = splitList(E.vtl.value), C = splitList(E.vcl.value);
+    f.querySelectorAll('#varVals [data-vv]').forEach(b => b.classList.toggle('on', has(T, b.dataset.vv)));
+    const all = f.querySelector('#varVals [data-vall]'); if(all && grp) all.classList.toggle('on', splitList(grp[1]).every(v => has(T, v)));
+    f.querySelectorAll('#varCols [data-vcol]').forEach(b => b.classList.toggle('on', has(C, b.dataset.vcol)));
+  };
+  const setT = L => { E.vtl.value = L.join(', '); draw(); sync(); };
+  const order = L => { const G = grp ? splitList(grp[1]) : []; return G.filter(v => has(L, v)).concat(L.filter(v => !has(G, v))); };
+  f.querySelector('#varPre').onclick = e => {
+    if(e.target.closest('[data-vgmore]')){ f.querySelectorAll('#varPre [hidden]').forEach(b => b.hidden = false); e.target.closest('[data-vgmore]').remove(); return; }
+    const b = e.target.closest('[data-vg]'); if(!b) return; grp = VAR_GROUPS[+b.dataset.vg];
+    f.querySelectorAll('#varPre [data-vg]').forEach(x => x.classList.toggle('on', x === b));
+    const box = f.querySelector('#varVals');
+    if(!grp[1]){ box.hidden = true; box.innerHTML = ''; setT([]); return; }
+    box.innerHTML = splitList(grp[1]).map(v => `<button type="button" class="chip" data-vv="${esc(v)}">${esc(v)}</button>`).join('') + '<button type="button" class="chip" data-vall><b>Tout</b></button>';
+    box.hidden = false; sync();
+  };
+  f.querySelector('#varVals').onclick = e => {
+    const T = splitList(E.vtl.value);
+    if(e.target.closest('[data-vall]')){ const G = splitList(grp[1]), on = G.every(v => has(T, v)); setT(on ? T.filter(v => !has(G, v)) : order(T.concat(G.filter(v => !has(T, v))))); return; }
+    const b = e.target.closest('[data-vv]'); if(!b) return; const v = b.dataset.vv;
+    setT(has(T, v) ? T.filter(x => lo(x) !== lo(v)) : order(T.concat([v])));
+  };
+  f.querySelector('#varCols').onclick = e => { const b = e.target.closest('[data-vcol]'); if(!b) return; const C = splitList(E.vcl.value), v = b.dataset.vcol;
+    E.vcl.value = (has(C, v) ? C.filter(x => lo(x) !== lo(v)) : C.concat([v])).join(', '); draw(); sync(); };
+  E.vtl.addEventListener('input', sync); E.vcl.addEventListener('input', sync); sync();
+}
+
+/* Entrée de stock par taille : le contenu d'un carton ou d'un ballot (plusieurs tailles / couleurs) en une fois */
+function grpEntrySheet(g){
+  const L = grpOf(g); if(!L.length) return; const p0 = L[0], base = varTitle(p0);
+  const T = [...new Set(L.map(x => x.vt || ''))], C = [...new Set(L.map(x => x.vc || ''))];
+  const cell = (t, c) => { const x = L.find(y => (y.vt || '') === t && (y.vc || '') === c); return x ? `<td><input type="number" min="0" step="any" data-gq="${x.id}" placeholder="0"></td>` : '<td class="note">·</td>'; };
+  sheet('Entrée de stock par taille', `<form id="gef"><p class="note" style="margin-bottom:10px">« ${esc(base)} » : tapez combien de pièces de chaque taille${C.some(Boolean) ? ' et couleur' : ''} vous recevez (par exemple le contenu d'un carton ou d'un ballot). Laissez vide ce qui ne vient pas.</p>
+    <div class="tbw"><table class="tb vgrid"><tr><th></th>${C.map(c => `<th>${esc(c || 'Quantité')}</th>`).join('')}</tr>${T.map(t => `<tr><th>${esc(t || 'Unique')}</th>${C.map(c => cell(t, c)).join('')}</tr>`).join('')}</table></div>
+    <p class="note" id="geTot" style="margin:6px 0 10px">Total : 0 pièce</p>
+    <div class="row2">${field('Coût par pièce', `<input name="cost" type="number" step="any" min="0" value="${num(p0.buy) || ''}">`, p0.cur === 'FC' ? esc(LC()) : 'en dollars ($)')}${field('Date', `<input name="date" type="date" required value="${today()}">`)}</div>
+    ${p0.perim ? `<div class="row2">${field('N° de lot', '<input name="lot" maxlength="30" placeholder="Optionnel">')}${field('Date de péremption', '<input name="exp" type="date">')}</div>` : ''}
+    ${field('Note', '<input name="note" maxlength="80" placeholder="Ex : carton n° 3, fournisseur…">')}
+    <button class="btn primary block">Ajouter au dépôt</button></form>`);
+  const f = $('#gef'), E = f.elements;
+  const tot = () => { const n = r3([...f.querySelectorAll('[data-gq]')].reduce((t, i) => t + Math.max(0, num(i.value)), 0)); $('#geTot').textContent = 'Total : ' + fmt(n) + ' pièce' + (n > 1 ? 's' : ''); return n; };
+  f.oninput = tot;
+  f.onsubmit = e => { e.preventDefault();
+    const rows = [...f.querySelectorAll('[data-gq]')].map(i => [prod(i.dataset.gq), num(i.value)]).filter(([x, q]) => x && q > 0);
+    if(!rows.length){ toast('Tapez au moins une quantité'); return; }
+    const cost = num(E.cost.value), ts = Date.now(), lot = E.lot ? E.lot.value.trim() : '', exp = E.exp ? E.exp.value : '';
+    rows.forEach(([x, q], i) => { const rec = {id:uid(), ts:ts + i, type:'entree', pid:x.id, qty:qr(x, q), cost, date:E.date.value || today(), note:E.note.value.trim()};
+      if(lot) rec.lot = lot; if(exp) rec.exp = exp; S.moves.push(rec); if(cost > 0) x.buy = cost; });
+    save(); closeSheet(); render(); toast(fmt(tot()) + ' pièce(s) ajoutée(s) au dépôt (' + rows.length + ' taille(s) / couleur(s))');
+  };
+}
+function grpHint(p, type){
+  const el = $('#fefo'); if(!el || type !== 'entree' || !p || !p.grp || grpOf(p.grp).length < 2) return;
+  el.insertAdjacentHTML('beforeend', `<p class="note" style="margin:-4px 0 10px">Vous recevez plusieurs tailles ou couleurs de « ${esc(varTitle(p))} » ? <button type="button" class="link" data-a="grpin:${p.grp}">Entrée par taille</button></p>`);
+}
+
+/* Stock : filtre par catégorie et par marque (quand il y en a au moins deux) */
+let stockCat = '', stockBrand = '';
+const stockFilt = p => (!stockCat || (p.cat || '') === stockCat) && (!stockBrand || (p.marque || '') === stockBrand);
+function stockFiltChips(){
+  const L = S.products.filter(p => !isKit(p));
+  const count = k => { const o = {}, seen = new Set(); L.forEach(p => { const v = p[k], key = k + '|' + (p.grp || p.id); if(!v || seen.has(key)) return; seen.add(key); o[v] = (o[v] || 0) + 1; }); return Object.entries(o).sort((a, b) => byFr(a[0], b[0])); };
+  const row = (k, cur, lab, E) => (E.length >= 2 || cur) ? `<div class="chips sfil" style="margin:0 0 8px"><button class="chip ${cur ? '' : 'on'}" data-a="sfil" data-k="${k}" data-v="">${lab}</button>${E.map(([v, n]) => `<button class="chip ${cur === v ? 'on' : ''}" data-a="sfil" data-k="${k}" data-v="${esc(v)}">${esc(v)}<b>${n}</b></button>`).join('')}</div>` : '';
+  return row('cat', stockCat, 'Toutes les catégories', count('cat')) + row('marque', stockBrand, 'Toutes les marques', count('marque'));
+}
+Object.assign(A, {
+  grpin: g => grpEntrySheet(g),
+  sfil: (v, el) => { if(el.dataset.k === 'cat') stockCat = el.dataset.v; else stockBrand = el.dataset.v; refreshList('stock'); const w = $('#sfilw'); if(w) w.innerHTML = stockFiltChips(); }
+});
+
+/* ---------- IMEI / numéro de série : noté à la vente, sur le reçu, avec la fin de garantie ; « Vérifier un IMEI » retrouve la vente ---------- */
+const SN_CATS = ['Smartphones', 'Téléphones simples', 'Tablettes', 'Ordinateurs portables', 'Ordinateurs de bureau', 'Montres connectées'];
+if(!VAR_SHARED.includes('sn')) VAR_SHARED.push('sn');
+const snAsk = p => !!(p && p.sn) || !caracSects().length || caracSects().some(s => ['tel', 'bijou', 'quinc', 'autre'].includes(s));
+const snList = v => { const seen = new Set(); return String(v || '').split(/[\s,;]+/).map(x => x.trim().slice(0, 30)).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase())).slice(0, 50); };
+const snClean = v => snList(v).join(', ');
+const luhn = s => { let t = 0; for(let i = 0; i < s.length; i++){ let d = +s[s.length - 1 - i]; if(i % 2){ d *= 2; if(d > 9) d -= 9; } t += d; } return t % 10 === 0; };
+const snOn = () => S.products.some(p => p.sn) || S.moves.some(m => m.sn);
+const saleDate = m => m.ldate || m.ddate || m.date || today();
+function garEnd(m){
+  const g = String(m.gar || ''), x = g.match(/(\d+)\s*(jour|j\b|semaine|mois|an)/i); if(!x || /sans/i.test(g)) return '';
+  const n = +x[1], u = x[2].toLowerCase(), d = new Date(saleDate(m) + 'T12:00:00');
+  if(u.startsWith('j')) d.setDate(d.getDate() + n); else if(u.startsWith('s')) d.setDate(d.getDate() + 7 * n); else if(u.startsWith('m')) d.setMonth(d.getMonth() + n); else d.setFullYear(d.getFullYear() + n);
+  return d.toISOString().slice(0, 10);
+}
+function garTxt(m, plain){
+  if(!m.gar) return plain ? '' : '<span class="note">Garantie non notée</span>';
+  if(/sans/i.test(m.gar)) return plain ? 'Sans garantie' : '<span class="note">Sans garantie</span>';
+  const e = garEnd(m); if(!e) return (plain ? 'Garantie : ' : '') + esc(m.gar);
+  if(plain) return `Garantie : ${m.gar}, jusqu'au ${new Date(e + 'T12:00:00').toLocaleDateString('fr-FR')}`;
+  return e >= today() ? `<span class="green">Sous garantie (${esc(m.gar)}) jusqu'au ${esc(fmtDate(e))}</span>` : `<span class="red">Garantie finie le ${esc(fmtDate(e))} (${esc(m.gar)})</span>`;
+}
+// Reçu WhatsApp : lignes IMEI + garantie
+const snLine = (m, pre) => m && m.sn ? pre + '📱 IMEI / N° de série : ' + m.sn + (garTxt(m, 1) ? pre + '🛡️ ' + garTxt(m, 1) : '') : '';
+// Reçu image : lignes sous le nom du produit
+const snImg = m => m && m.sn ? ['IMEI / série : ' + m.sn].concat(garTxt(m, 1) ? [garTxt(m, 1)] : []) : [];
+function snField(m){
+  return `<div id="snw" data-self="${m ? m.id : ''}" hidden>${field('IMEI ou numéro de série', `<textarea name="sn" rows="1" maxlength="900" placeholder="Ex : 356938035643809 (tapez *#06# sur le téléphone)" style="min-height:48px">${esc(m && m.sn || '')}</textarea>`, 'Un numéro par pièce vendue, séparés par une virgule ou à la ligne')}<div id="snwarn"></div></div>`;
+}
+function snWarn(v, qty, self){
+  const L = snList(v), out = [];
+  L.forEach(t => {
+    if(/^\d+$/.test(t) && t.length === 15 && !luhn(t)) out.push(`Le numéro ${esc(t)} semble faux : vérifiez-le (tapez *#06# sur le téléphone).`);
+    else if(/^\d+$/.test(t) && t.length >= 13 && t.length <= 17 && t.length !== 15) out.push(`${esc(t)} : un IMEI a 15 chiffres (celui-ci en a ${t.length}).`);
+    const d = S.moves.find(m => m.type === 'vente' && m.id !== self && m.status !== 'annule' && m.sn && snList(m.sn).some(x => x.toLowerCase() === t.toLowerCase()));
+    if(d) out.push(`${esc(t)} a déjà été vendu le ${esc(fmtDate(saleDate(d)))}${d.client ? ' à ' + esc(d.client) : ''}.`);
+  });
+  if(L.length && qty > 0 && L.length !== qty) out.push(`Vous vendez ${qty} pièce(s) mais vous avez noté ${L.length} numéro(s).`);
+  return out.length ? `<p class="note red" style="margin:-4px 0 10px">${out.join('<br>')}</p>` : '';
+}
+function snShow(p, on){
+  const w = $('#snw'); if(!w) return; const show = !!(on && p && p.sn); w.hidden = !show; if(!show) return;
+  const E = w.closest('form').elements, q = Math.round(num(E.qty && E.qty.value));
+  if(!w.dataset.wired){ w.dataset.wired = 1; E.sn.addEventListener('input', () => snShow(prod(E.pid.value), true)); }
+  $('#snwarn').innerHTML = snWarn(E.sn.value, q, w.dataset.self);
+}
+const snRec = (p, E) => { const v = p && p.sn && E.sn ? snClean(E.sn.value) : ''; return v ? Object.assign({sn:v}, p.gar ? {gar:p.gar} : {}) : {}; };
+function snApply(rec, p, E){
+  if(!E.sn) return; const w = $('#snw'); if(w && w.hidden) return;
+  const v = snClean(E.sn.value); if(v){ rec.sn = v; if(p.gar) rec.gar = p.gar; else delete rec.gar; } else { delete rec.sn; delete rec.gar; }
+}
+function snCard(m){
+  if(!m.sn) return '';
+  return `<div class="card" style="margin-bottom:12px"><b>IMEI / numéro de série</b><div style="font-family:ui-monospace,monospace;font-size:15px;margin:6px 0;word-break:break-all">${esc(m.sn)}</div><div class="d">${garTxt(m)}</div></div>`;
+}
+function imeiSheet(q0){
+  sheet('Vérifier un IMEI ou un numéro de série', `<p class="note" style="margin-bottom:10px">Un client revient avec un téléphone ? Tapez son IMEI (ou seulement les derniers chiffres) : vous voyez s'il a été vendu ici, quand, à qui, et si la garantie court encore. Pour voir l'IMEI : tapez <b>*#06#</b> sur le téléphone.</p>
+    <input class="search" id="imq" autocomplete="off" placeholder="Ex : 356938035643809" value="${esc(q0 || '')}"><div id="imr" style="margin-top:10px"></div>`);
+  const run = () => {
+    const q = $('#imq').value.replace(/\s+/g, '').toLowerCase(), box = $('#imr'); if(!box) return;
+    if(q.length < 4){ box.innerHTML = '<p class="note">Tapez au moins 4 chiffres ou lettres.</p>'; return; }
+    const L = sortMoves(S.moves.filter(m => m.type === 'vente' && m.sn && snList(m.sn).some(t => t.toLowerCase().includes(q))));
+    box.innerHTML = L.length ? `<div class="list">${L.map(m => `<button class="it" data-a="sale:${m.id}"><div class="m"><div class="t">${esc(pname(m.pid))}</div>
+        <div class="d" style="font-family:ui-monospace,monospace">${esc(snList(m.sn).filter(t => t.toLowerCase().includes(q)).join(', '))}</div>
+        <div class="d">Vendu le ${esc(fmtDate(saleDate(m)))} · ${esc(m.client || 'client non noté')}${m.phone ? ' · ' + esc(m.phone) : ''}</div><div class="d">${garTxt(m)}</div></div>
+        <div class="r"><span class="pill p-${m.status}">${STATUS[m.status] || ''}</span></div></button>`).join('')}</div>`
+      : `<div class="card empty"><b>Aucune vente trouvée</b>Ce numéro n'a pas été vendu dans cette boutique, ou il n'a pas été noté à la vente.</div>`;
+  };
+  $('#imq').oninput = run; run(); setTimeout(() => { const i = $('#imq'); if(i) i.focus(); }, 150);
+}
+// Case « Noter l'IMEI » dans la fiche produit (cochée seule pour les téléphones, tablettes, ordinateurs)
+function snBox(p){
+  if(!snAsk(p)) return '';
+  return `<label class="f" style="display:flex;gap:10px;align-items:center;margin:6px 0 0"><input type="checkbox" name="c_sn" ${p && p.sn ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Noter l'IMEI ou le numéro de série à chaque vente <small class="note">(téléphones, ordinateurs, montres…)</small></span></label>`;
+}
+function snWire(f, p){
+  const E = f.elements; if(!E.c_sn || !E.cat) return; let touched = !!p;
+  E.c_sn.addEventListener('change', () => touched = true);
+  E.cat.addEventListener('input', () => { if(!touched) E.c_sn.checked = SN_CATS.includes(E.cat.value.trim()); });
+}
+Object.assign(A, {imei: q => imeiSheet(q)});
 
 /* ---------- Formulaires : fonctionnent même dans un aperçu restreint (sans envoi de formulaire) ---------- */
 document.addEventListener('click', e => {
@@ -5093,7 +5391,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'c1e4a5b4ae';
+const APP_BUILD = '3e7bf6f89b';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
