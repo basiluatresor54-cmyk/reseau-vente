@@ -5753,7 +5753,7 @@ function authShell(inner){
   let el = $('#auth');
   if(!el){ el = document.createElement('div'); el.id = 'auth'; document.body.appendChild(el); }
   el.hidden = false; document.body.classList.add('authon');
-  el.innerHTML = `<div class="auth-box"><div class="auth-logo">${ico('box')}</div><h1>BASILUA TECH</h1><div style="font-weight:800;color:var(--brand);font-size:17px;margin:-2px 0 4px">Réseau &amp; Vente</div><p class="note" style="margin-bottom:18px">Le réseau qui relie vendeurs, livreurs et clients</p>${inner}${!isStandalone() ? `<button type="button" class="btn block" style="margin-top:16px" data-a="install">📲 Installer l'application sur ce téléphone</button>` : ''}<p class="note" style="margin-top:22px"><a class="link" href="guide.html" target="_blank" rel="noopener">Guide d'utilisation</a> · Conçu par <b>BASILUA TECH</b></p></div>`;
+  el.innerHTML = `<div class="auth-box"><div class="auth-logo" style="overflow:hidden"><img src="icon-192.png" alt="BASILUA TECH" style="width:100%;height:100%;display:block;object-fit:cover"></div><h1>BASILUA TECH</h1><div style="font-weight:800;color:var(--brand);font-size:17px;margin:-2px 0 4px">Réseau &amp; Vente</div><p class="note" style="margin-bottom:18px">Le réseau qui relie vendeurs, livreurs et clients</p>${inner}${!isStandalone() ? `<button type="button" class="btn block" style="margin-top:16px" data-a="install">📲 Installer l'application sur ce téléphone</button>` : ''}<p class="note" style="margin-top:22px"><a class="link" href="guide.html" target="_blank" rel="noopener">Guide d'utilisation</a> · Conçu par <b>BASILUA TECH</b></p></div>`;
   return el;
 }
 function hideAuth(){ const el = $('#auth'); if(el){ el.hidden = true; el.innerHTML = ''; } document.body.classList.remove('authon'); }
@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'e735d6ecb1';
+const APP_BUILD = '78e51e9f2c';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
