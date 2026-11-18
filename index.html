@@ -4217,12 +4217,13 @@ const IMP_COLS = [
   ['lot', 'N° de lot', /(^lot|lot$|batch)/],
   ['exp', 'Date de péremption', /(perem|expir|^exp|^dlc|^dluo)/],
   ['marque', 'Marque', /(marque|brand|labo|fabricant)/],
+  ['modele', 'Modèle', /(^modele|^model|^version)/],
   ['qual', 'Qualité ou état', /(qualit|^etat|condition)/],
   ['mat', 'Matière', /(^mati|metal|carat)/],
   ['forme', 'Forme', /(^forme|galen)/],
   ['gar', 'Garantie', /(garant|warrant)/]
 ];
-const impKeys = () => ['name', 'sell', 'buy', 'qty', 'cat', 'alert', 'taille', 'couleur', 'lot', 'exp'].concat(['marque', 'qual', 'mat', 'forme', 'gar'].filter(k => caracOn(k) || (IMPX.map && IMPX.map[k] != null && IMPX.map[k] !== '')));
+const impKeys = () => ['name', 'sell', 'buy', 'qty', 'cat', 'alert', 'taille', 'couleur', 'lot', 'exp'].concat(['marque', 'modele', 'qual', 'mat', 'forme', 'gar'].filter(k => caracOn(k) || (IMPX.map && IMPX.map[k] != null && IMPX.map[k] !== '')));
 const colIdx = s => { let n = 0; for(const ch of String(s).toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
 const colName = i => { let s = ''; i++; while(i > 0){ const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };
 // « 1 500,50 », « 1,500.50 », « 15 $ », « 2 500 FC » → nombre
@@ -4320,7 +4321,7 @@ function importRows(){
     if(have.has(key) || seen.has(key)){ skip.dup++; continue; }
     const sell = numx(g(r, 'sell')); if(!(sell > 0)){ skip.noprice++; continue; }
     seen.add(key);
-    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:String(g(r, 'cat')).slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert')))), vt, vc, lot:String(g(r, 'lot')).trim().slice(0, 30), exp:dateX(g(r, 'exp')), ...Object.fromEntries(['marque', 'qual', 'mat', 'forme', 'gar'].map(k => [k, String(g(r, k)).replace(/\s+/g, ' ').trim().slice(0, 40)]).filter(e => e[1]))});
+    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:String(g(r, 'cat')).slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert')))), vt, vc, lot:String(g(r, 'lot')).trim().slice(0, 30), exp:dateX(g(r, 'exp')), ...Object.fromEntries(['marque', 'modele', 'qual', 'mat', 'forme', 'gar'].map(k => [k, String(g(r, k)).replace(/\s+/g, ' ').trim().slice(0, 40)]).filter(e => e[1]))});
   }
   return {ok, skip};
 }
@@ -4593,7 +4594,7 @@ addCats('tel', ['Smartphones', 'Téléphones simples', 'Tablettes', 'Ordinateurs
 addCats('cosm', ['Éclaircissants et laits', 'Huiles et beurres (karité…)', 'Déodorants', 'Ongles', 'Perruques et mèches']);
 
 /* Caractéristiques d'un produit : chacune a sa liste de propositions selon le secteur ; on peut toujours écrire autre chose. */
-const CARAC = [['marque', 'Marque'], ['qual', 'Qualité ou état'], ['mat', 'Matière'], ['forme', 'Forme'], ['gar', 'Garantie']];
+const CARAC = [['marque', 'Marque'], ['modele', 'Modèle'], ['qual', 'Qualité ou état'], ['mat', 'Matière'], ['forme', 'Forme'], ['gar', 'Garantie']];
 const CARAC_SUG = {
   marque: {
     vet: ['Adidas', 'Nike', 'Puma', 'Fila', 'Gucci', 'Louis Vuitton', 'Versace', 'Dior', 'Balenciaga', 'Zara', 'H&M', 'Lacoste', 'Tommy Hilfiger', 'Ralph Lauren', 'Hugo Boss', 'Armani', 'Calvin Klein', "Levi's", 'Dolce & Gabbana', 'Prada', 'Burberry', 'Vlisco', 'Woodin', 'Uniwax', 'Hitarget', 'Shein', 'Sans marque'],
@@ -4621,6 +4622,7 @@ const CARAC_SUG = {
     bijou: ['Or 18 carats', 'Or 24 carats', 'Or 14 carats', 'Plaqué or', 'Argent 925', 'Acier inoxydable', 'Titane', 'Fantaisie', 'Perles', 'Diamant', 'Cuir'],
     meub: ['Bois massif', 'Contreplaqué', 'Métal', 'Plastique', 'Verre', 'Tissu', 'Cuir']
   },
+  modele: { tel: [], bijou: [] },
   forme: {
     pharma: ['Comprimés', 'Gélules', 'Sirop', 'Suspension', 'Injectable', 'Perfusion', 'Pommade ou crème', 'Gel', 'Suppositoire', 'Ovule', 'Gouttes', 'Collyre', 'Sachet', 'Spray']
   },
@@ -4642,24 +4644,97 @@ const caracChips = (k, mine) => { const T = CARAC_SUG[k] || {}, ss = caracSects(
   return [...new Set(out)].slice(0, Math.max(20, mine.length)); };
 const caracOn = (k, p) => k === 'marque' || k === 'qual' || !!(p && p[k]) || caracSects().some(s => (CARAC_SUG[k] || {})[s]);
 const caracLabel = k => k === 'marque' && hasSect('pharma') ? 'Marque ou laboratoire' : (CARAC.find(c => c[0] === k) || [])[1];
-const caracTxt = p => p ? [p.marque, p.qual, p.mat, p.forme, p.gar ? (/garantie/i.test(p.gar) ? p.gar : 'garantie ' + p.gar) : ''].filter(Boolean).join(' · ') : '';
+const caracTxt = p => p ? [p.marque, p.modele, p.qual, p.mat, p.forme, p.gar ? (/garantie/i.test(p.gar) ? p.gar : 'garantie ' + p.gar) : ''].filter(Boolean).join(' · ') : '';
 const caracLine = p => { const t = caracTxt(p); return t ? `<div class="d">${esc(t)}</div>` : ''; };
+/* Modèles proposés selon la marque (téléphones, ordinateurs, montres). Chaque boutique peut en ajouter. */
+const MODELS = {
+  apple: ['iPhone 17 Pro Max', 'iPhone 17 Pro', 'iPhone 17', 'iPhone Air', 'iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16 Plus', 'iPhone 16', 'iPhone 16e', 'iPhone 15 Pro Max', 'iPhone 15 Pro', 'iPhone 15 Plus', 'iPhone 15', 'iPhone 14 Pro Max', 'iPhone 14 Pro', 'iPhone 14 Plus', 'iPhone 14', 'iPhone 13 Pro Max', 'iPhone 13 Pro', 'iPhone 13', 'iPhone 13 mini', 'iPhone 12 Pro Max', 'iPhone 12 Pro', 'iPhone 12', 'iPhone 11 Pro Max', 'iPhone 11 Pro', 'iPhone 11', 'iPhone XS Max', 'iPhone XS', 'iPhone XR', 'iPhone X', 'iPhone SE', 'iPhone 8 Plus', 'iPhone 8', 'iPhone 7 Plus', 'iPhone 7', 'iPad', 'iPad Air', 'iPad Pro', 'MacBook Air', 'MacBook Pro', 'AirPods', 'AirPods Pro', 'Apple Watch'],
+  samsung: ['Galaxy S25 Ultra', 'Galaxy S25', 'Galaxy S24 Ultra', 'Galaxy S24', 'Galaxy S23 Ultra', 'Galaxy S23', 'Galaxy S22', 'Galaxy S21', 'Galaxy S20', 'Galaxy S10', 'Galaxy S9', 'Galaxy S8', 'Galaxy Note 20', 'Galaxy Note 10', 'Galaxy Z Fold', 'Galaxy Z Flip', 'Galaxy A56', 'Galaxy A55', 'Galaxy A36', 'Galaxy A35', 'Galaxy A26', 'Galaxy A25', 'Galaxy A16', 'Galaxy A15', 'Galaxy A14', 'Galaxy A13', 'Galaxy A12', 'Galaxy A10', 'Galaxy A06', 'Galaxy A05', 'Galaxy Tab', 'Galaxy Buds', 'Galaxy Watch'],
+  tecno: ['Spark 40', 'Spark 30', 'Spark 20', 'Spark 10', 'Spark Go', 'Camon 40', 'Camon 30', 'Camon 20', 'Pova 7', 'Pova 6', 'Pova 5', 'Phantom V', 'Phantom X2', 'Pop 9', 'Pop 8', 'Pop 7'],
+  itel: ['A80', 'A70', 'A50', 'A05s', 'P65', 'P55', 'S25', 'S24', 'S23', 'Vision 3', 'it2160', 'it5626'],
+  infinix: ['Hot 60', 'Hot 50', 'Hot 40', 'Hot 30', 'Smart 10', 'Smart 9', 'Smart 8', 'Note 50', 'Note 40', 'Note 30', 'Zero 40', 'Zero 30', 'GT 30 Pro'],
+  xiaomi: ['Xiaomi 15', 'Xiaomi 14', 'Redmi Note 14', 'Redmi Note 13', 'Redmi Note 12', 'Redmi 15C', 'Redmi 14C', 'Redmi 13C', 'Redmi A5', 'Redmi A3', 'Poco X7', 'Poco X6', 'Poco F6'],
+  redmi: ['Note 14', 'Note 13', 'Note 12', '15C', '14C', '13C', 'A5', 'A3'],
+  oppo: ['Reno 13', 'Reno 12', 'Reno 11', 'A80', 'A60', 'A58', 'A38', 'A18', 'A17'],
+  huawei: ['Pura 70', 'P60', 'P40', 'P30', 'Nova 13', 'Nova 12', 'Nova 11', 'Y9', 'Y7'],
+  honor: ['X9c', 'X8c', 'X7c', 'X6c', 'Magic 7', '400', '200'],
+  nokia: ['105', '106', '110', '150', '3310', 'C32', 'G42'],
+  'google pixel': ['Pixel 10', 'Pixel 9', 'Pixel 8', 'Pixel 7', 'Pixel 6'],
+  hp: ['EliteBook', 'ProBook', 'Pavilion', 'Victus', 'Omen', 'Envy', 'Spectre', 'HP 250', 'HP 15', 'Chromebook'],
+  dell: ['Latitude', 'Inspiron', 'Vostro', 'XPS', 'Precision', 'Alienware', 'OptiPlex'],
+  lenovo: ['ThinkPad', 'IdeaPad', 'Yoga', 'Legion', 'ThinkCentre', 'Tab'],
+  asus: ['VivoBook', 'ZenBook', 'TUF Gaming', 'ROG', 'ExpertBook'],
+  acer: ['Aspire', 'Swift', 'Nitro', 'Predator', 'Extensa', 'TravelMate'],
+  rolex: ['Submariner', 'Daytona', 'Datejust', 'Day-Date', 'GMT-Master II', 'Oyster Perpetual', 'Yacht-Master', 'Explorer'],
+  casio: ['G-Shock', 'Edifice', 'Vintage', 'F-91W', 'Baby-G', 'Pro Trek'],
+  'apple watch': ['Series 10', 'Series 9', 'SE', 'Ultra 2'],
+  oraimo: ['FreePods', 'Power bank', 'Chargeur rapide', 'Câble', 'Watch'],
+  jbl: ['Flip', 'Charge', 'Go', 'Boombox', 'PartyBox', 'Tune']
+};
+const modelKey = m => 'c:modele' + (m && m.trim() ? ':' + m.trim().toLowerCase() : '');
+function modelSug(m){
+  const k = (m || '').trim().toLowerCase();
+  if(k && MODELS[k]) return MODELS[k];
+  if(k) return [];
+  return [...new Set(['apple', 'samsung', 'tecno', 'itel', 'infinix'].reduce((t, b) => t.concat(MODELS[b].slice(0, 6)), []))];
+}
+/* Boutons à toucher, modifiables par la boutique : « + Ajouter » garde un bouton ; « Modifier » enlève ceux qui ne servent pas.
+   Gardés dans S.settings.chipAdd / chipHide (par liste). */
+const chLo = s => String(s).toLowerCase();
+const chipList = (key, defs, last) => { const A = ((S.settings.chipAdd || {})[key] || []), H = ((S.settings.chipHide || {})[key] || []).map(chLo), seen = new Set();
+  const D = defs.filter(v => !H.includes(chLo(v))); return (last ? D.concat(A) : A.concat(D)).filter(v => !seen.has(chLo(v)) && seen.add(chLo(v))); };
+function chipEdit(key, v, add){
+  const st = S.settings; st.chipAdd = st.chipAdd || {}; st.chipHide = st.chipHide || {};
+  const A = (st.chipAdd[key] || []), mine = A.some(x => chLo(x) === chLo(v));
+  st.chipAdd[key] = A.filter(x => chLo(x) !== chLo(v)); st.chipHide[key] = (st.chipHide[key] || []).filter(x => chLo(x) !== chLo(v));
+  if(add) st.chipAdd[key].unshift(v); else if(!mine) st.chipHide[key].push(v);
+  ['chipAdd', 'chipHide'].forEach(o => { if(!st[o][key].length) delete st[o][key]; });
+  save();
+}
+function chipBox(box, o){
+  let edit = false;
+  const key = () => typeof o.key === 'function' ? o.key() : o.key;
+  const draw = () => {
+    const k = key(), L = chipList(k, o.defs(), o.last), hid = ((S.settings.chipHide || {})[k] || []).length;
+    if(!L.length && !o.extra && !edit && box.hidden) return;
+    box.innerHTML = L.map(v => `<button type="button" class="chip ${edit ? 'ed' : o.isOn(v) ? 'on' : ''}" data-cv="${esc(v)}">${esc(v)}${edit ? ' ✕' : ''}</button>`).join('')
+      + (edit ? `<button type="button" class="chip" data-cdone><b>Terminé</b></button>${hid ? '<button type="button" class="chip" data-creset>Remettre les boutons de départ</button>' : ''}`
+        : (o.extra ? o.extra() : '') + '<button type="button" class="chip cadd" data-cadd>+ Ajouter</button>' + (L.length ? '<button type="button" class="chip cadd" data-cedit>Modifier</button>' : ''));
+    if(edit) box.insertAdjacentHTML('afterbegin', '<span class="note" style="width:100%">Touchez un bouton pour l\'enlever de la liste :</span>');
+  };
+  const add = () => { const i = box.querySelector('.cnew input'); const v = i ? i.value.replace(/\s+/g, ' ').trim().slice(0, o.len || 40) : ''; if(v){ chipEdit(key(), v, true); o.pick(v, true); } draw(); };
+  box.onclick = e => { const t = e.target.closest('button'); if(!t || !box.contains(t)) return;
+    if(t.hasAttribute('data-cadd')){ t.outerHTML = `<span class="cnew" style="display:flex;gap:6px;width:100%"><input maxlength="${o.len || 40}" placeholder="Écrire puis OK" style="flex:1;min-height:40px;padding:6px 10px"><button type="button" class="btn sm primary" data-cok>OK</button></span>`; box.querySelector('.cnew input').focus(); return; }
+    if(t.hasAttribute('data-cok')){ add(); return; }
+    if(t.hasAttribute('data-cedit')){ edit = true; draw(); return; }
+    if(t.hasAttribute('data-cdone')){ edit = false; draw(); return; }
+    if(t.hasAttribute('data-creset')){ delete S.settings.chipHide[key()]; save(); draw(); return; }
+    if(t.dataset.cv !== undefined){ if(edit){ chipEdit(key(), t.dataset.cv, false); draw(); } else o.pick(t.dataset.cv, false); draw(); return; }
+    if(o.onExtra) o.onExtra(t);
+  };
+  box.addEventListener('keydown', e => { if(e.key === 'Enter' && e.target.closest('.cnew')){ e.preventDefault(); add(); } });
+  draw(); return {draw};
+}
+document.head.insertAdjacentHTML('beforeend', '<style>.chips.wrapc .chip.cadd{border:1.5px dashed var(--brand);background:transparent;color:var(--brand)}.chips.wrapc .chip.ed{border:1.5px dashed #dc2626;color:#dc2626}</style>');
 function caracSection(p){
   const ks = CARAC.filter(([k]) => caracOn(k, p)), any = p && CARAC.some(([k]) => p[k]);
   const open = any || caracSects().some(s => ['vet', 'chaus', 'bijou', 'tel', 'quinc', 'pharma', 'cosm'].includes(s));
   const mine = k => [...new Set(S.products.map(x => x[k]).filter(Boolean))];
   return `<details class="card" id="caracw" style="margin-bottom:12px" ${open ? 'open' : ''}><summary><b>Marque, qualité…</b> <span class="note">(optionnel)</span></summary>
-    <p class="note" style="margin:8px 0">Touchez une proposition ou écrivez vous-même. Elles s'affichent dans le stock et servent à la recherche.</p>
-    ${ks.map(([k]) => { const sug = [...new Set(mine(k).concat(caracSug(k)))];
+    <p class="note" style="margin:8px 0">Touchez une proposition ou écrivez vous-même. « + Ajouter » garde votre bouton pour les prochains produits ; « Modifier » enlève ceux qui ne vous servent pas.</p>
+    ${ks.map(([k]) => { const sug = [...new Set(mine(k).concat(k === 'modele' ? modelSug(p && p.marque) : caracSug(k)))];
       return `<div class="f"><span>${esc(caracLabel(k))}</span><input name="c_${k}" maxlength="40" list="cdl_${k}" value="${esc(p && p[k] || '')}" placeholder="${k === 'marque' ? 'Ex : ' + esc((sug[0] || 'Adidas')) : 'Écrire…'}" autocomplete="off">
         <datalist id="cdl_${k}">${sug.map(v => `<option value="${esc(v)}">`).join('')}</datalist>
-        ${sug.length ? `<div class="chips wrapc cpk" data-ck="${k}" style="margin-top:6px">${caracChips(k, mine(k).slice(0, 8)).map(v => `<button type="button" class="chip ${p && p[k] === v ? 'on' : ''}" data-cv="${esc(v)}">${esc(v)}</button>`).join('')}</div>` : ''}</div>`; }).join('')}${snBox(p)}</details>`;
+        <div class="chips wrapc cpk" data-ck="${k}" style="margin-top:6px"></div></div>`; }).join('')}${snBox(p)}</details>`;
 }
 function caracWire(f){
-  f.querySelectorAll('.cpk').forEach(box => { const inp = f.elements['c_' + box.dataset.ck];
-    const sync = () => box.querySelectorAll('[data-cv]').forEach(b => b.classList.toggle('on', b.dataset.cv === inp.value.trim()));
-    box.onclick = e => { const b = e.target.closest('[data-cv]'); if(!b) return; inp.value = inp.value.trim() === b.dataset.cv ? '' : b.dataset.cv; sync(); };
-    inp.addEventListener('input', sync); });
+  const mine = k => [...new Set(S.products.map(x => x[k]).filter(Boolean))].slice(0, 8), B = {};
+  f.querySelectorAll('.cpk').forEach(box => { const k = box.dataset.ck, inp = f.elements['c_' + k];
+    const mk = () => k === 'modele' ? modelKey(f.elements.c_marque && f.elements.c_marque.value) : 'c:' + k;
+    B[k] = chipBox(box, {key:mk, defs:() => k === 'modele' ? modelSug(f.elements.c_marque && f.elements.c_marque.value).slice(0, 40) : caracChips(k, mine(k)),
+      isOn:v => v === inp.value.trim(), pick:(v, added) => { inp.value = added || inp.value.trim() !== v ? v : ''; inp.dispatchEvent(new Event('input', {bubbles:true})); }});
+    inp.addEventListener('input', () => B[k].draw()); });
+  if(B.modele && f.elements.c_marque) f.elements.c_marque.addEventListener('input', () => { B.modele.draw(); const dl = f.querySelector('#cdl_modele'); if(dl) dl.innerHTML = modelSug(f.elements.c_marque.value).map(v => `<option value="${esc(v)}">`).join(''); });
 }
 function readCarac(f){
   const E = f.elements, o = {}; let seen = false;
@@ -4692,7 +4767,8 @@ const VAR_GROUPS = [
   ['Pointures enfants', '18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34', 'chaus'],
   ['Bagues', '48, 50, 52, 54, 56, 58, 60, 62, 64, 66', 'bijou'],
   ['Chaînes (longueur)', '40 cm, 45 cm, 50 cm, 55 cm, 60 cm, 70 cm', 'bijou'],
-  ['Mémoire (téléphones)', '16 Go, 32 Go, 64 Go, 128 Go, 256 Go, 512 Go, 1 To', 'tel'],
+  ['Stockage (64 Go, 128 Go…)', '8 Go, 16 Go, 32 Go, 64 Go, 128 Go, 256 Go, 512 Go, 1 To, 2 To', 'tel'],
+  ['Android (RAM + stockage)', '2 Go / 32 Go, 3 Go / 64 Go, 4 Go / 64 Go, 4 Go / 128 Go, 6 Go / 128 Go, 8 Go / 128 Go, 8 Go / 256 Go, 12 Go / 256 Go, 12 Go / 512 Go', 'tel'],
   ['Ordinateurs (RAM / disque)', '4 Go / 128 Go, 4 Go / 256 Go, 8 Go / 256 Go, 8 Go / 512 Go, 16 Go / 512 Go, 16 Go / 1 To', 'tel'],
   ['Taille unique', '', '']
 ];
@@ -4703,38 +4779,31 @@ function varPickWire(f, draw){
   const first = rel.length ? rel.concat(VAR_GROUPS.map((g, i) => [g, i]).filter(([g]) => !g[2])) : VAR_GROUPS.map((g, i) => [g, i]);
   const more = VAR_GROUPS.map((g, i) => [g, i]).filter(x => !first.some(y => y[1] === x[1]));
   const chip = ([g, i], hid) => `<button type="button" class="chip" data-vg="${i}" ${hid ? 'hidden' : ''}>${esc(g[0])}</button>`;
-  E.vtl.closest('.f').insertAdjacentHTML('beforebegin', `<div class="vpk" style="margin-bottom:8px"><span class="note">Choisissez un modèle, puis touchez les tailles que vous avez (ou écrivez-les en dessous) :</span>
+  E.vtl.closest('.f').insertAdjacentHTML('beforebegin', `<div class="vpk" style="margin-bottom:8px"><span class="note">Choisissez un modèle, puis touchez les tailles que vous avez. Il en manque une ? « + Ajouter », ou écrivez-la en dessous :</span>
     <div class="chips wrapc" id="varPre" style="margin:6px 0 0">${first.map(x => chip(x)).join('')}${more.map(x => chip(x, 1)).join('')}${more.length ? '<button type="button" class="chip" data-vgmore>Autres modèles…</button>' : ''}</div>
     <div class="chips wrapc" id="varVals" style="margin:6px 0 0" hidden></div></div>`);
-  E.vcl.closest('.f').insertAdjacentHTML('afterend', `<div class="chips wrapc vpk" id="varCols" style="margin:-4px 0 10px">${VAR_COLORS.map(c => `<button type="button" class="chip" data-vcol="${esc(c)}">${esc(c)}</button>`).join('')}</div>`);
+  E.vcl.closest('.f').insertAdjacentHTML('afterend', `<div class="chips wrapc vpk" id="varCols" style="margin:-4px 0 10px"></div>`);
   let grp = null;
   const lo = s => s.toLowerCase(), has = (L, v) => L.some(x => lo(x) === lo(v));
-  const sync = () => {
-    const T = splitList(E.vtl.value), C = splitList(E.vcl.value);
-    f.querySelectorAll('#varVals [data-vv]').forEach(b => b.classList.toggle('on', has(T, b.dataset.vv)));
-    const all = f.querySelector('#varVals [data-vall]'); if(all && grp) all.classList.toggle('on', splitList(grp[1]).every(v => has(T, v)));
-    f.querySelectorAll('#varCols [data-vcol]').forEach(b => b.classList.toggle('on', has(C, b.dataset.vcol)));
-  };
-  const setT = L => { E.vtl.value = L.join(', '); draw(); sync(); };
-  const order = L => { const G = grp ? splitList(grp[1]) : []; return G.filter(v => has(L, v)).concat(L.filter(v => !has(G, v))); };
+  const gvals = () => grp ? chipList('vg:' + grp[0], splitList(grp[1]), 1) : [];
+  const order = L => { const G = gvals(); return G.filter(v => has(L, v)).concat(L.filter(v => !has(G, v))); };
+  const setT = L => { E.vtl.value = L.join(', '); draw(); vb.draw(); };
+  const vb = chipBox(f.querySelector('#varVals'), {key:() => 'vg:' + (grp ? grp[0] : ''), defs:() => grp ? splitList(grp[1]) : [], len:24, last:1,
+    isOn:v => has(splitList(E.vtl.value), v),
+    pick:(v, added) => { const T = splitList(E.vtl.value); setT(has(T, v) && !added ? T.filter(x => lo(x) !== lo(v)) : order(has(T, v) ? T : T.concat([v]))); },
+    extra:() => grp ? `<button type="button" class="chip ${gvals().every(v => has(splitList(E.vtl.value), v)) ? 'on' : ''}" data-vall><b>Tout</b></button>` : '',
+    onExtra:t => { if(t.dataset.vall === undefined) return; const T = splitList(E.vtl.value), G = gvals(), on = G.every(v => has(T, v)); setT(on ? T.filter(v => !has(G, v)) : order(T.concat(G.filter(v => !has(T, v))))); }});
+  const cb = chipBox(f.querySelector('#varCols'), {key:'vcol', defs:() => VAR_COLORS, len:24, last:1, isOn:v => has(splitList(E.vcl.value), v),
+    pick:(v, added) => { const C = splitList(E.vcl.value); E.vcl.value = (has(C, v) && !added ? C.filter(x => lo(x) !== lo(v)) : has(C, v) ? C : C.concat([v])).join(', '); draw(); cb.draw(); }});
   f.querySelector('#varPre').onclick = e => {
     if(e.target.closest('[data-vgmore]')){ f.querySelectorAll('#varPre [hidden]').forEach(b => b.hidden = false); e.target.closest('[data-vgmore]').remove(); return; }
     const b = e.target.closest('[data-vg]'); if(!b) return; grp = VAR_GROUPS[+b.dataset.vg];
     f.querySelectorAll('#varPre [data-vg]').forEach(x => x.classList.toggle('on', x === b));
     const box = f.querySelector('#varVals');
-    if(!grp[1]){ box.hidden = true; box.innerHTML = ''; setT([]); return; }
-    box.innerHTML = splitList(grp[1]).map(v => `<button type="button" class="chip" data-vv="${esc(v)}">${esc(v)}</button>`).join('') + '<button type="button" class="chip" data-vall><b>Tout</b></button>';
-    box.hidden = false; sync();
+    if(!grp[1]){ box.hidden = true; grp = null; vb.draw(); setT([]); return; }
+    box.hidden = false; vb.draw();
   };
-  f.querySelector('#varVals').onclick = e => {
-    const T = splitList(E.vtl.value);
-    if(e.target.closest('[data-vall]')){ const G = splitList(grp[1]), on = G.every(v => has(T, v)); setT(on ? T.filter(v => !has(G, v)) : order(T.concat(G.filter(v => !has(T, v))))); return; }
-    const b = e.target.closest('[data-vv]'); if(!b) return; const v = b.dataset.vv;
-    setT(has(T, v) ? T.filter(x => lo(x) !== lo(v)) : order(T.concat([v])));
-  };
-  f.querySelector('#varCols').onclick = e => { const b = e.target.closest('[data-vcol]'); if(!b) return; const C = splitList(E.vcl.value), v = b.dataset.vcol;
-    E.vcl.value = (has(C, v) ? C.filter(x => lo(x) !== lo(v)) : C.concat([v])).join(', '); draw(); sync(); };
-  E.vtl.addEventListener('input', sync); E.vcl.addEventListener('input', sync); sync();
+  E.vtl.addEventListener('input', () => vb.draw()); E.vcl.addEventListener('input', () => cb.draw());
 }
 
 /* Entrée de stock par taille : le contenu d'un carton ou d'un ballot (plusieurs tailles / couleurs) en une fois */
@@ -5391,7 +5460,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '3e7bf6f89b';
+const APP_BUILD = '22dd507e6d';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
