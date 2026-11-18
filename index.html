@@ -866,7 +866,7 @@ function vStock(){
     <div class="chips" style="margin:8px 0 0"><button class="chip ${!stockAsOf ? 'on' : ''}" data-a="sasof" data-d="">Aujourd'hui (actuel)</button><button class="chip ${stockAsOf === addDays(t, -1) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -1)}">Hier soir</button><button class="chip ${stockAsOf === addDays(t, -7) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -7)}">Il y a 7 jours</button></div>
     ${stockAsOf ? `<p class="note" style="margin:8px 0 0">⏪ Vous voyez le stock tel qu'il était <b>à la fin du ${esc(dAbs(stockAsOf, 1))}</b>. <button class="link" data-a="sasof" data-d="">Revenir au stock actuel</button> · <button class="link" data-a="shday" data-d="${stockAsOf}">Mouvements de ce jour ›</button></p>` : ''}</div>
   <input class="search" type="search" placeholder="Rechercher un produit…" value="${esc(stockQ)}" oninput="stockQ=this.value;refreshList('stock')">
-  ${bcOn() ? '<button class="btn sm" data-a="scanstock" style="margin:-4px 0 10px">Scanner un code-barres</button>' : ''}
+  ${bcOn() || (has('shop') && !isVendeur()) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 10px">${bcOn() ? '<button class="btn sm" data-a="scanstock">Scanner un code-barres</button>' : ''}${isVendeur() ? '' : '<button class="btn sm" data-a="lbl">Imprimer des étiquettes</button>'}</div>` : ''}
   <div id="sfilw">${stockFiltChips()}</div>
   ${stockAsOf || isVendeur() ? '' : (n => n ? `<button class="card daycard" data-a="rachat"><span><b>À racheter</b> · ${n} produit(s) presque fini(s)</span><span class="note">Préparer la commande ›</span></button>` : '')(rachatList().length)}
   ${perimCard()}
@@ -4938,15 +4938,34 @@ Object.assign(A, {imei: q => imeiSheet(q)});
 
 /* ---------- Codes-barres : caméra du téléphone (lecteur intégré, sinon ZXing chargé à la demande) ou lecteur « pistolet » (tape le code + Entrée) ----------
    Un produit peut avoir un ou plusieurs codes (p.code, séparés par des virgules). Le code n'est pas partagé entre les tailles / couleurs. */
-const bcList = v => String(v || '').split(/[\s,;]+/).map(x => x.trim().slice(0, 40)).filter(Boolean);
-const bcClean = v => [...new Set(bcList(v))].slice(0, 10).join(', ');
-const prodByCode = c => { c = String(c || '').trim(); return c ? S.products.find(p => bcList(p.code).includes(c)) : null; };
+// Plusieurs codes séparés par des virgules (« 600123…, 544900… ») ; un texte de QR code avec des espaces (« Pommade Golden Hair 15000 FC ») compte pour un seul code
+const bcNorm = c => String(c || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+const bcList = v => { const s = bcNorm(v); if(!s) return []; const parts = s.split(/\s*[,;]\s*/).filter(Boolean); return parts.every(x => /^\S{1,60}$/.test(x)) ? [...new Set(parts)] : [s]; };
+const bcClean = v => bcList(v).slice(0, 10).join(', ');
+const prodByCode = c => { c = bcNorm(c); return c ? S.products.find(p => bcList(p.code).includes(c)) : null; };
+// Texte d'un QR code fait maison → nom et prix proposés (« Nom : Huile / Prix : 10 $ », « Pommade Golden Hair - 15 000 FC »…)
+function qrNum(t){ t = String(t).replace(/\s/g, ''); if(/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); else if(/,\d{3}$/.test(t) && !/\./.test(t) && t.length > 4) t = t.replace(/,/g, ''); else t = t.replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'); return num(t); }
+function qrInfo(t){
+  const raw = String(t || '').trim(); if(!raw || /^https?:\/\//i.test(raw) || !/[a-zà-ÿ]{3,}/i.test(raw)) return null;
+  const C = '(\\$|usd|dollars?|fc|cdf|francs?(?: congolais)?)', N = '(\\d[\\d\\s.,]*\\d|\\d)';
+  let sell = 0, cur = '', used = '';
+  const m1 = raw.match(new RegExp(N + '\\s*' + C, 'i')), m2 = raw.match(new RegExp(C + '\\s*' + N, 'i')), m3 = raw.match(new RegExp('(?:prix|valeur|price|pv)\\s*[:=]?\\s*' + N, 'i'));
+  if(m1){ sell = qrNum(m1[1]); cur = m1[2]; used = m1[0]; } else if(m2){ sell = qrNum(m2[2]); cur = m2[1]; used = m2[0]; } else if(m3){ sell = qrNum(m3[1]); used = m3[0]; }
+  cur = !cur ? '' : /fc|cdf|franc/i.test(cur) ? 'FC' : '$';
+  const lines = raw.split(/[\n\r|;]+/).map(x => x.trim()).filter(Boolean);
+  const nl = lines.find(l => /^(nom|produit|article|name|d[ée]signation)\s*[:=-]/i.test(l));
+  let name = nl ? nl.replace(/^[^:=-]*[:=-]\s*/, '') : lines.filter(l => !/^(prix|valeur|price|pv|code|ref|réf)\b/i.test(l)).join(' ');
+  if(used) name = name.replace(used, ' ');
+  name = name.replace(/\b(prix|valeur|price)\s*[:=]?\s*$/i, '').replace(/[\s\-–:|,;=]+$/, '').replace(/^[\s\-–:|,;=]+/, '').replace(/\s+/g, ' ').trim().slice(0, 70);
+  return name || sell ? {name, sell, cur} : null;
+}
 const bcOn = () => S.products.some(p => p.code) || caracSects().some(s => ['alim', 'pharma', 'tel', 'quinc', 'cosm', 'libr'].includes(s));
 function codeField(p, opt){
-  return `<div class="f"><span>Code-barres <small class="note">(optionnel)</small></span><div style="display:flex;gap:8px"><input name="code" class="bcin" maxlength="120" autocomplete="off" value="${esc((p && p.code) || (opt && opt.code) || '')}" placeholder="Scannez ou tapez le code" style="flex:1"><button type="button" class="btn sm" data-a="scanpick">Scanner</button></div><small class="note" id="codewarn"></small></div>`;
+  return `<div class="f"><span>Code-barres ou QR code <small class="note">(optionnel)</small></span><div style="display:flex;gap:8px"><input name="code" class="bcin" maxlength="300" autocomplete="off" value="${esc((p && p.code) || (opt && opt.code) || '')}" placeholder="Scannez ou tapez le code" style="flex:1"><button type="button" class="btn sm" data-a="scanpick">Scanner</button></div><small class="note" id="codewarn"></small></div>`;
 }
 const scanBar = () => bcOn() ? `<div class="scanbar" style="display:flex;gap:8px;margin:-4px 0 12px"><button type="button" class="btn sm" data-a="scanpick">Scanner</button><input class="bcin" autocomplete="off" placeholder="Code-barres (lecteur ou à la main)" style="flex:1;min-width:0"></div>` : '';
-const codeCard = p => p && p.code ? `<div class="card" style="margin-bottom:12px"><div class="dl"><span>Code-barres</span><span style="font-family:ui-monospace,monospace">${esc(p.code)}</span></div></div>` : '';
+const codeCard = p => { if(!p || isKit(p)) return ''; const b = isVendeur() ? '' : `<button class="btn sm" style="margin-top:${p.code ? 8 : 0}px" data-a="lbl:${p.id}">Imprimer des étiquettes</button>`;
+  return p.code || b ? `<div class="card" style="margin-bottom:12px">${p.code ? `<div class="dl"><span>Code-barres</span><span style="font-family:ui-monospace,monospace">${esc(p.code)}</span></div>` : ''}${b}</div>` : ''; };
 function beep(){
   try{ navigator.vibrate && navigator.vibrate(80); }catch(_){}
   try{ const C = window.AudioContext || window.webkitAudioContext; if(!C) return; const a = beep.ctx || (beep.ctx = new C()), o = a.createOscillator(), g = a.createGain();
@@ -4994,12 +5013,23 @@ function scanCode(title){
 }
 async function unknownCode(c){
   if(isVendeur()){ toast('Code ' + c + ' : aucun produit'); return; }
-  if(await ask(`Le code ${c} n'est sur aucun produit. Créer un nouveau produit avec ce code ?`, 'Créer le produit', false)) productForm(null, {code:c});
+  const q = qrInfo(c), lab = /\s/.test(c) || c.length > 40 ? '« ' + (c.length > 40 ? c.slice(0, 40) + '…' : c) + ' »' : c;
+  if(!await ask(`Le code ${lab} n'est sur aucun produit. Créer un nouveau produit avec ce code ?${q && q.name ? ' Nom lu : « ' + q.name + ' »' + (q.sell ? ', prix ' + fmt(q.sell) + (q.cur === 'FC' ? ' FC' : q.cur ? ' $' : '') : '') + '.' : ''}`, 'Créer le produit', false)) return;
+  productForm(null, {code:c}); qrFill($('#pf'), c);
+}
+// Remplit le nom et le prix d'un nouveau produit à partir du texte d'un QR code (seulement les champs encore vides)
+function qrFill(f, c){
+  const q = qrInfo(c); if(!q || !f) return; const E = f.elements;
+  if(q.name && E.name && !E.name.value.trim()) E.name.value = q.name;
+  if(q.sell > 0 && E.sell && !E.sell.value){ E.sell.value = q.sell; if(q.cur && E.cur) E.cur.value = q.cur; }
+  [E.name, E.sell, E.cur].forEach(i => i && i.dispatchEvent(new Event('input', {bubbles:true})));
 }
 // Un code lu dans un formulaire : fiche produit → remplit le champ ; vente / entrée / envoi… → choisit le produit
 function bcApply(f, c){
   c = String(c || '').trim(); if(!c || !f) return; const E = f.elements;
-  if(f.id === 'pf'){ const cur = bcList(E.code.value); if(!cur.includes(c)) E.code.value = cur.concat([c]).join(', '); E.code.dispatchEvent(new Event('input', {bubbles:true})); return; }
+  if(f.id === 'pf'){ const cur = bcList(E.code.value), one = bcList(c).length === 1 && /\s/.test(bcNorm(c));
+    E.code.value = !cur.length || one ? bcNorm(c) : cur.includes(bcNorm(c)) ? E.code.value : cur.concat([bcNorm(c)]).join(', ');
+    E.code.dispatchEvent(new Event('input', {bubbles:true})); if(!f.dataset.pid) qrFill(f, c); return; }
   const p = prodByCode(c); if(!p){ unknownCode(c); return; }
   if(!E.pid || ![...E.pid.options].some(o => o.value === p.id)){ toast('« ' + p.name + ' » ne peut pas être choisi ici'); return; }
   if(E.pid.value === p.id && E.qty){ E.qty.value = num(E.qty.value) + 1; E.qty.dispatchEvent(new Event('input', {bubbles:true})); }
@@ -5029,6 +5059,136 @@ Object.assign(A, {
   scanpick: (v, el) => { const f = el.closest('form'); scanCode(f && f.id === 'pf' ? 'Scannez le code-barres du produit' : 'Scannez le produit').then(c => c && bcApply(f, c)); },
   scanstock: () => scanCode().then(c => { if(!c) return; const p = prodByCode(c); if(p) prodSheet(p.id); else unknownCode(c); })
 });
+
+/* ---------- Étiquettes à imprimer (produits locaux, faits maison, vêtements…) ----------
+   Un produit sans code reçoit un code interne EAN-13 qui commence par 20 (codes réservés à l'usage du magasin).
+   Feuilles A4 d'autocollants ou rouleau d'imprimante d'étiquettes ; nom, prix, code-barres. */
+const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
+const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111'];
+const EAN_R = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100'];
+const EAN_P = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+const eanCheck = d12 => { let t = 0; for(let i = 0; i < 12; i++) t += (+d12[i]) * (i % 2 ? 3 : 1); return String((10 - t % 10) % 10); };
+const isEan13 = c => /^\d{13}$/.test(c) && eanCheck(c.slice(0, 12)) === c[12];
+function eanBits(c){
+  const p = EAN_P[+c[0]]; let b = '101';
+  for(let i = 1; i <= 6; i++) b += (p[i - 1] === 'L' ? EAN_L : EAN_G)[+c[i]];
+  b += '01010'; for(let i = 7; i <= 12; i++) b += EAN_R[+c[i]];
+  return b + '101';
+}
+const C128 = '212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112'.split(' ');
+function c128Bits(txt){
+  const v = [104].concat([...txt].map(ch => Math.min(95, Math.max(0, ch.charCodeAt(0) - 32))));
+  v.push(v.reduce((t, x, i) => t + x * (i || 1), 0) % 103); v.push(106);
+  return v.map(x => [...C128[x]].map((w, i) => (i % 2 ? '0' : '1').repeat(+w)).join('')).join('');
+}
+// Code-barres en SVG : barres seules (EAN-13 si possible, sinon Code 128), étirées à la largeur voulue ; les chiffres s'écrivent dessous en texte
+function barcodeSVG(code){
+  code = String(code || '').trim(); if(!code) return '';
+  const ean = isEan13(code), bits = ean ? eanBits(code) : c128Bits(code), q = ean ? 11 : 10, W = bits.length + 2 * q, H = 50;
+  let x = q, rects = '';
+  for(let i = 0; i < bits.length;){ if(bits[i] !== '1'){ i++; x++; continue; } let w = 0; while(bits[i + w] === '1') w++; rects += `<rect x="${x}" y="0" width="${w}" height="${H}"/>`; i += w; x += w; }
+  return `<svg class="bcs" xmlns="http://www.w3.org/2000/svg" width="${W * 3}" height="${H * 3}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" shape-rendering="crispEdges" fill="#000"><rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>${rects}</svg>`;
+}
+// Un code imprimable en code-barres (chiffres et lettres simples, sans espace) ; un texte de QR code fait maison ne l'est pas
+const lblOk = p => !p.code || /^[\x21-\x7e]{1,40}$/.test(bcList(p.code)[0] || '');
+// Code interne pour un produit sans code : 20 + numéro + chiffre de contrôle
+function newShopCode(){
+  let n = Math.max(1, Math.round(num(S.settings.lblSeq)) || 1), c;
+  do { const d = '20' + String(n).padStart(10, '0'); c = d + eanCheck(d); n++; } while(prodByCode(c));
+  S.settings.lblSeq = n; return c;
+}
+const LBL_FMT = {
+  a24: {t:'Feuille A4 : 24 étiquettes (3 × 8, 70 × 37 mm)', c:3, r:8, w:70, h:37.1},
+  a40: {t:'Feuille A4 : 40 étiquettes (4 × 10, 52,5 × 29,7 mm)', c:4, r:10, w:52.5, h:29.7},
+  a21: {t:'Feuille A4 : 21 étiquettes (3 × 7, 70 × 42,4 mm)', c:3, r:7, w:70, h:42.4},
+  r50: {t:'Rouleau 50 × 30 mm (imprimante d\'étiquettes)', roll:1, w:50, h:30},
+  r40: {t:'Rouleau 40 × 30 mm (imprimante d\'étiquettes)', roll:1, w:40, h:30},
+  r58: {t:'Rouleau 58 × 40 mm (imprimante d\'étiquettes)', roll:1, w:58, h:40}
+};
+let lblQty = {}, lblQ = '';
+function lblOne(p, o, w, h){
+  const pr = o.price ? `<div class="lp" style="font-size:${Math.max(9, h * .36).toFixed(1)}pt">${esc(amt(num(p.sell), p.cur))}</div>` : '';
+  return `<div class="lb${o.cut ? ' cut' : ''}" style="width:${w}mm;height:${h}mm">${o.shop ? `<div class="ls">${esc(S.settings.shop || '')}</div>` : ''}<div class="ln" style="font-size:${Math.max(6.5, h * .22).toFixed(1)}pt">${esc(p.name)}</div>${pr}<div class="lc" style="width:${Math.min(w - 5, 40)}mm;height:${(h * .32).toFixed(1)}mm">${barcodeSVG(bcList(p.code)[0])}</div><div class="lcd" style="font-size:${Math.max(5.5, h * .17).toFixed(1)}pt">${esc(bcList(p.code)[0] || '')}</div></div>`;
+}
+function lblPages(items, o){
+  const F = LBL_FMT[o.fmt] || LBL_FMT.a24, L = [];
+  if(!F.roll) for(let i = 1; i < o.start; i++) L.push(null);
+  items.forEach(([p, n]) => { for(let i = 0; i < n; i++) L.push(p); });
+  if(F.roll) return L.map(p => `<div class="lpage roll" style="width:${F.w}mm;height:${F.h}mm">${lblOne(p, o, F.w, F.h)}</div>`).join('');
+  const per = F.c * F.r, pages = [];
+  for(let i = 0; i < L.length; i += per) pages.push(L.slice(i, i + per));
+  return pages.map(pg => `<div class="lpage" style="width:210mm;height:297mm;display:grid;grid-template-columns:repeat(${F.c},${F.w}mm);grid-auto-rows:${F.h}mm;justify-content:center;align-content:center">${pg.map(p => p ? lblOne(p, o, F.w, F.h) : `<div style="width:${F.w}mm;height:${F.h}mm"></div>`).join('')}</div>`).join('');
+}
+function lblSheet(pid){
+  if(pid){ const p = prod(pid); lblQty = {}; if(p) lblQty[p.id] = Math.max(1, Math.round(qAt(stockAt(), '', p.id)) || 1); }
+  const o = S.settings.lbl || {fmt:'a24', price:true, shop:true, cut:false};
+  const L = S.products.filter(p => !isKit(p)).sort(byName); L.forEach(p => { if(!lblOk(p)) delete lblQty[p.id]; });
+  sheet('Étiquettes à imprimer', `<form id="lblf"><p class="note" style="margin-bottom:10px">Pour les produits sans code-barres (faits maison, produits locaux, vêtements…) : l'application leur donne un code, puis vous imprimez les étiquettes et vous les collez sur les articles. Ensuite, on les scanne comme les autres.</p>
+    ${field('Format', `<select name="fmt">${Object.entries(LBL_FMT).map(([k, f]) => `<option value="${k}" ${o.fmt === k ? 'selected' : ''}>${esc(f.t)}</option>`).join('')}</select>`)}
+    <div class="row2">${field('Commencer à l\'étiquette n°', `<input name="start" type="number" min="1" max="65" value="1">`, 'Pour une feuille déjà entamée')}<div></div></div>
+    <label class="f" style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><input type="checkbox" name="price" ${o.price !== false ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Afficher le prix</span></label>
+    <label class="f" style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><input type="checkbox" name="shop" ${o.shop !== false ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Afficher le nom de la boutique</span></label>
+    <label class="f" style="display:flex;gap:10px;align-items:center;margin-bottom:12px"><input type="checkbox" name="cut" ${o.cut ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Traits pour découper (papier normal)</span></label>
+    <div class="sec" style="margin:4px 0 6px"><h2>Combien d'étiquettes ?</h2></div>
+    <div class="chips" style="margin-bottom:8px"><button type="button" class="chip" data-lq="stock">Selon le stock au dépôt</button><button type="button" class="chip" data-lq="one">1 par produit</button><button type="button" class="chip" data-lq="zero">Tout à 0</button></div>
+    <input class="search" id="lblq" placeholder="Rechercher un produit…" value="${esc(lblQ)}" style="margin-bottom:8px">
+    <div class="list" id="lbll">${L.map(p => `<div class="it" data-lp="${p.id}" style="gap:10px">${pic(p)}<div class="m"><div class="t">${esc(p.name)}</div><div class="d">${p.code ? (lblOk(p) ? 'Code : ' + esc(bcList(p.code)[0]) : 'Votre propre code (QR) : déjà sur vos emballages') : '<span class="green">Code créé à l\'impression</span>'} · dépôt ${qv(p, qAt(stockAt(), '', p.id))}</div></div><input type="number" min="0" max="500" step="1" data-lqty="${p.id}" value="${lblOk(p) ? lblQty[p.id] || '' : ''}" placeholder="${lblOk(p) ? '0' : '—'}" ${lblOk(p) ? '' : 'disabled'} style="width:74px;flex:none"></div>`).join('') || '<div class="empty">Aucun produit</div>'}</div>
+    <p class="note" id="lbltot" style="margin:10px 0"></p>
+    <button class="btn primary block">Voir et imprimer</button></form>`);
+  const f = $('#lblf'), E = f.elements;
+  const tot = () => { let n = 0, k = 0; f.querySelectorAll('[data-lqty]:not([disabled])').forEach(i => { const v = Math.max(0, Math.round(num(i.value))); lblQty[i.dataset.lqty] = v; if(v){ n += v; k++; } });
+    $('#lbltot').textContent = n ? `${n} étiquette(s) pour ${k} produit(s)` : 'Tapez le nombre d\'étiquettes à côté de chaque produit.'; return n; };
+  const filt = () => { lblQ = $('#lblq').value.trim().toLowerCase(); f.querySelectorAll('[data-lp]').forEach(r => { const p = prod(r.dataset.lp); r.style.display = lblQ && !(p.name + ' ' + (p.code || '') + ' ' + caracTxt(p)).toLowerCase().includes(lblQ) ? 'none' : ''; }); };
+  $('#lblq').oninput = filt; filt(); f.oninput = e => { if(e.target.dataset.lqty !== undefined) tot(); }; tot();
+  f.querySelector('.chips').onclick = e => { const b = e.target.closest('[data-lq]'); if(!b) return; const st = stockAt();
+    f.querySelectorAll('[data-lp]').forEach(r => { const i = r.querySelector('[data-lqty]'), p = prod(r.dataset.lp); if(r.style.display === 'none' || i.disabled) return;
+      i.value = b.dataset.lq === 'zero' ? '' : b.dataset.lq === 'one' ? 1 : (Math.max(0, Math.min(500, Math.floor(qAt(st, '', p.id)))) || ''); }); tot(); };
+  f.onsubmit = e => { e.preventDefault(); const n = tot(); if(!n){ toast('Choisissez au moins une étiquette'); return; }
+    if(n > 1500){ toast('1 500 étiquettes au maximum à la fois'); return; }
+    const opt = {fmt:E.fmt.value, price:E.price.checked, shop:E.shop.checked, cut:E.cut.checked, start:Math.max(1, Math.round(num(E.start.value)) || 1)};
+    S.settings.lbl = {fmt:opt.fmt, price:opt.price, shop:opt.shop, cut:opt.cut};
+    const items = L.filter(p => lblQty[p.id] > 0).map(p => [p, lblQty[p.id]]); let made = 0;
+    items.forEach(([p]) => { if(!p.code){ p.code = newShopCode(); made++; } });
+    save(); if(made) render(); closeSheet(); lblPreview(items, opt, made);
+  };
+}
+function lblPreview(items, o, made){
+  document.getElementById('lblov')?.remove(); document.getElementById('lblpg')?.remove();
+  const F = LBL_FMT[o.fmt] || LBL_FMT.a24, n = items.reduce((t, x) => t + x[1], 0);
+  document.head.insertAdjacentHTML('beforeend', `<style id="lblpg">@media print{@page{size:${F.roll ? F.w + 'mm ' + F.h + 'mm' : 'A4'};margin:0}}</style>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="lblov"><div class="lbar"><div style="flex:1;min-width:0"><b>${n} étiquette(s)</b><div class="note">${esc(F.t)}${made ? ` · ${made} code(s) créé(s)` : ''}</div></div><button class="btn primary sm" id="lblgo">Imprimer</button><button class="btn sm" id="lblx">Fermer</button></div>
+    <p class="note lbar2">Imprimez à 100 % (taille réelle, sans « ajuster à la page »).${F.roll ? ' Choisissez votre imprimante d\'étiquettes et le format ' + F.w + ' × ' + F.h + ' mm.' : ' Sur iPhone : Imprimer, ou Partager → Enregistrer en PDF.'}</p>
+    <div id="lblprint">${lblPages(items, o)}</div></div>`);
+  document.body.classList.add('lblp');
+  const close = () => { document.getElementById('lblov')?.remove(); document.getElementById('lblpg')?.remove(); document.body.classList.remove('lblp'); };
+  $('#lblx').onclick = close;
+  $('#lblgo').onclick = () => { try{ window.print(); }catch(_){ toast('Impression impossible ici'); } };
+}
+document.head.insertAdjacentHTML('beforeend', `<style>
+#lblov{position:fixed;inset:0;z-index:9000;background:#e9ecef;overflow:auto;-webkit-overflow-scrolling:touch}
+#lblov .lbar{position:sticky;top:0;z-index:2;display:flex;gap:8px;align-items:center;padding:12px 14px calc(12px);padding-top:calc(12px + env(safe-area-inset-top));background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.08);color:#16181d}
+#lblov .lbar2{margin:10px 14px;color:#444}
+#lblprint{padding:0 0 30px}
+#lblov .lpage{background:#fff;margin:12px auto;box-shadow:0 2px 12px rgba(0,0,0,.15);zoom:.46;overflow:hidden;color:#000}
+#lblov .lpage.roll{zoom:1.2}
+.lb{box-sizing:border-box;padding:1.4mm 2mm;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;text-align:center;overflow:hidden;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#000;background:#fff}
+.lb.cut{outline:.2mm dashed #999;outline-offset:-.1mm}
+.lb .ls{font-size:6pt;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.1}
+.lb .ln{font-weight:700;line-height:1.1;max-height:2.25em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-width:100%}
+.lb .lp{font-weight:900;line-height:1.05;margin:.3mm 0}
+.lb .lc{flex:none;max-width:100%}
+.lb .lc svg{display:block;width:100%;height:100%}
+.lb .lcd{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.06em;line-height:1;margin-top:.3mm}
+@media print{
+  body.lblp > *:not(#lblov){display:none!important}
+  body.lblp{background:#fff!important;margin:0!important;padding:0!important}
+  #lblov{position:static!important;overflow:visible!important;background:#fff!important}
+  #lblov .lbar,#lblov .lbar2{display:none!important}
+  #lblprint{padding:0!important}
+  #lblov .lpage{zoom:1!important;box-shadow:none!important;margin:0!important;break-after:page;page-break-after:always}
+  #lblov .lpage:last-child{break-after:auto;page-break-after:auto}
+}</style>`);
+Object.assign(A, {lbl: id => { if(isVendeur()) return; lblSheet(id || null); }});
 
 /* ---------- Formulaires : fonctionnent même dans un aperçu restreint (sans envoi de formulaire) ---------- */
 document.addEventListener('click', e => {
@@ -5559,7 +5719,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'e91ac77609';
+const APP_BUILD = '6037a710de';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
