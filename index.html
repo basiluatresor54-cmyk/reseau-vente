@@ -4845,7 +4845,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '75d39562db';
+const APP_BUILD = '8a3d4df2b4';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5237,7 +5237,7 @@ CUSTOM.equipe = () => {
 };
 CUSTOM_AFTER.equipe = () => { if(TEAM.members === null && !TEAM.loading) loadTeam(); };
 function inviteMsg(i){
-  const role = i.role === 'livreur' ? 'livreur' : 'gérant(e)';
+  const role = i.role === 'livreur' ? 'livreur' : i.role === 'vendeur' ? 'vendeur (vendeuse)' : 'gérant(e)';
   return `Bonjour ${i.display_name || ''} 👋\n\nVous êtes invité(e) comme *${role}* de *${S.settings.shop}* sur l'application BASILUA TECH · Réseau & Vente.\n\n1️⃣ Ouvrez ce lien : ${APP_LINK}?rejoindre=${i.phone}\n2️⃣ Votre numéro est déjà rempli (+${i.phone}) : choisissez juste un *mot de passe* et touchez « Créer mon compte »\n3️⃣ C'est tout ✅ (déjà un compte ? touchez « Se connecter »)\n\n${i.role === 'livreur' ? 'Vous verrez vos livraisons, votre stock et votre commission de la semaine.\n\n📘 Guide du livreur (à lire avant de commencer) : ' + new URL('guide-livreur.html', APP_LINK).href : 'Vous aurez accès aux ventes, au stock et aux livreurs de la boutique.\n\n📘 Guide : ' + new URL('guide.html', APP_LINK).href}`;
 }
 function inviteSheet(pre = {}){
