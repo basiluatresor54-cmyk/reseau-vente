@@ -64,6 +64,11 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;bo
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.seg button{padding:10px 4px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-weight:650;font-size:13px}.seg button.on{background:var(--brand);color:#fff;border-color:transparent}
 .go{width:100%;margin-top:14px;padding:15px;border-radius:16px;background:#1fa855;color:#fff;font-weight:800;font-size:16px;display:flex;gap:8px;justify-content:center;align-items:center}
 .note{font-size:12.5px;color:var(--muted)}
+.pays{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pays button{padding:11px 6px;border-radius:12px;background:var(--card);border:1.5px solid var(--line);font-weight:700;font-size:13.5px}.pays button.on{background:var(--brand);color:#fff;border-color:transparent}
+.mmbox{margin-top:10px;padding:14px;border-radius:16px;background:var(--card);border:1.5px dashed var(--brand)}
+.mmnum{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}.mmnum b{font-size:22px;letter-spacing:.02em}
+.mmnum button{padding:9px 14px;border-radius:12px;background:var(--brand);color:#fff;font-weight:750}
+.err{margin-top:10px;padding:10px 12px;border-radius:12px;background:#fde8ec;color:#b4123a;font-weight:650;font-size:13.5px}
 .empty{text-align:center;padding:60px 20px;color:var(--muted)}
 .foot{text-align:center;font-size:12px;color:var(--muted);margin-top:26px}.foot a{color:inherit;font-weight:700}
 .load{display:grid;place-items:center;height:60vh;color:var(--muted)}
@@ -79,7 +84,7 @@ const SB_URL = 'https://anzzqgmzqweuznhoikhb.supabase.co', SB_KEY = 'sb_publisha
 const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return isNaN(n) ? 0 : n; };
 const fmt = n => Number(n).toLocaleString('fr-FR', {maximumFractionDigits:2});
-let SHOP = null, PRODS = [], CART = {}, CAT = '', WHEN = 'demain';
+let SHOP = null, PRODS = [], CART = {}, CAT = '', WHEN = 'demain', PAY = '', SB = null;
 const shopId = new URLSearchParams(location.search).get('s') || '';
 const LC = () => SHOP.lc || 'FC';
 const amt = (v, cur) => cur === 'FC' ? fmt(v) + ' ' + LC() : fmt(v) + ' $';
@@ -88,7 +93,7 @@ function hexRgb(h){ const m = String(h||'').replace('#','').match(/^([0-9a-f]{6}
 async function boot(){
   if(!shopId){ $('#app').innerHTML = '<div class="empty"><b>Lien incomplet</b><br>Demandez le lien de la boutique au vendeur.</div>'; return; }
   try{
-    const sb = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false}});
+    const sb = SB = supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:false}});
     const {data, error} = await sb.rpc('public_catalog', {p_shop: shopId});
     if(error) throw error;
     if(!data){ $('#app').innerHTML = '<div class="empty"><b>Boutique indisponible</b><br>Cette boutique n\'est pas encore ouverte en ligne. Contactez le vendeur.</div>'; return; }
@@ -107,7 +112,7 @@ function render(){
   const name = SHOP.shop || SHOP.name, cats = [...new Set(PRODS.map(p => p.cat).filter(Boolean))];
   const list = PRODS.filter(p => !CAT || p.cat === CAT);
   $('#app').innerHTML = `<div class="hero" style="${SHOP.cover ? `background-image:url('${SHOP.cover}')` : ''}"><div class="in"><div class="logo">${SHOP.logo ? `<img src="${SHOP.logo}" alt="">` : esc(initials(name))}</div><div><h1>${esc(name)}</h1><p>${esc(SHOP.intro || 'Commandez en quelques secondes, livraison rapide.')}</p></div></div></div>
-    <div class="badges"><span class="badge">🛵 Livraison rapide${feeRange() ? ' · ' + esc(feeRange()) : ''}</span><span class="badge">💵 Paiement à la livraison</span><span class="badge">✅ Vérifiez avant de payer</span></div>
+    <div class="badges"><span class="badge">🛵 Livraison rapide${feeRange() ? ' · ' + esc(feeRange()) : ''}</span><span class="badge">💵 Paiement à la livraison${mmList().length ? ' ou Mobile Money' : ''}</span><span class="badge">✅ Vérifiez avant de payer</span></div>
     ${cats.length > 1 ? `<div class="chips"><button class="chip ${!CAT?'on':''}" data-cat="">Tout</button>${cats.map(c => `<button class="chip ${CAT===c?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}
     <div class="grid">${list.map((p,i) => { const q = CART[p.id] || 0; return `<div class="pc" style="animation-delay:${Math.min(i,10)*.03}s">
       <div class="ph" data-det="${p.id}" style="${p.photo ? `background-image:url('${p.photo}')` : ''}">${p.photo ? '' : esc(initials(p.name))}${promoPct(p) ? `<span class="promo">-${promoPct(p)} %</span>` : ''}</div>
@@ -133,6 +138,15 @@ function openDetail(id){
 function feeOf(city){ const FC = SHOP.feeCity || {}, c = String(city || '').trim().toLowerCase(); const k = c ? Object.keys(FC).find(k => k.trim().toLowerCase() === c) : null; return k != null ? num(FC[k]) : num(SHOP.fee); }
 const feeAmt = v => `${fmt(v)} ${SHOP.feeCur === '$' ? '$' : LC()}`;
 function feeRange(){ const vals = Object.values(SHOP.feeCity || {}).map(num).concat(num(SHOP.fee) ? [num(SHOP.fee)] : []).filter(v => v > 0); if(!vals.length) return ''; const a = Math.min(...vals), b = Math.max(...vals); return a === b ? feeAmt(a) : 'dès ' + feeAmt(a); }
+const mmList = () => (SHOP && Array.isArray(SHOP.mm) ? SHOP.mm : []).filter(x => x && x.op && x.num);
+const mmOf = op => mmList().find(x => x.op === op);
+function copyNum(v){ const done = () => { const b = document.getElementById('cpBtn'); if(b){ b.textContent = 'Copié'; setTimeout(() => b.textContent = 'Copier', 1500); } };
+  try{ navigator.clipboard.writeText(v).then(done, () => { prompt('Copiez ce numéro :', v); }); }catch(_){ prompt('Copiez ce numéro :', v); } }
+function payBox(){ const m = mmOf(PAY); if(!m) return '';
+  return `<div class="mmbox"><b>1. Envoyez ${totTxt()} par ${esc(m.op)}</b><div class="mmnum"><b>${esc(m.num)}</b><button type="button" id="cpBtn" onclick="copyNum('${esc(m.num).replace(/'/g, '')}')">Copier</button></div>${m.name ? `<p class="note">Au nom de <b>${esc(m.name)}</b>. Vérifiez ce nom avant de valider le paiement.</p>` : ''}
+    <label class="f"><span>2. Code de la transaction (reçu par SMS) *</span><input name="code" autocomplete="off" autocapitalize="characters" placeholder="Ex : 8KL2X0QW1"></label>
+    <label class="f" style="margin-bottom:0"><span>Numéro qui a payé</span><input name="payer" type="tel" placeholder="Si différent de votre téléphone"></label>
+    <p class="note" style="margin-top:8px">Les frais de livraison restent à remettre au livreur. Le vendeur vérifie votre paiement puis vous livre.</p></div>`; }
 function cartLines(){ return Object.entries(CART).map(([id,q]) => [PRODS.find(p => p.id === id), q]).filter(([p,q]) => p && q > 0); }
 function totals(){ let usd = 0, fc = 0; for(const [p,q] of cartLines()){ if(p.cur === 'FC') fc += num(p.price)*q; else usd += num(p.price)*q; } return [usd, fc]; }
 const totTxt = () => { const [u,f] = totals(); return [u ? fmt(u) + ' $' : '', f ? fmt(f) + ' ' + LC() : ''].filter(Boolean).join(' + ') || '0'; };
@@ -165,18 +179,37 @@ function openOrder(){
       <div id="dWrap" hidden><label class="f"><span>Date</span><input name="d" type="date"></label></div>
       <label class="f"><span>Heure souhaitée</span><select name="h"><option value="">Peu importe</option><option>entre 9h et 11h</option><option>entre 11h et 13h</option><option>entre 13h et 15h</option><option>entre 15h et 17h</option><option>entre 17h et 19h</option></select></label>
       <label class="f"><span>Message (optionnel)</span><input name="m" placeholder="Précision pour le livreur…"></label>
-      <button class="go">✅ Envoyer ma commande sur WhatsApp</button>
-      <p class="note" style="text-align:center;margin-top:8px">Vous payez à la livraison, après avoir vérifié le produit.</p>
+      ${mmList().length ? `<div class="f"><span>Comment payez-vous ?</span><div class="pays"><button type="button" class="on" data-pay="">À la livraison</button>${mmList().map(m => `<button type="button" data-pay="${esc(m.op)}">${esc(m.op.replace(/\s*\(.*\)$/, ''))}</button>`).join('')}</div><div id="payBox"></div></div>` : ''}
+      <div id="oErr"></div>
+      <button class="go" id="oGo">✅ Envoyer ma commande sur WhatsApp</button>
+      <p class="note" id="oNote" style="text-align:center;margin-top:8px">Vous payez à la livraison, après avoir vérifié le produit.</p>
     </form>`;
-  WHEN = 'demain'; $('#ov').hidden = false;
+  WHEN = 'demain'; PAY = ''; $('#ov').hidden = false;
+  document.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => { PAY = b.dataset.pay; document.querySelectorAll('[data-pay]').forEach(x => x.classList.toggle('on', x === b)); $('#payBox').innerHTML = payBox(); $('#oErr').innerHTML = '';
+    $('#oNote').textContent = PAY ? 'Après votre paiement, le vendeur le vérifie et vous livre.' : 'Vous payez à la livraison, après avoir vérifié le produit.'; });
   $('#of').elements.v.addEventListener('input', e => { const v = feeOf(e.target.value); $('#feeNote').innerHTML = v ? `+ frais de livraison${e.target.value.trim() ? ' (' + esc(e.target.value.trim()) + ')' : ''} : ${feeAmt(v)}, à remettre au livreur.` : ''; });
-  $('#of').onsubmit = e => { e.preventDefault(); const E = e.target.elements;
+  $('#of').onsubmit = async e => { e.preventDefault(); const E = e.target.elements;
+    const code = PAY && E.code ? E.code.value.replace(/\s+/g, '').toUpperCase() : '';
+    if(PAY && code.length < 4){ $('#oErr').innerHTML = '<div class="err">Tapez le code de la transaction reçu par SMS après votre paiement.</div>'; E.code && E.code.focus(); return; }
     const me2 = {n:E.n.value.trim(), t:E.t.value.trim(), v:E.v.value.trim(), q:E.q.value.trim(), a:E.a.value.trim()}; try{ localStorage.setItem('me', JSON.stringify(me2)); }catch(_){}
     const days = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
     let quand = WHEN === 'aujourdhui' ? "aujourd'hui" : WHEN === 'demain' ? 'demain' : (E.d.value ? days[new Date(E.d.value + 'T12:00:00').getDay()] + ' ' + new Date(E.d.value + 'T12:00:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long'}) : 'à convenir');
     if(E.h.value) quand += ' ' + E.h.value;
     const adr = [me2.v, me2.q, me2.a].filter(Boolean).join(', ');
-    const msg = `Bonjour ${SHOP.shop || SHOP.name} 👋 Je souhaite commander :\nRécapitulatif :\n${cartLines().map(([p,q]) => `– ${p.name} x${q} : ${amt(num(p.price)*q, p.cur)}`).join('\n')}\n– Total : ${totTxt()}${feeOf(me2.v) ? '\n– Frais de livraison : ' + feeAmt(feeOf(me2.v)) : ''}\n– Ville : ${me2.v}\n– Adresse : ${adr}\n– Heure : ${quand}\n– Contact : ${me2.n} - ${me2.t}${E.m.value.trim() ? '\n– Note : ' + E.m.value.trim() : ''}\nPaiement à la livraison. Merci 🙏`;
+    // La commande est aussi enregistrée dans l'application du vendeur (obligatoire si le client a déjà payé)
+    let no = '';
+    const order = {client:me2, lines:cartLines().map(([p,q]) => ({id:p.id, q})), pay:PAY, code, payer:PAY && E.payer ? E.payer.value.trim() : '', quand, note:E.m.value.trim()};
+    const go = $('#oGo'); go.disabled = true; go.textContent = 'Envoi en cours…';
+    try{
+      const call = SB ? SB.rpc('public_place_order', {p_shop:shopId, p_order:order}) : Promise.reject(new Error('hors ligne'));
+      const r = await (PAY ? call : Promise.race([call, new Promise(res => setTimeout(() => res({timeout:true}), 6000))]));
+      if(r && r.error) throw r.error;
+      if(r && r.data && r.data.no) no = r.data.no;
+    }catch(err){
+      if(PAY){ go.disabled = false; go.textContent = '✅ Envoyer ma commande sur WhatsApp'; $('#oErr').innerHTML = `<div class="err">${esc((err && err.message) || 'Connexion impossible, réessayez.')}</div>`; return; }
+    }
+    const payLine = PAY ? `– Paiement : déjà payé par ${PAY}, code ${code}${order.payer ? ' (depuis le ' + order.payer + ')' : ''}. À vérifier.` : 'Paiement à la livraison.';
+    const msg = `Bonjour ${SHOP.shop || SHOP.name} 👋 Je souhaite commander :\nRécapitulatif :\n${cartLines().map(([p,q]) => `– ${p.name} x${q} : ${amt(num(p.price)*q, p.cur)}`).join('\n')}\n– Total : ${totTxt()}${feeOf(me2.v) ? '\n– Frais de livraison : ' + feeAmt(feeOf(me2.v)) : ''}\n– Ville : ${me2.v}\n– Adresse : ${adr}\n– Heure : ${quand}\n– Contact : ${me2.n} - ${me2.t}${E.m.value.trim() ? '\n– Note : ' + E.m.value.trim() : ''}${no ? '\n– N° commande : ' + no : ''}\n${payLine} Merci 🙏`;
     const wa = String(SHOP.wa || '').replace(/\D/g,'');
     location.href = 'https://wa.me/' + wa + '?text=' + encodeURIComponent(msg);
     CART = {}; saveCart(); setTimeout(() => { $('#ov').hidden = true; render(); }, 800);

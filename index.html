@@ -6101,7 +6101,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'fbf7df0580';
+const APP_BUILD = '47dbf3d7ce';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -7417,6 +7417,203 @@ A.trscan = (v, el) => { const f = el.closest('form'); scanCode('Scannez le produ
   if(view === 'plus') main.insertAdjacentHTML('afterbegin', `<div class="list menu" style="margin-bottom:12px"><button class="it" data-a="multi"><div class="ic c-brand">${ico('box')}</div><div class="m"><div class="t">Tous mes magasins</div><div class="d" style="white-space:normal">Ventes, bénéfice et stock de vos ${n} magasins, et le total</div></div>${ico('chev')}</button><button class="it" data-a="transfer"><div class="ic c-send">${ico('send')}</div><div class="m"><div class="t">Envoyer vers un autre magasin</div><div class="d" style="white-space:normal">Du stock de ce magasin vers un autre</div></div>${ico('chev')}</button></div>`);
   if(view === 'stock'){ const b = main.querySelector('[data-a="new:envoi"]'); if(b) b.parentElement.insertAdjacentHTML('afterend', '<button class="btn block" data-a="transfer" style="margin-top:8px">Envoyer vers un autre magasin</button>'); }
 }catch(_){ } }; })();
+
+/* ---------- Paiement Mobile Money sans papiers : commandes de la boutique en ligne et abonnements ---------- */
+// Le client paie sur le numéro Mobile Money du magasin puis tape le code du SMS ; le patron (ou le gérant) vérifie le SMS et confirme.
+const WEB = {list:null, t:0, busy:false, f:'check', pre:null};
+const WEB_ST = {averifier:['Payée · à vérifier', 'p-attente'], confirme:['Payée', 'p-livre'], nonrecu:['Paiement non reçu', 'p-annule'], livraison:['À la livraison', 'p-encours'], traite:['Traitée', 'p-livre']};
+const webRole = () => !!(ONLINE.shop && ['proprietaire','gerant','vendeur'].includes(ONLINE.role));
+const webCanPay = () => !!(ONLINE.shop && ['proprietaire','gerant'].includes(ONLINE.role));
+const webSig = () => (WEB.list || []).map(o => o.id + o.status).join(',');
+const webCheck = () => (WEB.list || []).filter(o => o.status === 'averifier');
+const webFresh = () => (WEB.list || []).filter(o => o.status === 'livraison');
+const webTot = o => { const t = o.total || {}; return [num(t.usd) ? fmt(num(t.usd)) + ' $' : '', num(t.fc) ? fmt(num(t.fc)) + ' ' + LC() : ''].filter(Boolean).join(' + ') || '0'; };
+const webWhen = o => { const d = new Date(o.created_at), t = today(), iso = iso10(d), h = d.toTimeString().slice(0, 5).replace(':', 'h');
+  return (iso === t ? "aujourd'hui" : iso === addDays(t, -1) ? 'hier' : fmtDate(iso)) + ' à ' + h; };
+const webNo = o => String(o.id || '').replace(/-/g, '').slice(0, 6).toUpperCase();
+async function loadWeb(force){
+  if(!sb || !webRole() || WEB.busy) return;
+  if(!force && Date.now() - WEB.t < 60000) return;
+  WEB.busy = true; WEB.t = Date.now();
+  try{
+    const {data, error} = await sb.from('web_orders').select('*').eq('shop_id', ONLINE.shop.id).order('created_at', {ascending:false}).limit(150);
+    if(!error){ const before = webSig(); WEB.list = data || [];
+      if(webSig() !== before && (view === 'home' || view === 'plus') && $('#ov').hidden) render();
+      if(document.getElementById('webL')) paintWeb(); }
+  }catch(_){}
+  WEB.busy = false;
+}
+function webRow(o){ const st = WEB_ST[o.status] || ['', ''], c = o.client || {}, n = (o.lines || []).reduce((t, l) => t + (+l.q || 0), 0);
+  return `<button class="it" data-a="webo:${o.id}"><div class="ic c-brand">${esc(initials(c.n || '?'))}</div><div class="m"><div class="t">${esc(c.n || 'Client')} · ${webTot(o)}</div><div class="d">${esc(webWhen(o))}${c.v ? ' · ' + esc(c.v) : ''} · ${n} article${n > 1 ? 's' : ''}${o.pay ? ' · ' + esc(o.pay) : ''}</div></div><div class="r"><span class="pill ${st[1]}">${st[0]}</span></div></button>`; }
+function paintWeb(){ const box = document.getElementById('webL'); if(!box) return;
+  const L = WEB.list || [], f = WEB.f, list = f === 'check' ? L.filter(o => o.status === 'averifier') : f === 'new' ? L.filter(o => o.status === 'livraison' || o.status === 'confirme') : L;
+  document.querySelectorAll('#webSeg [data-wf]').forEach(b => b.classList.toggle('on', b.dataset.wf === f));
+  box.innerHTML = WEB.list === null ? '<div class="empty">Chargement…</div>' : list.map(webRow).join('') || `<div class="empty">${f === 'check' ? 'Aucun paiement à vérifier.' : f === 'new' ? 'Aucune commande à préparer.' : 'Aucune commande pour le moment.'}</div>`; }
+A.weborders = () => {
+  const c = webCheck().length, n = L => L.length;
+  if(WEB.f === 'check' && !c && WEB.list) WEB.f = webFresh().length ? 'new' : 'all';
+  sheet('Commandes de la boutique en ligne', `<p class="note" style="margin-bottom:10px">Les commandes passées par vos clients dans votre boutique en ligne. Celles payées par Mobile Money sont à vérifier : regardez le SMS reçu sur votre téléphone, puis confirmez.</p>
+    <div class="seg" id="webSeg" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:10px"><button type="button" data-wf="check">À vérifier (${c})</button><button type="button" data-wf="new">À préparer (${n((WEB.list || []).filter(o => o.status === 'livraison' || o.status === 'confirme'))})</button><button type="button" data-wf="all">Toutes</button></div>
+    <div class="list" id="webL"></div>
+    <button class="btn block" style="margin-top:10px" data-a="webreload">Actualiser</button>`);
+  $('#webSeg').onclick = e => { const b = e.target.closest('[data-wf]'); if(b){ WEB.f = b.dataset.wf; paintWeb(); } };
+  paintWeb(); loadWeb(true);
+};
+A.webreload = () => { toast('Actualisation…'); loadWeb(true); };
+function webMsgClient(o, kind){ const c = o.client || {}, shop = S.settings.shop || ONLINE.shop.name;
+  if(kind === 'ok') return `Bonjour ${c.n || ''} 👋\nNous avons bien reçu votre paiement de ${webTot(o)} par ${o.pay} (code ${o.code}) pour la commande N° ${webNo(o)}. Merci !\nNous préparons votre livraison 🛵\n${shop}`;
+  if(kind === 'ko') return `Bonjour ${c.n || ''} 👋\nNous n'avons pas trouvé votre paiement par ${o.pay} (code ${o.code}) pour la commande N° ${webNo(o)}.\nPouvez-vous vérifier le code et le numéro utilisé, ou nous envoyer la capture du paiement ? Merci 🙏\n${shop}`;
+  return `Bonjour ${c.n || ''} 👋\nNous avons bien reçu votre commande N° ${webNo(o)} (${webTot(o)}). Nous vous contactons pour la livraison 🛵\n${shop}`; }
+// Même texte que le message WhatsApp de la boutique : « Nouvelle vente » le comprend (coller une commande)
+function webOrderText(o){ const c = o.client || {}, adr = [c.v, c.q, c.a].filter(Boolean).join(', ');
+  return `Bonjour ${S.settings.shop || ONLINE.shop.name} Je souhaite commander :\nRécapitulatif :\n${(o.lines || []).map(l => `– ${l.name} x${l.q} : ${amt(num(l.price) * (+l.q || 1), l.cur === 'FC' ? 'FC' : '$')}`).join('\n')}\n– Total : ${webTot(o)}${c.v ? '\n– Ville : ' + c.v : ''}\n– Adresse : ${adr}${o.quand ? '\n– Heure : ' + o.quand : ''}\n– Contact : ${c.n || ''} - ${c.t || ''}${o.note ? '\n– Note : ' + o.note : ''}`; }
+A.webo = id => {
+  const o = (WEB.list || []).find(x => x.id === id); if(!o) return;
+  const c = o.client || {}, st = WEB_ST[o.status] || ['', ''], paid = !!o.pay;
+  sheet('Commande N° ' + webNo(o), `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:17px">${esc(c.n || 'Client')}</b><span class="pill ${st[1]}">${st[0]}</span></div>
+    <div class="card" style="margin-bottom:10px">${(o.lines || []).map(l => `<div class="dl"><span>${esc(l.name)} × ${+l.q || 1}</span><span class="num">${amt(num(l.price) * (+l.q || 1), l.cur === 'FC' ? 'FC' : '$')}</span></div>`).join('')}
+      <div class="dl strong"><span>Total</span><span class="num">${webTot(o)}</span></div></div>
+    ${paid ? `<div class="card" style="margin-bottom:10px;border:2px solid ${o.status === 'averifier' ? 'var(--warn, #d97706)' : o.status === 'nonrecu' ? 'var(--bad)' : 'var(--ok)'}"><b>Payé par ${esc(o.pay)}</b>
+      <div class="dl"><span>Code de la transaction</span><span><b class="num" style="font-size:18px">${esc(o.code)}</b></span></div>
+      ${o.payer ? `<div class="dl"><span>Numéro qui a payé</span><span>${esc(o.payer)}</span></div>` : ''}
+      <div class="dl"><span>Montant attendu</span><span class="num">${webTot(o)}</span></div>
+      ${o.status === 'averifier' ? `<p class="note" style="margin-top:8px">Ouvrez les SMS de votre téléphone ${esc(o.pay)} : le code <b>${esc(o.code)}</b> et le montant doivent être arrivés. Ne confirmez jamais sans avoir vu le SMS.</p>
+        ${webCanPay() ? `<div class="btns" style="margin-top:10px"><button class="btn primary" data-a="webok:${o.id}">Paiement reçu : confirmer</button><button class="btn ghost-bad" data-a="webko:${o.id}">Paiement non reçu</button></div>` : '<p class="note" style="margin-top:8px">Le propriétaire ou le gérant confirme ce paiement.</p>'}` : ''}
+      ${o.status === 'confirme' && c.t ? `<a class="btn wa block" style="margin-top:10px" href="${waLink(c.t, webMsgClient(o, 'ok'))}" target="_blank" rel="noopener">${ico('wa')} Prévenir le client : paiement reçu</a>` : ''}
+      ${o.status === 'nonrecu' ? `${c.t ? `<a class="btn wa block" style="margin-top:10px" href="${waLink(c.t, webMsgClient(o, 'ko'))}" target="_blank" rel="noopener">${ico('wa')} Écrire au client</a>` : ''}${webCanPay() ? `<button class="btn block" style="margin-top:8px" data-a="webagain:${o.id}">Remettre « à vérifier »</button>` : ''}` : ''}</div>`
+    : `<div class="card" style="margin-bottom:10px"><b>Paiement à la livraison</b><p class="note" style="margin-top:4px">Le client paie au livreur après avoir vérifié le produit.</p></div>`}
+    <div class="card" style="margin-bottom:10px">
+      <div class="dl"><span>Téléphone</span><span>${esc(c.t || '—')}</span></div>
+      <div class="dl"><span>Adresse</span><span style="text-align:right">${esc([c.v, c.q, c.a].filter(Boolean).join(', ') || '—')}</span></div>
+      ${o.quand ? `<div class="dl"><span>Livraison</span><span>${esc(o.quand)}</span></div>` : ''}
+      ${o.note ? `<div class="dl"><span>Note</span><span>${esc(o.note)}</span></div>` : ''}
+      <div class="dl"><span>Reçue</span><span>${esc(webWhen(o))}</span></div></div>
+    ${o.status !== 'nonrecu' && o.status !== 'traite' && o.status !== 'averifier' ? `<button class="btn primary block" data-a="webprep:${o.id}">Préparer la livraison (nouvelle vente)</button>` : ''}
+    ${c.t ? `<a class="btn wa block" style="margin-top:8px" href="${waLink(c.t, webMsgClient(o, paid && o.status === 'confirme' ? 'ok' : 'recu'))}" target="_blank" rel="noopener">${ico('wa')} Écrire au client sur WhatsApp</a>` : ''}
+    ${o.status === 'livraison' || o.status === 'confirme' ? `<button class="btn block" style="margin-top:8px" data-a="webdone:${o.id}">Marquer comme traitée</button>` : ''}
+    <button class="link" style="margin-top:12px" data-a="weborders">‹ Toutes les commandes en ligne</button>`);
+};
+async function webDecide(id, stt){
+  const {error} = await sb.rpc('shop_decide_order', {p_id:id, p_status:stt});
+  if(error){ toast(rpcErr(error)); return false; }
+  const o = (WEB.list || []).find(x => x.id === id); if(o) o.status = stt;
+  return true;
+}
+A.webok = async id => { if(!await ask('Vous avez bien vu le SMS du paiement (code et montant) sur votre téléphone ?', 'Oui, paiement reçu', false)) return;
+  if(await webDecide(id, 'confirme')){ toast('Paiement confirmé'); A.webo(id); if(view === 'home') render(); } };
+A.webko = async id => { if(!await ask('Le paiement n\'est pas arrivé ? Le client sera prévenu sur WhatsApp.', 'Paiement non reçu')) return;
+  if(await webDecide(id, 'nonrecu')){ toast('Paiement marqué non reçu'); A.webo(id); if(view === 'home') render(); } };
+A.webagain = async id => { if(await webDecide(id, 'averifier')){ A.webo(id); } };
+A.webdone = async id => { if(await webDecide(id, 'traite')){ toast('Commande traitée'); A.weborders(); if(view === 'home') render(); } };
+A.webprep = id => {
+  const o = (WEB.list || []).find(x => x.id === id); if(!o) return;
+  if(o.status === 'averifier'){ toast('Vérifiez et confirmez d\'abord le paiement'); return; }
+  WEB.pre = {id, paid:o.status === 'confirme', pay:o.pay, code:o.code, status:o.status, ids:new Set(S.moves.map(m => m.id)), at:Date.now()};
+  closeSheet();
+  setTimeout(() => { moveForm('vente'); const t = $('#pasteTx'), g = $('#pasteGo'); if(t && g){ t.value = webOrderText(o); g.click(); }
+    if(o.status === 'confirme') toast('Déjà payée par ' + o.pay + ' : le livreur n\'encaissera rien'); }, 250);
+};
+// Après l'enregistrement de la vente : déjà payée par Mobile Money → le livreur n'encaisse rien ; commande en ligne → traitée
+function webPreCheck(){
+  const P = WEB.pre; if(!P) return;
+  if(Date.now() - P.at > 30 * 60000){ WEB.pre = null; return; }
+  const news = S.moves.filter(m => m && m.type === 'vente' && !P.ids.has(m.id)); if(!news.length) return;
+  WEB.pre = null;
+  if(P.paid){ news.forEach(m => { m.pre = true; m.pay = 'Mobile Money'; m.note = [m.note, 'Payé par ' + P.pay + ' (code ' + P.code + ')'].filter(Boolean).join(' · '); }); save(); }
+  if(P.status === 'livraison' || P.status === 'confirme') webDecide(P.id, 'traite');
+}
+/* Réglages : numéros Mobile Money de la boutique (seul le propriétaire les modifie) */
+function mmCard(){ const mm = S.settings.mm || {}, on = !!mm.on, nums = Array.isArray(mm.nums) ? mm.nums : [];
+  return `<div class="card" style="margin-top:12px" id="mmCard"><b>Paiement Mobile Money dans la boutique</b>
+    <p class="note" style="margin:4px 0 10px">Le client peut payer avant la livraison sur votre numéro, puis il tape le code reçu par SMS. Vous vérifiez le SMS sur votre téléphone et vous confirmez dans « Commandes de la boutique en ligne ». Sans papiers et sans frais en plus.</p>
+    <div class="seg" style="grid-template-columns:1fr 1fr;margin-bottom:10px">${[['1','Activé'],['0','Désactivé']].map(([k,l]) => `<button type="button" class="${(on ? '1' : '0') === k ? 'on' : ''}" data-a="mmon:${k}">${l}</button>`).join('')}</div>
+    ${on ? `<form id="mmf">${[0,1,2].map(i => { const p = nums[i] || {}; return `<div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px"><label class="f" style="margin:0 0 8px"><select name="op${i}"><option value="">Réseau</option>${OPS.filter(o => o !== 'Autre').map(o => `<option ${p.op === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label><label class="f" style="margin:0 0 8px"><input name="num${i}" type="tel" value="${esc(p.num || '')}" placeholder="Numéro"></label><label class="f" style="margin:0 0 8px"><input name="name${i}" value="${esc(p.name || '')}" placeholder="Nom du compte"></label></div>`; }).join('')}
+      <button class="btn primary block">Enregistrer les numéros</button></form>
+      ${nums.length ? '' : '<div class="warnbox" style="margin-top:10px">Ajoutez au moins un numéro : sinon le client ne voit que « paiement à la livraison ».</div>'}` : ''}
+  </div>`; }
+A.mmon = k => { const mm = Object.assign({nums:[]}, S.settings.mm || {}); mm.on = k === '1'; S.settings.mm = mm; save(); render(); };
+function mmWire(){ const f = $('#mmf'); if(!f) return;
+  f.onsubmit = e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements;
+    const nums = [0,1,2].map(i => ({op:E['op' + i].value, num:E['num' + i].value.trim(), name:E['name' + i].value.trim()})).filter(x => x.op && x.num);
+    const bad = nums.find(x => x.num.replace(/\D/g, '').length < 8); if(bad){ toast('Numéro incomplet : ' + bad.num); return; }
+    S.settings.mm = {on:true, nums}; save(); render(); toast(nums.length ? 'Numéros enregistrés' : 'Aucun numéro enregistré'); }; }
+/* Abonnement : le patron tape le code de son paiement ; BASILUA TECH vérifie et active en un clic */
+const SUBP = {list:null, t:0};
+async function loadSubPays(){ if(!sb || !ONLINE.user || Date.now() - SUBP.t < 60000) return; SUBP.t = Date.now();
+  try{ const {data} = await sb.from('sub_payments').select('id,created_at,status,months,amount,op,code,until').eq('user_id', ONLINE.user.id).order('created_at', {ascending:false}).limit(5); const had = subPending().length; SUBP.list = data || []; if(view === 'reglages' && subPending().length !== had) render(); }catch(_){} }
+const subPending = () => (SUBP.list || []).filter(x => x.status === 'averifier');
+{ const rawPaySheet = paySheet; paySheet = function(){ rawPaySheet.apply(this, arguments); try{ subPayWire(); }catch(_){} }; }
+function subPayWire(){
+  if(ONLINE.role !== 'proprietaire') return;
+  const h = [...document.querySelectorAll('#shb .sec h2')].find(x => x.textContent.trim().startsWith('2. Envoyez la capture')); if(!h) return;
+  const ops = PAYINFO.length ? PAYINFO.map(p => p.op) : OPS.filter(o => o !== 'Autre');
+  h.textContent = 'Ou envoyez la capture sur WhatsApp';
+  h.parentElement.insertAdjacentHTML('beforebegin', `<div class="sec"><h2>2. Tapez le code du paiement</h2></div>
+    <form id="subpf" class="card" style="margin-bottom:12px"><p class="note" style="margin-bottom:8px">Après le paiement, vous recevez un SMS avec un code de transaction. Tapez-le ici : BASILUA TECH vérifie et active votre abonnement, en général dans l'heure.</p>
+      <div class="row2">${field('Réseau utilisé *', `<select name="op" required>${ops.map(o => `<option>${esc(o)}</option>`).join('')}</select>`)}${field('Numéro qui a payé', `<input name="payer" type="tel" placeholder="Ex : 0812345678">`)}</div>
+      ${field('Code de la transaction *', `<input name="code" required autocomplete="off" autocapitalize="characters" placeholder="Code reçu par SMS">`)}
+      <button class="btn primary block" id="subpGo">J'ai payé : envoyer le code</button></form>`);
+  $('#subpf').onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements, code = E.code.value.replace(/\s+/g, '').toUpperCase();
+    if(code.length < 4){ toast('Tapez le code de la transaction reçu par SMS'); return; }
+    const pl = planList().find(x => x.k === PAYPLAN) || planList()[0], btn = $('#subpGo'); btn.disabled = true; btn.textContent = 'Envoi…';
+    const {error} = await sb.rpc('submit_sub_payment', {p_shop:ONLINE.shop.id, p_months:pl.n, p_pro:!!payPro(), p_amount:pl.p, p_op:E.op.value, p_code:code, p_payer:E.payer.value.trim()});
+    if(error){ btn.disabled = false; btn.textContent = 'J\'ai payé : envoyer le code'; toast(rpcErr(error)); return; }
+    SUBP.t = 0; loadSubPays();
+    sheet('Paiement envoyé', `<div class="card" style="text-align:center"><b style="font-size:18px">Merci !</b><p class="note" style="margin:8px 0">Votre paiement de <b>${fmt(pl.p)} $</b> (${esc(pl.t)}) par ${esc(E.op.value)}, code <b>${esc(code)}</b>, est envoyé à BASILUA TECH.</p><p class="note">Dès que le paiement est vérifié, votre abonnement est activé automatiquement. Vous n'avez rien d'autre à faire.</p></div>
+      <a class="btn wa block" style="margin-top:10px" href="${supportLink(payMsg() + '\nCode de la transaction : ' + code)}" target="_blank" rel="noopener">${ico('wa')} Prévenir BASILUA TECH sur WhatsApp (facultatif)</a>`);
+  };
+}
+/* Espace BASILUA TECH : paiements d'abonnement à vérifier */
+const ADMP = {list:null, t:0};
+async function loadAdmPays(){ if(!ONLINE.admin) return; ADMP.t = Date.now();
+  const {data, error} = await sb.rpc('admin_list_sub_payments'); if(!error){ ADMP.list = data || []; if(view === 'admin') render(); } }
+function admPayRows(){ const L = ADMP.list; if(L === null) return '';
+  const pend = L.filter(x => x.status === 'averifier'), done = L.filter(x => x.status !== 'averifier').slice(0, 8);
+  const row = x => `<div class="card" style="margin-bottom:8px${x.status === 'averifier' ? ';border:2px solid var(--brand)' : ''}"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc((x.names || [x.shop]).join(', '))}</b><span class="pill ${x.status === 'averifier' ? 'p-attente' : x.status === 'confirme' ? 'p-livre' : 'p-annule'}">${x.status === 'averifier' ? 'À vérifier' : x.status === 'confirme' ? 'Activé' : 'Refusé'}</span></div>
+    <div class="note" style="margin-top:4px">${esc(x.owner_name || '')}${x.owner_phone ? ' · ' + esc(telPretty(x.owner_phone)) : ''} · ${esc(fmtDate(String(x.created_at).slice(0, 10)))}</div>
+    <div class="dl"><span>Formule</span><span>${x.months} mois${x.pro ? ' · Pro' : ''}${x.n > 1 ? ' · ' + x.n + ' magasins' : ''}</span></div>
+    <div class="dl"><span>Montant</span><span class="num"><b>${fmt(num(x.amount))} $</b> (≈ ${subFc(num(x.amount))})</span></div>
+    <div class="dl"><span>${esc(x.op)}</span><span><b class="num" style="font-size:17px">${esc(x.code)}</b></span></div>
+    ${x.payer ? `<div class="dl"><span>Payé depuis</span><span>${esc(x.payer)}</span></div>` : ''}
+    ${x.status === 'averifier' ? `<div class="btns" style="margin-top:8px"><button class="btn primary" data-a="admpayok:${x.id}">Reçu : activer</button><button class="btn ghost-bad" data-a="admpayko:${x.id}">Pas reçu</button></div>` : x.until ? `<p class="note">Actif jusqu'au ${esc(fmtDate(x.until, true))}</p>` : ''}</div>`;
+  return `<div class="sec"><h2>Paiements d'abonnement à vérifier (${pend.length})</h2><button class="link" data-a="admpayreload">Actualiser</button></div>
+    ${pend.length ? pend.map(row).join('') : '<div class="card empty" style="margin-bottom:8px">Aucun paiement en attente.</div>'}
+    ${done.length ? `<details class="card" style="margin-bottom:12px"><summary><b>Derniers paiements traités</b></summary><div style="margin-top:8px">${done.map(row).join('')}</div></details>` : ''}`; }
+A.admpayreload = () => loadAdmPays();
+A.admpayok = async id => { const x = (ADMP.list || []).find(y => y.id === id); if(!x) return;
+  if(!await ask(`Vous avez bien reçu ${fmt(num(x.amount))} $ par ${x.op} (code ${x.code}) ?`, 'Oui, activer', false)) return;
+  const {data, error} = await sb.rpc('admin_decide_sub_payment', {p_id:id, p_ok:true}); if(error) return toast(rpcErr(error));
+  x.status = 'confirme'; x.until = data && data.until; toast('Abonnement activé'); loadAdmin(); loadAdmPays();
+  if(x.owner_phone) sheet('Abonnement activé', `<p class="note" style="margin-bottom:10px">Prévenez le client :</p><a class="btn wa block" href="${waLink(x.owner_phone, `Bonjour ${x.owner_name || ''} 👋\nNous avons bien reçu votre paiement de ${fmt(num(x.amount))} $ (code ${x.code}). Votre abonnement Réseau & Vente${x.pro ? ' Pro' : ''} est activé${x.until ? " jusqu'au " + fmtDate(x.until, true) : ''}. Merci pour votre confiance 🙏\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Envoyer la confirmation</a>`); };
+A.admpayko = async id => { const x = (ADMP.list || []).find(y => y.id === id); if(!x) return;
+  if(!await ask('Ce paiement n\'est pas arrivé ? L\'abonnement ne sera pas activé.', 'Pas reçu')) return;
+  const {error} = await sb.rpc('admin_decide_sub_payment', {p_id:id, p_ok:false}); if(error) return toast(rpcErr(error));
+  x.status = 'refuse'; render();
+  if(x.owner_phone) sheet('Paiement non trouvé', `<a class="btn wa block" href="${waLink(x.owner_phone, `Bonjour ${x.owner_name || ''} 👋\nNous n'avons pas trouvé votre paiement par ${x.op} (code ${x.code}). Pouvez-vous vérifier le code, ou nous envoyer la capture du paiement ? Merci 🙏\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Écrire au client</a>`); };
+// Branchements : accueil, Plus, Réglages, Mon compte, espace BASILUA TECH
+(() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
+  const main = $('#main'); if(!main || !ONLINE.shop) return;
+  if(view === 'admin' && ONLINE.admin){ if(Date.now() - ADMP.t > 60000) loadAdmPays(); const k = main.querySelector('.kpis'); if(k && ADMP.list) k.insertAdjacentHTML('afterend', `<div style="margin-top:12px">${admPayRows()}</div>`); return; }
+  if(webRole()){ loadWeb(); webPreCheck(); }
+  if(view === 'home' && webRole() && WEB.list){
+    const c = webCheck(), f = webFresh();
+    if(f.length) main.insertAdjacentHTML('afterbegin', `<button class="subban info" style="display:block;width:100%;text-align:left" data-a="weborders">${f.length} nouvelle${f.length > 1 ? 's' : ''} commande${f.length > 1 ? 's' : ''} de la boutique en ligne (paiement à la livraison) : touchez pour préparer</button>`);
+    if(c.length && webCanPay()) main.insertAdjacentHTML('afterbegin', `<button class="subban warn" style="display:block;width:100%;text-align:left" data-a="weborders">${c.length} paiement${c.length > 1 ? 's' : ''} Mobile Money à vérifier (boutique en ligne) : regardez vos SMS puis confirmez</button>`);
+  }
+  if(view === 'plus' && webRole() && (S.settings.catalog || (WEB.list || []).length)){
+    const c = webCheck().length;
+    main.insertAdjacentHTML('afterbegin', `<div class="list menu" style="margin-bottom:12px"><button class="it" data-a="weborders"><div class="ic c-brand">${ico('box')}</div><div class="m"><div class="t">Commandes de la boutique en ligne</div><div class="d" style="white-space:normal">${c ? c + ' paiement(s) à vérifier · ' : ''}Commandes et paiements Mobile Money de vos clients</div></div>${ico('chev')}</button></div>`);
+  }
+  if(view === 'reglages'){
+    if(ONLINE.role === 'proprietaire' && S.settings.catalog){
+      const h = [...main.querySelectorAll('.sec h2')].find(x => x.textContent.includes('Ma boutique en ligne'));
+      const card = h && h.parentElement.nextElementSibling; if(card) card.insertAdjacentHTML('afterend', mmCard()); mmWire();
+    }
+    if(ONLINE.role === 'proprietaire'){ loadSubPays(); const p = subPending()[0];
+      if(p){ const n = [...main.querySelectorAll('.dl span')].find(x => x.textContent === 'Abonnement'); if(n) n.parentElement.insertAdjacentHTML('afterend', `<div class="dl"><span>Paiement envoyé</span><span>${fmt(num(p.amount))} $ · code ${esc(p.code)} · en cours de vérification</span></div>`); } }
+  }
+}catch(e){ console.error(e); } }; })();
 
 </script>
 </body>
