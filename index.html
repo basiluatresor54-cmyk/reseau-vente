@@ -866,6 +866,7 @@ function vStock(){
     <div class="chips" style="margin:8px 0 0"><button class="chip ${!stockAsOf ? 'on' : ''}" data-a="sasof" data-d="">Aujourd'hui (actuel)</button><button class="chip ${stockAsOf === addDays(t, -1) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -1)}">Hier soir</button><button class="chip ${stockAsOf === addDays(t, -7) ? 'on' : ''}" data-a="sasof" data-d="${addDays(t, -7)}">Il y a 7 jours</button></div>
     ${stockAsOf ? `<p class="note" style="margin:8px 0 0">⏪ Vous voyez le stock tel qu'il était <b>à la fin du ${esc(dAbs(stockAsOf, 1))}</b>. <button class="link" data-a="sasof" data-d="">Revenir au stock actuel</button> · <button class="link" data-a="shday" data-d="${stockAsOf}">Mouvements de ce jour ›</button></p>` : ''}</div>
   <input class="search" type="search" placeholder="Rechercher un produit…" value="${esc(stockQ)}" oninput="stockQ=this.value;refreshList('stock')">
+  ${bcOn() ? '<button class="btn sm" data-a="scanstock" style="margin:-4px 0 10px">Scanner un code-barres</button>' : ''}
   <div id="sfilw">${stockFiltChips()}</div>
   ${stockAsOf || isVendeur() ? '' : (n => n ? `<button class="card daycard" data-a="rachat"><span><b>À racheter</b> · ${n} produit(s) presque fini(s)</span><span class="note">Préparer la commande ›</span></button>` : '')(rachatList().length)}
   ${perimCard()}
@@ -899,7 +900,7 @@ function stockRows(){
   if(!S.products.length) return `<div class="list"><div class="empty"><b>Aucun produit</b>Ajoutez votre premier produit.</div></div>`;
   const MV = stockAsOf ? S.moves.filter(m => (mday(m) || '') <= stockAsOf && !(m.type === 'vente' && m.status !== 'livre' && (m.date || '') > stockAsOf)) : S.moves;
   const st = stockAt(MV), q = stockQ.trim().toLowerCase();
-  const match = p => stockFilt(p) && (!q || (p.name + ' ' + (p.cat||'') + ' ' + caracTxt(p)).toLowerCase().includes(q));
+  const match = p => stockFilt(p) && (!q || (p.name + ' ' + (p.cat||'') + ' ' + caracTxt(p) + ' ' + (p.code||'')).toLowerCase().includes(q));
   const simple = S.products.filter(p => !isKit(p) && match(p)).sort(byName);
   const kits = S.products.filter(p => isKit(p) && match(p)).sort(byName);
   let units = 0, dep = 0, hand = 0, soldAll = 0;
@@ -2328,7 +2329,7 @@ function quickSale(){
     <p class="note" style="margin-bottom:10px">Aujourd'hui : <b>${td.n}</b> vente(s) · <b>${money(td.ca)}</b> — <a href="#" data-a="jourset:${today()}">voir le rapport du jour</a> · <a href="#" data-a="cloture:${today()}">clôture de caisse</a></p>
     <form id="qf">
     ${field('Produit *', `<select name="pid" required><option value="">Choisir un produit…</option>${prods.map(p => `<option value="${p.id}">${esc(p.name)} — ${avail(st,'',p.id)} dispo</option>`).join('')}</select>`)}
-    <div id="qunit"></div><div class="row2">${field('Quantité *', `<div class="qty"><button type="button" class="btn sm" id="qm">−</button><input name="qty" type="number" min="1" step="1" required value="1"><button type="button" class="btn sm" id="qp">+</button></div>`)}
+    ${scanBar()}<div id="qunit"></div><div class="row2">${field('Quantité *', `<div class="qty"><button type="button" class="btn sm" id="qm">−</button><input name="qty" type="number" min="1" step="1" required value="1"><button type="button" class="btn sm" id="qp">+</button></div>`)}
       ${field('Prix unitaire', `<input name="price" type="number" step="any" min="0">`, '<span id="qcur"></span>')}</div>
     <div class="tot" id="qtot"></div><div id="qfefo"></div>${snField(null)}
     <div class="f"><span>Payé en</span><div class="seg" id="segP">${PAYS.slice(1).map(x => `<button type="button" data-p="${x}">${x}</button>`).join('')}</div></div>
@@ -2545,6 +2546,7 @@ function productForm(id, opt = {}){
       <button type="button" class="btn sm" id="kitAdd" style="margin:4px 0 8px">+ Ajouter un produit au pack</button>
       <div id="kitSum" class="note"></div></div>
     ${field(packMode ? 'Nom du pack *' : 'Nom du produit *', `<input name="name" ${packMode ? '' : 'required'} maxlength="70" value="${esc(p?.name)}" placeholder="${packMode ? 'Ex : Gamme complète Golden Hair' : 'Ex : Sac de poitrine'}">`)}
+    ${bcOn() ? codeField(p, opt) : ''}
     <div class="f"><span>Photo du produit (optionnel)</span><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <div class="ic pic" id="pfPrev" style="width:64px;height:64px">${p && p.photo ? `<img src="${p.photo}" alt="">` : '📷'}</div>
       <label class="btn sm" style="cursor:pointer">Choisir une photo<input type="file" accept="image/*" id="pfPhoto" hidden></label>
@@ -2573,7 +2575,7 @@ function productForm(id, opt = {}){
     ${p ? `<button type="button" class="btn ghost-bad block" style="margin-top:8px" data-a="delprod:${p.id}">Supprimer ce produit</button>` : ''}</form>`);
   const f = $('#pf'), E = f.elements;
   let photo = (p && p.photo) || '';
-  unitWire(f); supWire(f); perimWire(f); varWire(f, p); caracWire(f); snWire(f, p);
+  unitWire(f); supWire(f); perimWire(f); varWire(f, p); caracWire(f); snWire(f, p); if(p) f.dataset.pid = p.id;
   $('#pfPhoto').onchange = e => { const file = e.target.files[0]; if(!file) return; smallImage(file, 240, .72).then(u => { photo = u; $('#pfPrev').innerHTML = `<img src="${u}" alt="">`; $('#pfNoPhoto').hidden = false; }).catch(() => toast('Image illisible')); };
   $('#pfNoPhoto').onclick = () => { photo = ''; $('#pfPrev').textContent = '📷'; $('#pfNoPhoto').hidden = true; };
   // Pack / promo : composition, prix séparé, économie, coût et bénéfice
@@ -2625,11 +2627,12 @@ function productForm(id, opt = {}){
     if(!kitv){ const fid = readSup(f); if(fid === null) return; if(fid !== undefined) data.fid = fid || undefined; }
     if(!kitv && E.perim) data.perim = E.perim.checked || undefined;
     if(!kitv) Object.assign(data, readCarac(f));
+    if(E.code){ const cd = bcClean(E.code.value); if(cd && !codeFree(cd, p && p.id)) return; data.code = cd || undefined; }
     if(p){ Object.assign(p, data); const nv = E.varAll && E.varAll.checked ? varShare(p, data) : 0; toast(nv ? 'Produit modifié, ainsi que ' + nv + ' autre(s) taille(s) / couleur(s)' : 'Produit modifié'); }
     else {
       const vs = kitv ? null : readVariants(f); if(vs === false) return;
       const lx = !kitv && data.perim && E.iexp ? Object.assign({}, E.ilot.value.trim() ? {lot:E.ilot.value.trim()} : {}, E.iexp.value ? {exp:E.iexp.value} : {}) : {};
-      if(vs && vs.length){ const n = makeVariants(name, data, vs, uid(), 0, lx); toast(n + ' fiche(s) créée(s) : une par taille et couleur'); }
+      if(vs && vs.length){ delete data.code; const n = makeVariants(name, data, vs, uid(), 0, lx); toast(n + ' fiche(s) créée(s) : une par taille et couleur'); }
       else {
       const np = Object.assign({id:uid()}, data); S.products.push(np);
       const init = kitv ? 0 : qr(np, E.init?.value);
@@ -2664,7 +2667,7 @@ function prodSheet(id){
     ${kit ? `<div class="warnbox" style="background:var(--vio-soft);color:var(--vio)">Pack : ${p.kit.map(c => c.q + ' × ' + esc(pname(c.pid))).join(' + ')}. Les quantités ci-dessous = nombre de packs possibles.</div>` : ''}
     <div class="kv"><div><b class="num">${kit ? avail(st,'',id) : qAt(st,'',id)}</b><span>Au dépôt</span></div><div><b class="num">${kit ? locs.reduce((s,x)=>s+x[1],0) : inHands(st,id)}</b><span>Chez livreurs</span></div><div><b class="num">${kit ? '—' : totalOf(st,id)}</b><span>Total</span></div></div>
     ${locs.length ? `<div class="card" style="margin-bottom:12px">${locs.map(([l,q]) => `<div class="dl"><span>${esc(l.name)} · ${esc(l.city||'')}</span><span class="num">${q}</span></div>`).join('')}</div>` : ''}
-    ${caracCard(p)}${varSheetCard(p, st)}${perimSheetCard(p, st)}
+    ${codeCard(p)}${caracCard(p)}${varSheetCard(p, st)}${perimSheetCard(p, st)}
     <div class="card" style="margin-bottom:12px">
       <div class="dl"><span>Prix de vente</span><span class="num">${priceTxt(p)}${p.cur==='FC' ? ' ≈ ' + money(su) : ''}</span></div>
       <div class="dl cost"><span>Prix d'achat</span><span class="num">${num(p.buy)>0 ? amt(p.buy, p.cur) : (kit && cu ? '≈ ' + money(cu) + ' (produits)' : '<span class="red">à compléter</span>')}</span></div>
@@ -2708,7 +2711,7 @@ function moveForm(type, opt = {}){
   if(type === 'perte') h += field('Où se trouve le produit ?', `<select name="loc">${livOpts(true, 'Au dépôt')}</select>`);
   if(type === 'vente') h += field('Livré par', `<select name="loc">${livOpts(true, 'Vente directe (depuis le dépôt)')}</select>`);
   h += field('Produit *', `<select name="pid" required>${pid0 ? '' : '<option value="">Choisir un produit…</option>'}${prods.map(p => `<option value="${p.id}" ${p.id===pid0?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`);
-  h += `<div id="avail"></div><div id="fefo"></div>${type === 'vente' ? snField(m) : ''}<div id="uctl"></div><div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : 1}">`)}`;
+  h += `${scanBar()}<div id="avail"></div><div id="fefo"></div>${type === 'vente' ? snField(m) : ''}<div id="uctl"></div><div class="row2">${field('Quantité *', `<input name="qty" type="number" min="1" step="1" required value="${m ? m.qty : 1}">`)}`;
   if(type === 'entree') h += field('Coût unitaire', `<input name="cost" type="number" step="any" min="0" value="${m ? (m.cost ?? '') : ''}">`, '<span id="curl"></span>') + `</div>` + perimMoveFields(m);
   else if(type === 'perte') h += field('Motif', `<select name="motif">${MOTIFS.map(x => `<option ${m?.motif===x?'selected':''}>${x}</option>`).join('')}</select>`) + `</div>`;
   else if(type === 'vente') h += field('Prix unitaire', `<input name="price" type="number" step="any" min="0" value="${m ? m.price : ''}">`, '<span id="curl"></span>') + `</div><div class="tot" id="tot"></div>
@@ -4218,12 +4221,13 @@ const IMP_COLS = [
   ['exp', 'Date de péremption', /(perem|expir|^exp|^dlc|^dluo)/],
   ['marque', 'Marque', /(marque|brand|labo|fabricant)/],
   ['modele', 'Modèle', /(^modele|^model|^version)/],
+  ['code', 'Code-barres', /(^code|barre|^ean|gtin|^upc|^sku)/],
   ['qual', 'Qualité ou état', /(qualit|^etat|condition)/],
   ['mat', 'Matière', /(^mati|metal|carat)/],
   ['forme', 'Forme', /(^forme|galen)/],
   ['gar', 'Garantie', /(garant|warrant)/]
 ];
-const impKeys = () => ['name', 'sell', 'buy', 'qty', 'cat', 'alert', 'taille', 'couleur', 'lot', 'exp'].concat(['marque', 'modele', 'qual', 'mat', 'forme', 'gar'].filter(k => caracOn(k) || (IMPX.map && IMPX.map[k] != null && IMPX.map[k] !== '')));
+const impKeys = () => ['name', 'sell', 'buy', 'qty', 'cat', 'alert', 'taille', 'couleur', 'lot', 'exp'].concat(['code', 'marque', 'modele', 'qual', 'mat', 'forme', 'gar'].filter(k => (k === 'code' ? bcOn() : caracOn(k)) || (IMPX.map && IMPX.map[k] != null && IMPX.map[k] !== '')));
 const colIdx = s => { let n = 0; for(const ch of String(s).toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
 const colName = i => { let s = ''; i++; while(i > 0){ const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };
 // « 1 500,50 », « 1,500.50 », « 15 $ », « 2 500 FC » → nombre
@@ -4321,7 +4325,7 @@ function importRows(){
     if(have.has(key) || seen.has(key)){ skip.dup++; continue; }
     const sell = numx(g(r, 'sell')); if(!(sell > 0)){ skip.noprice++; continue; }
     seen.add(key);
-    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:String(g(r, 'cat')).slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert')))), vt, vc, lot:String(g(r, 'lot')).trim().slice(0, 30), exp:dateX(g(r, 'exp')), ...Object.fromEntries(['marque', 'modele', 'qual', 'mat', 'forme', 'gar'].map(k => [k, String(g(r, k)).replace(/\s+/g, ' ').trim().slice(0, 40)]).filter(e => e[1]))});
+    ok.push({name, sell, buy:Math.max(0, numx(g(r, 'buy'))), qty:Math.max(0, Math.round(numx(g(r, 'qty')))), cat:String(g(r, 'cat')).slice(0, 40), alert:Math.max(0, Math.round(numx(g(r, 'alert')))), vt, vc, lot:String(g(r, 'lot')).trim().slice(0, 30), exp:dateX(g(r, 'exp')), ...Object.fromEntries(['code', 'marque', 'modele', 'qual', 'mat', 'forme', 'gar'].map(k => [k, String(g(r, k)).replace(/\s+/g, ' ').trim().slice(0, 40)]).filter(e => e[1]))});
   }
   return {ok, skip};
 }
@@ -4343,7 +4347,7 @@ function importStep(){
     const G = {};
     ok.forEach((x, i) => { const vv = x.vt || x.vc; const np = {id:uid(), name:vv ? varName(x.name, x.vt, x.vc) : x.name, details:'', usage:'', cat:x.cat, cur:IMPX.cur, sell:x.sell, old:0, buy:x.buy, comm:0, commMode:'fixe', commCity:null, alert:x.alert, kit:null, photo:'', hide:false};
       if(vv){ const gk = norm(x.name), gg = G[gk] = G[gk] || {id:uid(), n:0}; Object.assign(np, {base:x.name, grp:gg.id, vi:gg.n++}); if(x.vt) np.vt = x.vt; if(x.vc) np.vc = x.vc; }
-      CARAC.forEach(([k]) => { if(x[k]) np[k] = x[k]; });
+      CARAC.forEach(([k]) => { if(x[k]) np[k] = x[k]; }); if(x.code && !prodByCode(x.code)) np.code = bcClean(x.code);
       if(x.exp || x.lot) np.perim = true;
       S.products.push(np);
       if(x.qty > 0) S.moves.push(Object.assign({id:uid(), ts:ts + i, type:'entree', pid:np.id, qty:x.qty, cost:np.buy, date:t, note:'Stock de départ (import)'}, x.lot ? {lot:x.lot} : {}, x.exp ? {exp:x.exp} : {})); });
@@ -4442,7 +4446,7 @@ function addVarSheet(g){
   f.onsubmit = e => { e.preventDefault();
     const vs = readVariants(f, exists); if(vs === false) return;
     if(!vs || !vs.length){ toast('Ajoutez une nouvelle taille ou une nouvelle couleur'); return; }
-    const data = {}; Object.keys(p0).forEach(k => { if(!['id', 'name', 'vt', 'vc', 'vi', 'grp', 'base'].includes(k)) data[k] = p0[k]; });
+    const data = {}; Object.keys(p0).forEach(k => { if(!['id', 'name', 'vt', 'vc', 'vi', 'grp', 'base', 'code'].includes(k)) data[k] = p0[k]; });
     const vi0 = Math.max(...L.map(x => x.vi ?? 0)) + 1;
     // Les fiches sans taille (ou sans couleur) prennent la nouvelle valeur seulement si l'article n'en avait aucune
     const n = makeVariants(base, data, vs, g, vi0);
@@ -4722,6 +4726,7 @@ function caracSection(p){
   const mine = k => [...new Set(S.products.map(x => x[k]).filter(Boolean))];
   return `<details class="card" id="caracw" style="margin-bottom:12px" ${open ? 'open' : ''}><summary><b>Marque, qualité…</b> <span class="note">(optionnel)</span></summary>
     <p class="note" style="margin:8px 0">Touchez une proposition ou écrivez vous-même. « + Ajouter » garde votre bouton pour les prochains produits ; « Modifier » enlève ceux qui ne vous servent pas.</p>
+    ${bcOn() ? '' : codeField(p)}
     ${ks.map(([k]) => { const sug = [...new Set(mine(k).concat(k === 'modele' ? modelSug(p && p.marque) : caracSug(k)))];
       return `<div class="f"><span>${esc(caracLabel(k))}</span><input name="c_${k}" maxlength="40" list="cdl_${k}" value="${esc(p && p[k] || '')}" placeholder="${k === 'marque' ? 'Ex : ' + esc((sug[0] || 'Adidas')) : 'Écrire…'}" autocomplete="off">
         <datalist id="cdl_${k}">${sug.map(v => `<option value="${esc(v)}">`).join('')}</datalist>
@@ -4930,6 +4935,100 @@ function snWire(f, p){
   E.cat.addEventListener('input', () => { if(!touched) E.c_sn.checked = SN_CATS.includes(E.cat.value.trim()); });
 }
 Object.assign(A, {imei: q => imeiSheet(q)});
+
+/* ---------- Codes-barres : caméra du téléphone (lecteur intégré, sinon ZXing chargé à la demande) ou lecteur « pistolet » (tape le code + Entrée) ----------
+   Un produit peut avoir un ou plusieurs codes (p.code, séparés par des virgules). Le code n'est pas partagé entre les tailles / couleurs. */
+const bcList = v => String(v || '').split(/[\s,;]+/).map(x => x.trim().slice(0, 40)).filter(Boolean);
+const bcClean = v => [...new Set(bcList(v))].slice(0, 10).join(', ');
+const prodByCode = c => { c = String(c || '').trim(); return c ? S.products.find(p => bcList(p.code).includes(c)) : null; };
+const bcOn = () => S.products.some(p => p.code) || caracSects().some(s => ['alim', 'pharma', 'tel', 'quinc', 'cosm', 'libr'].includes(s));
+function codeField(p, opt){
+  return `<div class="f"><span>Code-barres <small class="note">(optionnel)</small></span><div style="display:flex;gap:8px"><input name="code" class="bcin" maxlength="120" autocomplete="off" value="${esc((p && p.code) || (opt && opt.code) || '')}" placeholder="Scannez ou tapez le code" style="flex:1"><button type="button" class="btn sm" data-a="scanpick">Scanner</button></div><small class="note" id="codewarn"></small></div>`;
+}
+const scanBar = () => bcOn() ? `<div class="scanbar" style="display:flex;gap:8px;margin:-4px 0 12px"><button type="button" class="btn sm" data-a="scanpick">Scanner</button><input class="bcin" autocomplete="off" placeholder="Code-barres (lecteur ou à la main)" style="flex:1;min-width:0"></div>` : '';
+const codeCard = p => p && p.code ? `<div class="card" style="margin-bottom:12px"><div class="dl"><span>Code-barres</span><span style="font-family:ui-monospace,monospace">${esc(p.code)}</span></div></div>` : '';
+function beep(){
+  try{ navigator.vibrate && navigator.vibrate(80); }catch(_){}
+  try{ const C = window.AudioContext || window.webkitAudioContext; if(!C) return; const a = beep.ctx || (beep.ctx = new C()), o = a.createOscillator(), g = a.createGain();
+    o.frequency.value = 1500; g.gain.value = .08; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + .09); }catch(_){}
+}
+let zxP = null;
+const loadZX = () => zxP || (zxP = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'zxing.js'; s.onload = () => window.ZXing ? res(window.ZXing) : rej(new Error('zx')); s.onerror = () => { zxP = null; rej(new Error('zx')); }; document.head.appendChild(s); }));
+// Ouvre la caméra en plein écran ; renvoie le code lu (ou tapé), ou null si on ferme.
+function scanCode(title){
+  return new Promise(resolve => {
+    document.getElementById('scanov')?.remove();
+    document.body.insertAdjacentHTML('beforeend', `<div id="scanov" style="position:fixed;inset:0;z-index:10000;background:#000;color:#fff;display:flex;flex-direction:column">
+      <div style="position:relative;flex:1;overflow:hidden"><video playsinline muted autoplay style="width:100%;height:100%;object-fit:cover"></video>
+        <div style="position:absolute;left:8%;right:8%;top:34%;height:24%;border:3px solid #fff;border-radius:18px;box-shadow:0 0 0 9999px rgba(0,0,0,.35)"></div>
+        <div id="scanmsg" style="position:absolute;left:0;right:0;top:calc(34% - 54px);text-align:center;font-weight:700;font-size:17px;text-shadow:0 1px 4px #000">${esc(title || 'Placez le code-barres dans le cadre')}</div></div>
+      <div style="background:#111;padding:14px 14px calc(14px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center">
+        <input id="scanin" autocomplete="off" placeholder="ou tapez le code" style="flex:1;min-width:0;min-height:46px;border-radius:12px;border:0;padding:0 12px;font-size:16px">
+        <button class="btn sm primary" id="scanok" style="min-height:46px">OK</button><button class="btn sm" id="scanx" style="min-height:46px">Fermer</button></div></div>`);
+    const ov = $('#scanov'), v = ov.querySelector('video'); let stream = null, done = false, timer = null;
+    const stop = () => { done = true; clearTimeout(timer); try{ stream && stream.getTracks().forEach(t => t.stop()); }catch(_){} ov.remove(); };
+    const finish = c => { if(done) return; c = String(c || '').trim(); if(c) beep(); stop(); resolve(c || null); };
+    $('#scanx').onclick = () => finish(null);
+    $('#scanok').onclick = () => finish($('#scanin').value);
+    $('#scanin').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); finish(e.target.value); } };
+    const msg = t => { const m = $('#scanmsg'); if(m) m.textContent = t; };
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ msg('Caméra non disponible ici : tapez le code en bas.'); return; }
+    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false}).then(async s => {
+      if(done){ s.getTracks().forEach(t => t.stop()); return; }
+      stream = s; v.srcObject = s; try{ await v.play(); }catch(_){}
+      let read = null;
+      if('BarcodeDetector' in window){ try{ const fm = await BarcodeDetector.getSupportedFormats(); if(fm && fm.length){ const d = new BarcodeDetector({formats:fm}); read = async () => { const r = await d.detect(v); return r && r[0] ? r[0].rawValue : ''; }; } }catch(_){ read = null; } }
+      if(!read){
+        try{ const Z = await loadZX(), H = new Map(), F = Z.BarcodeFormat;
+          H.set(Z.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.CODABAR, F.QR_CODE, F.DATA_MATRIX]); H.set(Z.DecodeHintType.TRY_HARDER, true);
+          // Image entière de la caméra (pas seulement la partie affichée), réduite à 1280 px de large au plus
+          const rd = new Z.MultiFormatReader(), cv = document.createElement('canvas'), cx = cv.getContext('2d', {willReadFrequently:true}); rd.setHints(H);
+          read = async () => { const k = Math.min(1, 1280 / (v.videoWidth || 1280)); cv.width = Math.round((v.videoWidth || 640) * k); cv.height = Math.round((v.videoHeight || 480) * k); cx.drawImage(v, 0, 0, cv.width, cv.height);
+            try{ return rd.decodeWithState(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)))).getText(); }catch(_){ return ''; } };
+        }catch(_){ msg('Lecteur non chargé (internet ?) : tapez le code en bas.'); return; }
+      }
+      const loop = async () => { if(done) return; if(v.readyState >= 2){ try{ const c = await read(); if(c){ finish(c); return; } }catch(_){} } timer = setTimeout(loop, 220); };
+      loop();
+    }).catch(() => msg('Autorisez la caméra, ou tapez le code en bas.'));
+  });
+}
+async function unknownCode(c){
+  if(isVendeur()){ toast('Code ' + c + ' : aucun produit'); return; }
+  if(await ask(`Le code ${c} n'est sur aucun produit. Créer un nouveau produit avec ce code ?`, 'Créer le produit', false)) productForm(null, {code:c});
+}
+// Un code lu dans un formulaire : fiche produit → remplit le champ ; vente / entrée / envoi… → choisit le produit
+function bcApply(f, c){
+  c = String(c || '').trim(); if(!c || !f) return; const E = f.elements;
+  if(f.id === 'pf'){ const cur = bcList(E.code.value); if(!cur.includes(c)) E.code.value = cur.concat([c]).join(', '); E.code.dispatchEvent(new Event('input', {bubbles:true})); return; }
+  const p = prodByCode(c); if(!p){ unknownCode(c); return; }
+  if(!E.pid || ![...E.pid.options].some(o => o.value === p.id)){ toast('« ' + p.name + ' » ne peut pas être choisi ici'); return; }
+  if(E.pid.value === p.id && E.qty){ E.qty.value = num(E.qty.value) + 1; E.qty.dispatchEvent(new Event('input', {bubbles:true})); }
+  else { E.pid.value = p.id; E.pid.dispatchEvent(new Event('change', {bubbles:true})); if(E.qty){ E.qty.value = 1; E.qty.dispatchEvent(new Event('input', {bubbles:true})); } }
+  toast(p.name + (E.qty ? ' · quantité ' + E.qty.value : ''));
+}
+// Lecteur « pistolet » : il tape le code puis Entrée dans le champ code-barres
+document.addEventListener('keydown', e => {
+  const i = e.target; if(e.key !== 'Enter' || !i.classList || !i.classList.contains('bcin')) return;
+  e.preventDefault(); e.stopImmediatePropagation(); const f = i.form; if(f && f.id === 'pf') return; bcApply(f, i.value); i.value = '';
+}, true);
+// « + Ajouter » un bouton : Entrée valide le bouton, sans envoyer le formulaire
+document.addEventListener('keydown', e => {
+  if(e.key !== 'Enter' || !e.target.closest || !e.target.closest('.cnew')) return;
+  e.preventDefault(); e.stopImmediatePropagation(); const ok = e.target.closest('.cnew').querySelector('[data-cok]'); if(ok) ok.click();
+}, true);
+document.addEventListener('input', e => { const i = e.target; if(i.name !== 'code' || !i.form || i.form.id !== 'pf') return;
+  const w = $('#codewarn'); if(!w) return; const self = i.form.dataset.pid || '';
+  const d = bcList(i.value).map(c => [c, prodByCode(c)]).filter(([, p]) => p && p.id !== self);
+  w.innerHTML = d.length ? `<span class="red">${d.map(([c, p]) => `Le code ${esc(c)} est déjà sur « ${esc(p.name)} »`).join('<br>')}</span>` : ''; });
+// Vérifie qu'aucun code n'est déjà pris par un autre produit (renvoie false et prévient sinon)
+function codeFree(code, selfId){
+  const d = bcList(code).map(c => [c, prodByCode(c)]).find(([, p]) => p && p.id !== selfId);
+  if(d){ toast('Le code ' + d[0] + ' est déjà sur « ' + d[1].name + ' »'); return false; } return true;
+}
+Object.assign(A, {
+  scanpick: (v, el) => { const f = el.closest('form'); scanCode(f && f.id === 'pf' ? 'Scannez le code-barres du produit' : 'Scannez le produit').then(c => c && bcApply(f, c)); },
+  scanstock: () => scanCode().then(c => { if(!c) return; const p = prodByCode(c); if(p) prodSheet(p.id); else unknownCode(c); })
+});
 
 /* ---------- Formulaires : fonctionnent même dans un aperçu restreint (sans envoi de formulaire) ---------- */
 document.addEventListener('click', e => {
@@ -5460,7 +5559,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '22dd507e6d';
+const APP_BUILD = 'e91ac77609';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
