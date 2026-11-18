@@ -6101,7 +6101,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '94ae698a9e';
+const APP_BUILD = 'ba85644c7f';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -7618,7 +7618,7 @@ A.admpayko = async id => { const x = (ADMP.list || []).find(y => y.id === id); i
 /* ---------- Programme Ambassadeur : le client devient ambassadeur dès son premier abonnement payé ---------- */
 const REF = {d:null, t:0, busy:false, att:false};
 const REF_URL = 'https://basiluatresor54-cmyk.github.io/reseau-vente/vente/';
-const REF_DEF = {on:true, pct1:15, pct2:5, months:12, min:2, bonus:10, bonus_min:3, fast_days:3, fast_bonus:7};
+const REF_DEF = {on:true, pct1:15, pct2:5, months:12, min:5, bonus:10, bonus_min:5, fast_days:3, fast_bonus:7};
 const refCfg = () => Object.assign({}, REF_DEF, (REF.d && REF.d.cfg) || {});
 const refOwner = () => !!(ONLINE.shop && ONLINE.role === 'proprietaire');
 const usd = v => fmt(Math.round((num(v) + Number.EPSILON) * 100) / 100) + ' $';
@@ -7653,6 +7653,16 @@ function refHow(){ const c = refCfg();
     ${num(c.bonus) > 0 ? `<p class="note" style="margin-top:8px">Concours du mois : le meilleur ambassadeur (au moins ${c.bonus_min} filleuls payants) gagne un bonus de ${usd(c.bonus)}.</p>` : ''}</div>`; }
 const REF_RULES = () => { const c = refCfg(); return `<div class="card" style="margin-bottom:12px"><b>Le règlement en bref</b>
   <p class="note" style="margin-top:6px;line-height:1.6">Vous gagnez seulement sur les commerçants que vous invitez vous-même (un seul niveau). La commission est gagnée quand BASILUA TECH a confirmé le paiement du filleul ; elle est annulée si ce paiement est faux ou annulé. Votre abonnement doit rester payé : sinon vos nouveaux gains sont mis en attente 30 jours. L'argent est envoyé seulement sur un numéro Mobile Money à votre nom. Interdit : promettre ce que l'application ne fait pas, changer les prix, se présenter comme employé de BASILUA TECH, se parrainer soi-même ou créer de faux comptes, encaisser l'argent d'un filleul. En cas de triche : arrêt du compte et perte des gains liés. Vous êtes indépendant (pas employé). BASILUA TECH peut changer les pourcentages en prévenant 7 jours avant ; ce qui est déjà gagné ne change pas.</p></div>`; };
+function refMmForm(id, btn){ return `<form id="${id}" class="card" novalidate style="margin-bottom:12px"><b>Votre numéro Mobile Money (obligatoire)</b><p class="note" style="margin:4px 0 8px">C'est sur ce numéro, <b>à votre nom</b>, que BASILUA TECH vous paiera. Ensuite, il ne pourra être changé que par BASILUA TECH.</p>
+    <div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px">${field('Réseau *', `<select name="op" required><option value="">—</option>${OPS.filter(o => o !== 'Autre').map(o => `<option>${o}</option>`).join('')}</select>`)}${field('Numéro *', `<input name="num" type="tel" required placeholder="08…">`)}${field('Nom du compte *', `<input name="name" required placeholder="Votre nom complet">`)}</div>
+    <button class="btn primary block" id="${id}Go">${btn}</button></form>`; }
+function refMmWire(id, msg){ const f = $('#' + id); if(!f) return;
+  f.onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements;
+    if(!E.op.value) return toast('Choisissez le réseau Mobile Money'); if(E.num.value.replace(/\D/g, '').length < 9) return toast('Numéro Mobile Money incomplet'); if(E.name.value.trim().length < 3) return toast('Écrivez le nom exact du compte Mobile Money');
+    if(!await ask(`Vous serez payé sur <b>${esc(E.op.value)} ${esc(E.num.value.trim())}</b> au nom de <b>${esc(E.name.value.trim())}</b>. Ce numéro ne pourra plus être changé sans BASILUA TECH. C'est bien correct ?`, 'Oui, c\'est correct', false)) return;
+    const {error} = await sb.rpc('ref_accept', {p_op:E.op.value, p_num:E.num.value.trim(), p_name:E.name.value.trim()}); if(error) return toast(rpcErr(error));
+    toast(msg); await loadRef(true); }; }
+const refChangeMsg = () => { const a = (REF.d && REF.d.amb) || {}; return `Bonjour BASILUA TECH 👋\nJe suis ambassadeur (code ${a.code || ''}). Je voudrais changer mon numéro Mobile Money de paiement.\nAncien numéro : ${a.mm_op || ''} ${a.mm_num || ''}\nNouveau numéro : \nNom du compte : \nRaison : `; };
 function refLink(){ const a = REF.d && REF.d.amb; return a ? REF_URL + '?ref=' + a.code : ''; }
 function refShareMsg(){ const a = REF.d.amb, c = refCfg();
   return `Bonjour 👋\nJ'utilise *Réseau & Vente* pour gérer mon stock, mes ventes, mes livreurs et ma boutique en ligne, directement sur mon téléphone. Ça m'aide beaucoup !\n\nEssayez gratuitement pendant 7 jours :\n${refLink()}\n\nMon code : *${a.code}*${num(c.fast_bonus) > 0 ? `\n🎁 Payez dans vos ${c.fast_days} premiers jours : ${c.fast_bonus} jours offerts en plus.` : ''}`; }
@@ -7675,18 +7685,18 @@ function paintRef(){ const box = document.getElementById('refBox'); if(!box) ret
   if(!a.accepted){ // Premier passage : accepter le règlement
     box.innerHTML = `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand);text-align:center"><b style="font-size:17px">Vous pouvez devenir ambassadeur</b><p class="note" style="margin-top:6px">Merci pour votre abonnement. Acceptez le règlement pour recevoir votre lien et commencer à gagner de l'argent.</p></div>
       ${refHow()}${REF_RULES()}
-      <form id="refAcc" class="card"><b>Votre numéro Mobile Money (à votre nom)</b><p class="note" style="margin:4px 0 8px">C'est là que vous recevrez votre argent. Vous pouvez le mettre plus tard.</p>
-        <div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px">${field('Réseau', `<select name="op"><option value="">—</option>${OPS.filter(o => o !== 'Autre').map(o => `<option>${o}</option>`).join('')}</select>`)}${field('Numéro', `<input name="num" type="tel" placeholder="08…">`)}${field('Nom du compte', `<input name="name" placeholder="Votre nom">`)}</div>
-        <button class="btn primary block" id="refAccGo">J'accepte le règlement</button></form>`;
-    $('#refAcc').onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const E = e.target.elements;
-      if(E.num.value.trim() && !E.op.value) return toast('Choisissez le réseau');
-      const {error} = await sb.rpc('ref_accept', {p_op:E.op.value, p_num:E.num.value.trim(), p_name:E.name.value.trim()}); if(error) return toast(rpcErr(error));
-      toast('Bienvenue parmi les ambassadeurs !'); await loadRef(true); };
+      ${a.mm_num ? `<button class="btn primary block" id="refAccOnly">J'accepte le règlement</button>` : refMmForm('refAcc', 'J\'accepte le règlement et je reçois mon lien')}`;
+    refMmWire('refAcc', 'Bienvenue parmi les ambassadeurs !');
+    const b1 = $('#refAccOnly'); if(b1) b1.onclick = async () => { const {error} = await sb.rpc('ref_accept', {p_op:'', p_num:'', p_name:''}); if(error) return toast(rpcErr(error)); await loadRef(true); };
     return; }
+  if(!a.mm_num){ // Numéro effacé par BASILUA TECH (changement demandé) : le nouveau numéro avant le lien
+    box.innerHTML = `<div class="card" style="margin-bottom:12px;border:2px solid var(--brand);text-align:center"><b>Ajoutez votre numéro Mobile Money</b><p class="note" style="margin-top:6px">Votre lien d'ambassadeur s'affiche dès que votre numéro de paiement est enregistré.</p></div>${refMmForm('refMm2', 'Enregistrer mon numéro')}`;
+    refMmWire('refMm2', 'Numéro enregistré'); return; }
   const T = d.totals || {}, F = d.filleuls || [], E = d.earnings || [], P = d.payouts || [], top = d.top || [], solde = num(T.solde);
   box.innerHTML = `<div class="card" style="margin-bottom:12px;text-align:center;border:2px solid var(--brand)"><div class="note">Votre code d'ambassadeur</div><div class="num" style="font-size:28px;font-weight:900;letter-spacing:.06em">${esc(a.code)}</div>
       <input readonly value="${esc(refLink())}" onclick="this.select()" style="font-size:13px;margin:8px 0;width:100%">
-      <div class="btns"><button class="btn" data-a="refcopy">Copier le lien</button><a class="btn wa" href="${waLink('', refShareMsg())}" target="_blank" rel="noopener">${ico('wa')} Partager sur WhatsApp</a></div></div>
+      <div class="btns"><button class="btn" data-a="refcopy">Copier le lien</button><a class="btn wa" href="${waLink('', refShareMsg())}" target="_blank" rel="noopener">${ico('wa')} Partager sur WhatsApp</a></div>
+      <p class="note" style="margin-top:10px">Vos paiements : <b>${esc(a.mm_op)} ${esc(a.mm_num)}</b>${a.mm_name ? ' au nom de ' + esc(a.mm_name) : ''} · <a class="link" href="${supportLink(refChangeMsg())}" target="_blank" rel="noopener">Changer de numéro</a></p></div>
     <div class="kpis"><div class="kpi"><div class="l">Solde à retirer</div><div class="v num pos">${usd(solde)}</div><div class="s">dès ${usd(c.min)}</div></div><div class="kpi"><div class="l">Gagné au total</div><div class="v num">${usd(T.gagne)}</div><div class="s">${F.filter(f => f.paid).length} filleul(s) payant(s)</div></div>
       ${num(T.attente) ? `<div class="kpi"><div class="l">En attente</div><div class="v num">${usd(T.attente)}</div><div class="s">renouvelez votre abonnement</div></div>` : ''}<div class="kpi"><div class="l">Déjà retiré</div><div class="v num">${usd(T.retire)}</div><div class="s">${num(T.en_cours) ? usd(T.en_cours) + ' en cours' : 'Mobile Money'}</div></div></div>
     ${num(T.en_cours) ? `<div class="subban info" style="display:block;margin-top:10px">Retrait de ${usd(T.en_cours)} en cours : BASILUA TECH l'envoie aujourd'hui.</div>` : solde >= num(c.min) ? `<button class="btn primary block" style="margin-top:10px" data-a="refpay">Retirer ${usd(solde)}</button>` : `<p class="note" style="margin-top:8px;text-align:center">Retrait possible dès ${usd(c.min)}.</p>`}
