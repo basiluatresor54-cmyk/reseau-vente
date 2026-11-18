@@ -1174,7 +1174,7 @@ function gsResults(qq){
   const P = S.products.filter(p => has_([p.name, p.cat, p.details].join(' '))).slice(0, 8);
   if(P.length) out.push(`<div class="sec"><h2>📦 Produits (${P.length})</h2></div><div class="list">${P.map(p => `<button class="it" data-a="prod:${p.id}">${pic(p)}<div class="m"><div class="t">${esc(p.name)}</div><div class="d">${priceTxt(p)}${p.cat ? ' · ' + esc(p.cat) : ''}</div></div>${ico('chev')}</button>`).join('')}</div>`);
   const C = clientsList().filter(c => has_([c.name, c.phone, c.addr].join(' ')) || (q.replace(/\D/g, '').length >= 4 && phoneNorm(c.phone).includes(q.replace(/\D/g, '')))).slice(0, 8);
-  if(C.length) out.push(`<div class="sec"><h2>👥 Clients (${C.length})</h2></div><div class="list">${C.map(c => `<button class="it" data-a="client:${esc(c.key)}"><div class="ic c-out">${esc(initials(c.name || '?'))}</div><div class="m"><div class="t">${esc(c.name || 'Sans nom')}</div><div class="d">${esc(c.phone || '—')} · ${c.n} achat(s)${c.nAnn ? ' · ' + c.nAnn + ' annulé(s)' : ''}</div></div>${ico('chev')}</button>`).join('')}</div>`);
+  if(C.length) out.push(`<div class="sec"><h2>👥 Clients (${C.length})</h2></div><div class="list">${C.map(c => `<button class="it" data-a="client:${esc(c.key)}"><div class="ic c-out">${esc(initials(c.name || '?'))}</div><div class="m"><div class="t">${esc(c.name || 'Sans nom')}${fidBadge(c)}</div><div class="d">${esc(c.phone || '—')} · ${c.n} achat(s)${c.nAnn ? ' · ' + c.nAnn + ' annulé(s)' : ''}</div></div>${ico('chev')}</button>`).join('')}</div>`);
   const L = S.livreurs.filter(l => has_([l.name, l.city, l.phone].join(' ')));
   if(L.length) out.push(`<div class="sec"><h2>🛵 Livreurs (${L.length})</h2></div><div class="list">${L.map(l => `<button class="it" data-a="liv:${l.id}">${pic(l)}<div class="m"><div class="t">${esc(l.name)}</div><div class="d">${esc(l.city || '')} · ${esc(l.phone || '')}</div></div>${ico('chev')}</button>`).join('')}</div>`);
   const V = sortMoves(S.moves.filter(m => m.type === 'vente' && has_([pname(m.pid), m.client, m.phone, m.addr, m.note, lname(m.liv), invNo(m)].join(' ')))).slice(0, 15);
@@ -1202,9 +1202,10 @@ function vPlus(){
   ];
   if(isVendeur()){ const keep = ['clients', 'credits']; for(let i = items.length - 1; i >= 0; i--) if(!keep.includes(items[i][0])) items.splice(i, 1); }
   else if(impOn()) items.unshift(['import','c-send','box','📦 Commandes import',"Commandes sur demande (" + impFrom() + "…) : acomptes, étapes, reçus, marge"]);
+  items.push(...proItems());
   if(snOn()) items.push(['__imei','c-out','tag','Vérifier un IMEI',"Retrouver la vente d'un téléphone, d'un ordinateur… et sa garantie"]);
   if(!isStandalone()) items.push(['__install','c-brand','set',"📲 Installer l'application","iPhone, Android ou ordinateur : une icône comme une vraie application"]);
-  return `${gsBar()}<div class="list menu">${items.map(([v,c,i,t,d]) => `<button class="it" data-a="${v === '__install' ? 'install' : v === '__imei' ? 'imei' : 'nav:' + v}"><div class="ic ${c}">${ico(i)}</div><div class="m"><div class="t">${t}</div><div class="d" style="white-space:normal">${d}</div></div>${ico('chev')}</button>`).join('')}</div>
+  return `${gsBar()}<div class="list menu">${items.map(([v,c,i,t,d]) => `<button class="it" data-a="${v === '__install' ? 'install' : v === '__imei' ? 'imei' : v.startsWith('__a:') ? v.slice(4) : 'nav:' + v}"><div class="ic ${c}">${ico(i)}</div><div class="m"><div class="t">${t}</div><div class="d" style="white-space:normal">${d}</div></div>${ico('chev')}</button>`).join('')}</div>
   <div class="sec cost"><h2>Raccourcis</h2></div>
   <div class="btns cost"><button class="btn" data-a="money:depense">+ Dépense</button><button class="btn" data-a="money:versement">+ Versement livreur</button><button class="btn" data-a="new:perte">− Sortie / perte</button><button class="btn" data-a="backup">Sauvegarde</button><button class="btn" data-a="soir">🌙 Point du soir</button><button class="btn" data-a="style:${glassPref()==='verre'?'simple':'verre'}">${glassPref()==='verre' ? 'Style simple' : '✨ Style verre'}</button><button class="btn" data-a="themetoggle">${isDark() ? '☀️ Mode clair' : '🌗 Mode sombre'}</button></div>
   <div style="margin-top:8px"><button class="btn block" data-a="tpl">📋 Modèle de commande pour WhatsApp</button></div>`;
@@ -1267,7 +1268,7 @@ function rowMove(m){
     case 'inventaire': { const L = m.lines || [], miss = L.reduce((t,x) => t + Math.max(0, x.exp - x.real), 0), plus = L.reduce((t,x) => t + Math.max(0, x.real - x.exp), 0);
       return R('inv', 'c-x', 'box', 'Contrôle de stock · ' + (m.loc ? esc(lname(m.loc)) : 'dépôt'), miss || plus ? `${miss ? miss + ' manquante(s)' : ''}${miss && plus ? ' · ' : ''}${plus ? plus + ' en trop' : ''}` : 'Tout est juste ✅', miss ? '−' + miss : '✓', miss ? 'var(--bad)' : 'var(--ok)', ''); }
     case 'cmd': return R('cmd', 'c-send', 'box', esc(m.title || 'Commande import'), `Commande import · ${esc(m.client||'Client')} · ${esc(stepOf(m.step)[1])}`, amtX(cmdCalc(m).total, m.cur), 'var(--brand-tx)', cmdNo(m));
-    case 'fourn': case 'trans': case 'plan': case 'promesse': case 'annonce': return '';
+    case 'fourn': case 'trans': case 'plan': case 'promesse': case 'annonce': case 'fid': return '';
     case 'cloture': return clotRow(m);
     case 'ajust': return R('inv', 'c-in', 'in', esc(pname(m.pid)), 'Écart inventaire (en trop) · ' + (m.loc ? esc(lname(m.loc)) : 'dépôt'), '+' + m.qty, 'var(--ok)', '');
     case 'depense': return R('money', 'c-loss', 'receipt', esc(m.cat||'Dépense'), (m.liv ? esc(lname(m.liv)) + ' · ' : '') + (m.note ? esc(m.note) : 'Dépense'), '−'+amt(m.amount, m.cur), 'var(--warn)', m.cur==='FC' ? money(moneyUSD(m)) : '');
@@ -1701,7 +1702,7 @@ function vClients(){
   return clientsHead(all, tabs) + `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><b style="font-size:14px">📅 Clients qui ont commandé le :</b><label class="f" style="margin:0;flex:1;min-width:140px"><input type="date" id="clientDayIn" max="${t}" value="${esc(clientDay)}"></label>${clientDay ? `<button class="link" data-a="cday">✕ Tous</button>` : `<button class="chip" data-a="cday" data-d="${t}">Aujourd'hui</button>`}</div>
   ${clientDay ? `<p class="note" style="margin:-4px 0 8px">${list.length} client(s) ont commandé le <b>${esc(dAbs(clientDay, 1))}</b>.</p>` : ''}` + `<input class="search" type="search" placeholder="Rechercher un client, un numéro, une commune…" value="${esc(clientQ)}" oninput="clientQ=this.value;refreshList('clients')">
   <div class="list" id="lst">${clientRows(list)}</div>
-  <button class="btn block" style="margin-top:12px" data-a="clientcsv">📥 Télécharger la liste des clients (Excel)</button>`;
+  ${proClientBtns()}<button class="btn block" style="margin-top:12px" data-a="clientcsv">📥 Télécharger la liste des clients (Excel)</button>`;
 }
 function clientsHead(all, tabs){
   const tot = all.reduce((s,c) => s + c.total, 0), np = promises().length;
@@ -1713,8 +1714,8 @@ function clientsHead(all, tabs){
 function clientRows(list){
   if(!list) list = clientFiltered();
   if(!list.length) return `<div class="empty"><b>Aucun client ici</b>Les clients apparaissent automatiquement avec vos ventes (nom et numéro).</div>`;
-  if(clientTab === 'annules') return list.slice(0, 300).map(c => `<button class="it" data-a="client:${esc(c.key)}"><div class="ic c-loss">${esc(initials(c.name || '?'))}</div><div class="m"><div class="t">${esc(c.name || 'Sans nom')}</div><div class="d">${esc(c.phone || '—')} · ❌ ${esc(pname(c.annPid))} annulé ${fmtDate(c.lastAnn)}${relDate(c.key) ? ' · <b>relancé ' + fmtDate(relDate(c.key)) + '</b>' : ''}</div></div>${ico('chev')}</button>`).join('');
-  return list.slice(0, 300).map(c => { const d = daysSince(c.last); return `<button class="it" data-a="client:${esc(c.key)}"><div class="ic c-out">${esc(initials(c.name || '?'))}</div><div class="m"><div class="t">${esc(c.name || 'Sans nom')}</div><div class="d">${esc(c.phone || '—')}${c.addr ? ' · ' + esc(c.addr.split('\n')[0]) : ''}</div><div class="d">${c.n} achat(s) · dernier ${d === 0 ? "aujourd'hui" : 'il y a ' + d + ' j'}</div></div><div class="r"><b class="num">${money(c.total)}</b>${d > 30 ? '<div><span class="pill p-attente">À relancer</span></div>' : ''}</div></button>`; }).join('');
+  if(clientTab === 'annules') return list.slice(0, 300).map(c => `<button class="it" data-a="client:${esc(c.key)}"><div class="ic c-loss">${esc(initials(c.name || '?'))}</div><div class="m"><div class="t">${esc(c.name || 'Sans nom')}${fidBadge(c)}</div><div class="d">${esc(c.phone || '—')} · ❌ ${esc(pname(c.annPid))} annulé ${fmtDate(c.lastAnn)}${relDate(c.key) ? ' · <b>relancé ' + fmtDate(relDate(c.key)) + '</b>' : ''}</div></div>${ico('chev')}</button>`).join('');
+  return list.slice(0, 300).map(c => { const d = daysSince(c.last); return `<button class="it" data-a="client:${esc(c.key)}"><div class="ic c-out">${esc(initials(c.name || '?'))}</div><div class="m"><div class="t">${esc(c.name || 'Sans nom')}${fidBadge(c)}</div><div class="d">${esc(c.phone || '—')}${c.addr ? ' · ' + esc(c.addr.split('\n')[0]) : ''}</div><div class="d">${c.n} achat(s) · dernier ${d === 0 ? "aujourd'hui" : 'il y a ' + d + ' j'}</div></div><div class="r"><b class="num">${money(c.total)}</b>${d > 30 ? '<div><span class="pill p-attente">À relancer</span></div>' : ''}</div></button>`; }).join('');
 }
 // ---------- Messages de relance (marketing) ----------
 function mkCtx(name, pid){
@@ -1806,7 +1807,7 @@ function clientSheet(key){
       ${relDate(c.key) ? `<div class="dl"><span>Dernière relance</span><span>${fmtDate(relDate(c.key), true)}</span></div>` : ''}
       <div class="dl"><span>Produits achetés</span><span>${Object.entries(c.prods).map(([pid,q]) => esc(pname(pid)) + ' × ' + q).join('<br>')}</span></div>
     </div>
-    ${relanceBox(relKind(c), mkCtx(c.name, annToRelance(c) ? c.annPid : c.lastPid), c.phone, `markRel('${esc(c.key)}')`)}
+    ${fidCard(c)}${relanceBox(relKind(c), mkCtx(c.name, annToRelance(c) ? c.annPid : c.lastPid), c.phone, `markRel('${esc(c.key)}')`)}
     <div class="stack" style="margin-top:8px">
     <button class="btn primary block" data-a="clientsale:${esc(c.key)}">+ Nouvelle vente pour ce client</button>
     <button class="btn block" data-a="promform" data-key="${esc(c.key)}">🤝 Noter une promesse (relancer plus tard)</button></div>
@@ -2336,7 +2337,7 @@ function quickSale(){
     <details style="margin-bottom:12px"><summary class="note"><b>Client (optionnel)</b> — pour le reçu et la relance</summary>
       <div class="row2" style="margin-top:8px">${field('Nom', `<input name="client" placeholder="Ex : Mme Nsimba">`)}${field('Téléphone (WhatsApp)', `<input name="phone" type="tel" placeholder="08… ou +243…">${phoneTools()}`)}</div></details>
     <button class="btn primary block">Encaisser</button></form>`);
-  const f = $('#qf'), E = f.elements; let pay = 'Cash'; setTimeout(() => qGridWire(f));
+  const f = $('#qf'), E = f.elements; let pay = 'Cash'; setTimeout(() => { qGridWire(f); fidWire(f); });
   const U = unitCtl({pid:E.pid, qty:E.qty, price:E.price, box:$('#qunit'), onChange:() => upd()});
   const paintP = () => [...$('#segP').children].forEach(b => b.classList.toggle('on', b.dataset.p === pay)); paintP();
   $('#segP').onclick = e => { const b = e.target.closest('button'); if(b){ pay = b.dataset.p; paintP(); } };
@@ -5240,6 +5241,230 @@ function qPick(f, pid){
 // La touche Entrée dans la recherche ne doit pas encaisser
 document.addEventListener('keydown', e => { if(e.key === 'Enter' && e.target && e.target.id === 'qsearch'){ e.preventDefault(); e.stopImmediatePropagation(); const f = e.target.form; const q = e.target.value.trim().toLowerCase(); const L = q ? S.products.filter(p => qMatch(p, q)) : []; if(f && L.length === 1){ qPick(f, L[0].id); e.target.value = ''; e.target.dispatchEvent(new Event('input')); } } }, true);
 
+/* ---------- Fonctions Pro : fidélité clients, relance WhatsApp groupée, export Excel pour le comptable, classement des vendeurs ----------
+   Visibles pour les boutiques en formule Pro (window.APP_PRO, donné par la version en ligne).
+   Si BASILUA TECH propose Pro (window.APP_PRO_OFFER), les autres boutiques voient l'entrée avec « Pro » et un bouton pour passer à Pro. */
+const proOK = () => window.APP_PRO !== false;
+const proSeen = () => proOK() || !!window.APP_PRO_OFFER;
+const proTag = () => proOK() ? '' : ' <span class="pill" style="background:var(--brand);color:#fff;font-size:11px;padding:1px 7px;vertical-align:middle">Pro</span>';
+function proUpsell(what){
+  sheet('Formule Pro', `<div class="card" style="margin-bottom:12px"><b>${esc(what)}</b> fait partie de la formule <b>Pro</b>.<p class="note" style="margin-top:6px">Pro : équipe illimitée, fidélité clients, relance WhatsApp groupée, export Excel pour le comptable et classement des vendeurs.</p></div>
+    ${typeof A.paysub === 'function' && !isVendeur() ? '<button class="btn primary block" data-a="paysub">Passer à Pro</button>' : '<p class="note">Demandez au patron de passer la boutique en formule Pro.</p>'}`);
+}
+const proRun = (what, fn) => (...a) => proOK() ? fn(...a) : proUpsell(what);
+
+/* ===== 1. Fidélité clients : 1 point tous les X $ d'achats livrés ; un cadeau à N points ===== */
+const fidCfg = () => S.settings.fid || {};
+const fidOn = () => proOK() && !!fidCfg().on;
+const fidKey = (phone, name) => phoneNorm(phone) || norm0(name);
+function fidMap(){
+  const c = fidCfg(), per = Math.max(0.01, num(c.per) || 5), start = c.start || '', spent = {}, used = {};
+  S.moves.forEach(m => {
+    if(m.type === 'vente' && m.status === 'livre' && (mday(m) || '') >= start){ const k = fidKey(m.phone, m.client); if(k) spent[k] = (spent[k] || 0) + saleUSD(m); }
+    else if(m.type === 'fid' && m.key) used[m.key] = (used[m.key] || 0) + num(m.pts);
+  });
+  const out = {}; new Set(Object.keys(spent).concat(Object.keys(used))).forEach(k => { out[k] = Math.max(0, Math.floor((spent[k] || 0) / per + 1e-9) - (used[k] || 0)); });
+  return out;
+}
+const fidOf = key => key ? (fidMap()[key] || 0) : 0;
+const fidGoal = () => Math.max(1, Math.round(num(fidCfg().goal) || 20));
+const fidBadge = c => { if(!fidOn()) return ''; const p = fidOf(c.key); return p ? ` <span class="note" style="font-weight:700">· ${p} pt${p > 1 ? 's' : ''}${p >= fidGoal() ? ' · cadeau' : ''}</span>` : ''; };
+function fidCard(c){
+  if(!fidOn() || !c) return '';
+  const p = fidOf(c.key), g = fidGoal(), cfg = fidCfg(), pc = Math.min(100, Math.round(p / g * 100));
+  const msg = `Bonjour ${c.name || ''} 👋\nVous avez *${p} point${p > 1 ? 's' : ''} fidélité* chez ${S.settings.shop || 'nous'} ⭐\n${p >= g ? `🎁 Bravo : vous avez droit à votre cadeau (${cfg.gift || 'cadeau fidélité'}) ! Passez nous voir ou commandez.` : `Encore ${g - p} point(s) et vous recevez : ${cfg.gift || 'un cadeau'} 🎁`}\nMerci pour votre fidélité 🙏`;
+  return `<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center"><b>Fidélité</b><b class="num" style="font-size:18px">${p} / ${g} pts</b></div>
+    <div style="height:8px;border-radius:6px;background:var(--line,#e5e7eb);margin:8px 0;overflow:hidden"><div style="height:100%;width:${pc}%;background:var(--brand)"></div></div>
+    <p class="note">${p >= g ? '🎁 Cadeau disponible : ' + esc(cfg.gift || 'cadeau fidélité') : 'Cadeau à ' + g + ' points : ' + esc(cfg.gift || 'cadeau fidélité')}</p>
+    <div class="btns" style="margin-top:8px">${p >= g ? `<button class="btn sm primary" data-a="fidgive" data-k="${esc(c.key)}">Offrir le cadeau (−${g} pts)</button>` : ''}${c.phone ? `<a class="btn sm wa" href="${waLink(c.phone, msg)}" target="_blank" rel="noopener">${ico('wa')} Envoyer ses points</a>` : ''}</div></div>`;
+}
+function fidSheet(){
+  const c = fidCfg();
+  sheet('Fidélité clients', `<form id="fidf"><p class="note" style="margin-bottom:10px">Chaque client gagne des points avec ses achats livrés (repéré par son numéro de téléphone). Quand il atteint le nombre de points choisi, vous lui offrez un cadeau. Les points sont calculés automatiquement.</p>
+    <label class="f" style="display:flex;gap:10px;align-items:center"><input type="checkbox" name="on" ${c.on ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">Activer la fidélité</span></label>
+    <div class="row2">${field('1 point tous les … $', `<input name="per" type="number" min="0.1" step="any" value="${esc(c.per || 5)}">`, 'd\'achats livrés')}${field('Cadeau à … points', `<input name="goal" type="number" min="1" step="1" value="${esc(c.goal || 20)}">`)}</div>
+    ${field('Le cadeau', `<input name="gift" maxlength="80" value="${esc(c.gift || '')}" placeholder="Ex : 2 $ de réduction, un savon offert…">`)}
+    ${field('Compter les achats à partir du', `<input name="start" type="date" value="${esc(c.start || today())}">`, 'Mettez une date passée pour compter aussi les anciens achats')}
+    <button class="btn primary block">Enregistrer</button></form>`);
+  $('#fidf').onsubmit = e => { e.preventDefault(); const E = e.target.elements;
+    S.settings.fid = {on:E.on.checked, per:Math.max(0.1, num(E.per.value) || 5), goal:Math.max(1, Math.round(num(E.goal.value)) || 20), gift:E.gift.value.trim(), start:E.start.value || today()};
+    save(); closeSheet(); render(); toast(S.settings.fid.on ? 'Fidélité activée ⭐' : 'Fidélité désactivée'); };
+}
+async function fidGive(key){
+  const c = clientsList().find(x => x.key === key); if(!c) return; const g = fidGoal();
+  if(fidOf(key) < g) return toast('Pas encore assez de points');
+  if(!await ask(`Offrir le cadeau à ${c.name || 'ce client'} (${fidCfg().gift || 'cadeau fidélité'}) ? ${g} points seront retirés.`, 'Offrir', false)) return;
+  S.moves.push({id:uid(), ts:Date.now(), type:'fid', key, pts:g, client:c.name || '', phone:c.phone || '', date:today(), note:fidCfg().gift || ''});
+  save(); toast('Cadeau noté 🎁'); clientSheet(key);
+}
+// Vente rapide : les points du client dès qu'on tape son numéro
+function fidWire(f){
+  if(!fidOn() || !f || !f.elements.phone) return; const E = f.elements;
+  E.phone.closest('.f').insertAdjacentHTML('afterend', '<div id="fidq" class="note" style="margin:-6px 0 10px"></div>');
+  const upd = () => { const k = fidKey(E.phone.value, E.client.value), box = $('#fidq'); if(!box) return; if(!phoneNorm(E.phone.value)){ box.innerHTML = ''; return; }
+    const p = fidOf(k), g = fidGoal(); box.innerHTML = `⭐ ${p} point${p > 1 ? 's' : ''} fidélité${p >= g ? ' · <b class="green">cadeau disponible : ' + esc(fidCfg().gift || 'cadeau') + '</b>' : ' · cadeau à ' + g}`; };
+  E.phone.addEventListener('input', upd); upd();
+}
+// Reçu WhatsApp du client : ses points
+(() => { const r0 = receiptClient; receiptClient = function(m){ let t = r0.apply(this, arguments); try{ if(fidOn() && m && m.phone){ const p = fidOf(fidKey(m.phone, m.client)), g = fidGoal(); t += `\n\n⭐ Vos points fidélité : *${p}*${p >= g ? ' — 🎁 cadeau disponible : ' + (fidCfg().gift || 'cadeau fidélité') : ' (cadeau à ' + g + ' points)'}`; } }catch(_){} return t; }; })();
+
+/* ===== 2. Relance WhatsApp groupée : un message personnalisé à une liste de clients, l'un après l'autre ===== */
+let RG = null;
+function relGroupSheet(){
+  const all = clientsList().filter(c => phoneNorm(c.phone)), tabs = clientTabs().filter(t => t[0] !== 'promesses');
+  const prods = [...new Set(all.flatMap(c => Object.keys(c.prods)))].map(id => prod(id)).filter(Boolean).sort(byName);
+  const st = RG || {tab:'tous', pid:'', msg:`Bonjour {nom} 👋\n${S.settings.shop || 'Notre boutique'} a du nouveau pour vous ! ✨\n\nRépondez à ce message pour commander. ${mkCtx('', '').liv} 🚚\n\nMerci pour votre confiance 🙏`};
+  sheet('Relance WhatsApp groupée', `<p class="note" style="margin-bottom:10px">Choisissez les clients et le message. Ensuite, touchez « Envoyer » pour chacun : WhatsApp s'ouvre avec le message prêt, à son nom. (WhatsApp ne permet pas d'envoyer à tous d'un seul coup depuis une application.)</p>
+    <div class="chips" id="rgTabs" style="margin-bottom:8px">${tabs.map(([k, l, fn]) => `<button class="chip ${st.tab === k ? 'on' : ''}" data-rg="${k}">${l}<b>${all.filter(fn).length}</b></button>`).join('')}</div>
+    ${field('Seulement ceux qui ont acheté…', `<select id="rgP"><option value="">— Tous les produits —</option>${prods.map(p => `<option value="${p.id}" ${st.pid === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>`)}
+    ${field('Message', `<textarea id="rgMsg" style="min-height:150px">${esc(st.msg)}</textarea>`, '{nom} sera remplacé par le nom de chaque client')}
+    <p class="note" id="rgN" style="margin:-4px 0 10px"></p>
+    <button class="btn primary block" id="rgGo">Préparer la liste</button><button class="btn block" id="rgCopy" style="margin-top:8px">Copier tous les numéros (liste de diffusion WhatsApp)</button>`);
+  const pick = () => { const fn = (tabs.find(t => t[0] === st.tab) || tabs[0])[2]; return all.filter(fn).filter(c => !st.pid || c.prods[st.pid]); };
+  const cnt = () => { $('#rgN').textContent = pick().length + ' client(s) avec un numéro'; };
+  $('#rgTabs').onclick = e => { const b = e.target.closest('[data-rg]'); if(!b) return; st.tab = b.dataset.rg; $('#rgTabs').querySelectorAll('[data-rg]').forEach(x => x.classList.toggle('on', x === b)); cnt(); };
+  $('#rgP').onchange = e => { st.pid = e.target.value; cnt(); };
+  $('#rgMsg').oninput = e => { st.msg = e.target.value; };
+  $('#rgCopy').onclick = () => { const L = pick(); if(!L.length) return toast('Aucun client'); copyText(L.map(c => '+' + phoneNorm(c.phone)).join('\n')); };
+  $('#rgGo').onclick = () => { const L = pick(); if(!L.length) return toast('Aucun client dans ce choix'); if(!st.msg.trim()) return toast('Écrivez le message');
+    RG = Object.assign(st, {list:L.map(c => ({key:c.key, name:c.name, phone:c.phone})), sent:{}}); relGroupList(); };
+  cnt(); RG = st;
+}
+function relGroupList(){
+  const st = RG; if(!st || !st.list) return relGroupSheet();
+  const n = Object.keys(st.sent).length, txt = c => st.msg.replace(/\{nom\}/g, (c.name || '').trim() || '');
+  sheet('Relance WhatsApp groupée', `<div class="card" style="margin-bottom:12px"><b>${n} / ${st.list.length} envoyé(s)</b><div style="height:8px;border-radius:6px;background:var(--line,#e5e7eb);margin-top:8px;overflow:hidden"><div style="height:100%;width:${Math.round(n / st.list.length * 100)}%;background:var(--brand)"></div></div></div>
+    <div class="list">${st.list.map((c, i) => `<div class="it" style="cursor:default"><div class="ic ${st.sent[c.key] ? 'c-in' : 'c-out'}">${st.sent[c.key] ? '✓' : esc(initials(c.name || '?'))}</div><div class="m"><div class="t">${esc(c.name || 'Sans nom')}</div><div class="d">${esc(c.phone)}</div></div>
+      <a class="btn sm ${st.sent[c.key] ? '' : 'wa'}" data-rgi="${i}" href="${waLink(c.phone, txt(c))}" target="_blank" rel="noopener">${st.sent[c.key] ? 'Renvoyer' : 'Envoyer'}</a></div>`).join('')}</div>
+    <button class="btn block" style="margin-top:12px" data-a="relgroup">Modifier le message ou la liste</button>`);
+  $('#ov').querySelectorAll('[data-rgi]').forEach(a => a.addEventListener('click', () => { const c = st.list[+a.dataset.rgi]; st.sent[c.key] = 1; if(typeof markRel === 'function') markRel(c.key); setTimeout(relGroupList, 400); }));
+}
+
+/* ===== 3. Export Excel pour le comptable : un fichier .xlsx du mois (résumé, ventes, dépenses, pertes, achats, stock) ===== */
+const CRC_T = (() => { const t = new Uint32Array(256); for(let n = 0; n < 256; n++){ let c = n; for(let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = u8 => { let c = 0xFFFFFFFF; for(let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zipStore(files){
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  files.forEach(f => {
+    const nm = enc.encode(f.name), d = typeof f.data === 'string' ? enc.encode(f.data) : f.data, crc = crc32(d);
+    const h = new DataView(new ArrayBuffer(30)); h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true); h.setUint16(10, 0, true); h.setUint16(12, 0x21, true);
+    h.setUint32(14, crc, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, nm.length, true); h.setUint16(28, 0, true);
+    parts.push(new Uint8Array(h.buffer), nm, d);
+    const c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true); c.setUint16(12, 0, true); c.setUint16(14, 0x21, true);
+    c.setUint32(16, crc, true); c.setUint32(20, d.length, true); c.setUint32(24, d.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    central.push(new Uint8Array(c.buffer), nm); off += 30 + nm.length + d.length;
+  });
+  const cs = central.reduce((t, x) => t + x.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cs, true); e.setUint32(16, off, true);
+  return new Blob(parts.concat(central, [new Uint8Array(e.buffer)]), {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+const xEsc = v => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const xCol = i => { let s = ''; i++; while(i > 0){ const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+// sheets : [{name, rows:[[...]], widths:[...]}] ; 1re ligne en gras ; nombres en nombres
+function xlsxBlob(sheets){
+  const ws = sheets.map(sh => {
+    const rows = sh.rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => { const ref = xCol(ci) + (ri + 1);
+      if(typeof v === 'number' && isFinite(v)) return `<c r="${ref}"${ri ? ' s="2"' : ' s="1"'}><v>${Math.round(v * 10000) / 10000}</v></c>`;
+      if(v == null || v === '') return '';
+      return `<c r="${ref}" t="inlineStr"${ri ? '' : ' s="1"'}><is><t xml:space="preserve">${xEsc(v)}</t></is></c>`; }).join('')}</row>`).join('');
+    const cols = (sh.widths || []).length ? `<cols>${sh.widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols}<sheetData>${rows}</sheetData></worksheet>`;
+  });
+  const nm = s => s.replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31);
+  const files = [
+    {name:'[Content_Types].xml', data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${ws.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`},
+    {name:'_rels/.rels', data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml', data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s, i) => `<sheet name="${xEsc(nm(s.name))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels', data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${ws.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${ws.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {name:'xl/styles.xml', data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`}
+  ].concat(ws.map((x, i) => ({name:`xl/worksheets/sheet${i + 1}.xml`, data:x})));
+  return zipStore(files);
+}
+function accountSheets(mo){
+  const inM = d => (d || '').slice(0, 7) === mo, r2 = v => Math.round(v * 100) / 100, D = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('fr-FR') : '';
+  const sales = sortMoves(S.moves.filter(m => m.type === 'vente' && m.status === 'livre' && inM(mday(m)))).reverse();
+  const deps = sortMoves(S.moves.filter(m => m.type === 'depense' && inM(m.date))).reverse();
+  const losses = sortMoves(S.moves.filter(m => m.type === 'perte' && inM(m.date))).reverse();
+  const ins = sortMoves(S.moves.filter(m => m.type === 'entree' && inM(m.date))).reverse();
+  let ca = 0, cost = 0, comm = 0;
+  const vRows = sales.map(m => { const u = saleUSD(m), c = m.qty * num(m.costU), k = m.liv ? m.qty * num(m.commU) : 0; ca += u; cost += c; comm += k;
+    return [D(mday(m)), invNo(m), m.client || '', m.phone || '', pname(m.pid), m.qty, num(m.price), m.cur === 'FC' ? LC() : '$', r2(m.qty * num(m.price)), r2(u), r2(c), r2(k), r2(u - c - k), m.liv ? 'Livreur : ' + lname(m.liv) : (m.pay || ''), m.byName || '']; });
+  const dep = deps.reduce((t, m) => t + moneyUSD(m), 0), loss = losses.reduce((t, m) => t + m.qty * num(m.costU), 0);
+  const st = stockAt();
+  const stock = S.products.filter(p => !isKit(p)).sort(byName).map(p => { const dpt = qAt(st, '', p.id), tot = totalOf(st, p.id), cu = unitCostUSD(p);
+    return [p.name, p.cat || '', p.code || '', r2(dpt), r2(tot - dpt), r2(tot), num(p.buy), p.cur === 'FC' ? LC() : '$', r2(tot * cu), num(p.sell), r2(tot * toUSD(num(p.sell), p.cur))]; });
+  const label = new Date(mo + '-15T12:00:00').toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
+  return [
+    {name:'Résumé', widths:[34, 18], rows:[['Résumé du mois', ''], ['Boutique', S.settings.shop || ''], ['Mois', label], ['Ventes livrées (nombre)', sales.length], ["Chiffre d'affaires ($)", r2(ca)], ['Coût des produits vendus ($)', r2(cost)], ['Commissions des livreurs ($)', r2(comm)], ['Dépenses ($)', r2(dep)], ['Pertes de stock ($)', r2(loss)], ['Bénéfice net ($)', r2(ca - cost - comm - dep - loss)], ['Taux utilisé (1 $ =)', rate()], ['Monnaie locale', LC()], ['Fichier créé le', D(today())]]},
+    {name:'Ventes', widths:[12, 18, 20, 15, 28, 9, 12, 8, 12, 12, 12, 12, 12, 22, 18], rows:[['Date', 'N° facture', 'Client', 'Téléphone', 'Produit', 'Quantité', 'Prix unitaire', 'Devise', 'Total', 'Total ($)', 'Coût ($)', 'Commission ($)', 'Bénéfice ($)', 'Payé par', 'Vendeur']].concat(vRows)},
+    {name:'Dépenses', widths:[12, 30, 12, 8, 12, 30], rows:[['Date', 'Catégorie', 'Montant', 'Devise', 'Montant ($)', 'Note']].concat(deps.map(m => [D(m.date), m.cat || '', num(m.amount), m.cur === 'FC' ? LC() : '$', r2(moneyUSD(m)), m.note || '']))},
+    {name:'Pertes', widths:[12, 28, 10, 24, 12, 30], rows:[['Date', 'Produit', 'Quantité', 'Motif', 'Coût ($)', 'Note']].concat(losses.map(m => [D(m.date), pname(m.pid), m.qty, m.motif || '', r2(m.qty * num(m.costU)), m.note || '']))},
+    {name:'Achats (entrées)', widths:[12, 28, 10, 14, 8, 12, 30], rows:[['Date', 'Produit', 'Quantité', 'Coût unitaire', 'Devise', 'Total', 'Note']].concat(ins.map(m => { const p = prod(m.pid) || {}; return [D(m.date), pname(m.pid), m.qty, num(m.cost), p.cur === 'FC' ? LC() : '$', r2(m.qty * num(m.cost)), m.note || '']; }))},
+    {name:"Stock aujourd'hui", widths:[28, 18, 16, 10, 12, 10, 12, 8, 14, 12, 14], rows:[['Produit', 'Catégorie', 'Code', 'Au dépôt', 'Chez livreurs', 'Total', "Prix d'achat", 'Devise', 'Valeur achat ($)', 'Prix de vente', 'Valeur vente ($)']].concat(stock)}
+  ];
+}
+function xlsxSheet(){
+  const t = today().slice(0, 7), prev = addDays(t + '-01', -1).slice(0, 7);
+  sheet('Export pour le comptable', `<p class="note" style="margin-bottom:10px">Un fichier Excel du mois avec 6 feuilles : résumé, ventes livrées, dépenses, pertes, achats et stock. À envoyer à votre comptable ou à garder.</p>
+    <div class="chips" style="margin-bottom:8px"><button class="chip on" data-xm="${t}">Ce mois</button><button class="chip" data-xm="${prev}">Mois dernier</button></div>
+    ${field('Mois', `<input type="month" id="xMo" value="${t}" max="${t}">`)}
+    <button class="btn primary block" id="xGo">Télécharger le fichier Excel</button>`);
+  const box = $('#ov');
+  box.querySelector('.chips').onclick = e => { const b = e.target.closest('[data-xm]'); if(!b) return; $('#xMo').value = b.dataset.xm; box.querySelectorAll('[data-xm]').forEach(x => x.classList.toggle('on', x === b)); };
+  $('#xGo').onclick = () => { const mo = $('#xMo').value || t; const blob = xlsxBlob(accountSheets(mo));
+    const name = `${(S.settings.shop || 'Boutique').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}-${mo}.xlsx`;
+    try{ const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000); toast('Fichier Excel prêt ✅'); }catch(_){ toast('Téléchargement impossible ici'); } };
+}
+
+/* ===== 4. Classement des vendeurs : ventes et bénéfice de chacun (semaine, mois), objectif du mois ===== */
+let vcPer = 'mois';
+function vcData(per){
+  const t = today(), mo = t.slice(0, 7), prev = addDays(mo + '-01', -1).slice(0, 7);
+  const inP = d => per === 'sem' ? d >= weekStart() && d <= t : per === 'prev' ? (d || '').slice(0, 7) === prev : (d || '').slice(0, 7) === mo;
+  const W = {};
+  S.moves.forEach(m => { if(m.type !== 'vente' || m.status !== 'livre' || !inP(mday(m) || '')) return;
+    const k = m.by || '', w = W[k] = W[k] || {k, name:m.byName || '', n:0, ca:0, net:0, pcs:0}; if(m.byName) w.name = m.byName;
+    const u = saleUSD(m); w.n++; w.ca += u; w.pcs += m.qty; w.net += u - m.qty * num(m.costU) - (m.liv ? m.qty * num(m.commU) : 0); });
+  return Object.values(W).sort((a, b) => b.ca - a.ca);
+}
+function vclassSheet(){
+  const L = vcData(vcPer), tot = L.reduce((t, w) => t + w.ca, 0), obj = S.settings.objV || {}, med = ['🥇', '🥈', '🥉'], perL = {sem:'cette semaine', mois:'ce mois', prev:'le mois dernier'}[vcPer];
+  const txt = `*${S.settings.shop} — Classement des vendeurs* (${perL})\n\n` + L.map((w, i) => `${med[i] || (i + 1) + '.'} ${w.k ? w.name || 'Vendeur' : 'Non attribué'} : ${w.n} vente(s) · ${money(w.ca)}`).join('\n') + `\n\nTotal : ${money(tot)}`;
+  sheet('Classement des vendeurs', `<div class="chips" style="margin-bottom:10px">${[['sem', 'Cette semaine'], ['mois', 'Ce mois'], ['prev', 'Mois dernier']].map(([k, l]) => `<button class="chip ${vcPer === k ? 'on' : ''}" data-a="vcper:${k}">${l}</button>`).join('')}</div>
+    ${L.length ? `<div class="list">${L.map((w, i) => { const o = num(obj[w.k]), pc = o ? Math.min(100, Math.round(w.ca / o * 100)) : 0;
+      return `<div class="it" style="cursor:default;flex-wrap:wrap"><div class="ic" style="font-weight:800;font-size:17px;${['background:#f5c542;color:#5c4300', 'background:#cfd5dd;color:#374151', 'background:#e0a46b;color:#5a2d0c'][i] || 'background:var(--line,#e5e7eb)'}">${i + 1}</div><div class="m"><div class="t">${esc(w.k ? w.name || 'Vendeur' : 'Non attribué')}</div>
+        <div class="d" style="white-space:normal">${w.n} vente(s) · ${fmt(w.pcs)} pièce(s) · panier moyen ${money(w.n ? w.ca / w.n : 0)}</div>
+        <div class="d" style="white-space:normal">Bénéfice <b class="${w.net < 0 ? 'red' : 'green'}">${money(w.net)}</b> · ${tot ? Math.round(w.ca / tot * 100) : 0} % des ventes</div>
+        ${vcPer === 'mois' && w.k ? (o ? `<div style="height:7px;border-radius:5px;background:var(--line,#e5e7eb);margin-top:6px;overflow:hidden"><div style="height:100%;width:${pc}%;background:${pc >= 100 ? 'var(--ok,#16a34a)' : 'var(--brand)'}"></div></div><div class="d" style="white-space:normal">Objectif du mois : ${money(o)} · ${pc} %${pc >= 100 ? ' 🎉' : ''} <button class="link" data-a="vcobj" data-k="${esc(w.k)}" data-n="${esc(w.name)}">changer</button></div>` : `<button class="link" data-a="vcobj" data-k="${esc(w.k)}" data-n="${esc(w.name)}">Fixer un objectif du mois</button>`) : ''}</div>
+        <div class="r"><b class="num">${money(w.ca)}</b></div></div>`; }).join('')}</div>
+      <p class="note" style="margin:8px 0">Chaque vente est comptée pour la personne connectée qui l'a enregistrée.</p>
+      <a class="btn wa block" href="${waLink('', txt)}" target="_blank" rel="noopener">${ico('wa')} Partager le classement</a>` : '<div class="card empty"><b>Aucune vente livrée sur cette période</b>Les ventes apparaissent ici au nom de la personne qui les a enregistrées.</div>'}`);
+}
+async function vcObj(k, n){
+  sheet('Objectif du mois', `<form id="vof"><p class="note" style="margin-bottom:10px">${esc(n || 'Vendeur')} : montant des ventes à atteindre ce mois.</p>${field('Objectif ($)', `<input name="o" type="number" min="0" step="any" value="${esc((S.settings.objV || {})[k] || '')}">`)}<button class="btn primary block">Enregistrer</button></form>`);
+  $('#vof').onsubmit = e => { e.preventDefault(); S.settings.objV = S.settings.objV || {}; const v = num(e.target.elements.o.value); if(v > 0) S.settings.objV[k] = v; else delete S.settings.objV[k]; save(); vclassSheet(); };
+}
+
+/* Entrées : Plus (classement, export Excel), Clients (relance groupée, fidélité) */
+function proItems(){
+  if(isVendeur() || !proSeen()) return [];
+  return [['__a:vclass', 'c-in', 'user', 'Classement des vendeurs' + proTag(), 'Ventes et bénéfice de chaque vendeur, semaine ou mois, avec objectifs'],
+          ['__a:xlsx', 'c-in', 'receipt', 'Export pour le comptable (Excel)' + proTag(), 'Un fichier Excel du mois : ventes, dépenses, pertes, achats, stock']];
+}
+function proClientBtns(){
+  if(!proSeen()) return '';
+  return `<div class="btns" style="margin-top:12px"><button class="btn" data-a="relgroup">Relance WhatsApp groupée${proTag()}</button>${isVendeur() ? '' : `<button class="btn" data-a="fidset">Fidélité clients${proTag()}${fidOn() ? ' · active' : ''}</button>`}</div>`;
+}
+Object.assign(A, {
+  vclass: proRun('Le classement des vendeurs', () => vclassSheet()),
+  vcper: k => { vcPer = k; vclassSheet(); },
+  vcobj: (_, el) => vcObj(el.dataset.k, el.dataset.n),
+  xlsx: proRun("L'export pour le comptable", () => xlsxSheet()),
+  relgroup: proRun('La relance WhatsApp groupée', () => { if(RG && RG.list) RG.list = null; relGroupSheet(); }),
+  fidset: proRun('La fidélité clients', () => fidSheet()),
+  fidgive: (_, el) => fidGive(el.dataset.k)
+});
+
 /* ---------- Formulaires : fonctionnent même dans un aperçu restreint (sans envoi de formulaire) ---------- */
 document.addEventListener('click', e => {
   const b = e.target.closest('form button:not([type=button])'); if(!b) return;
@@ -5658,6 +5883,7 @@ save = function(){
 /* ---------- Bandeau d'abonnement + carte « Mon compte » ---------- */
 const rawRender = render;
 render = function(){
+  window.APP_PRO = isPro(ONLINE.shop); window.APP_PRO_OFFER = !!PLANS.pro_on;
   if(ONLINE.shop && ONLINE.role === 'livreur') view = 'moi';
   if(CUSTOM[view]){
     const v = view; view = 'plus'; rawRender(); view = v;
@@ -5789,7 +6015,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '17168a1398';
+const APP_BUILD = 'a6e5e39fbf';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -5826,7 +6052,7 @@ async function ntFetch(){
     let q = sb.from('item_log').select('id,item_id,kind,action,actor,at,o,n').eq('shop_id', ONLINE.shop.id).gte('at', since).order('at', {ascending:false}).limit(60);
     const {data, error} = await q; if(error) return;
     if((data || []).some(r => r.actor && !JR.mem[r.actor])){ const m = await sb.from('members').select('user_id,role,display_name,phone').eq('shop_id', ONLINE.shop.id); (m.data || []).forEach(x => JR.mem[x.user_id] = x); }
-    const rows = (data || []).filter(r => r.actor && r.actor !== me && (r.kind === 'move' ? !['plan','promesse','annonce'].includes((r.n || {}).type) : true)).filter(ntVis);
+    const rows = (data || []).filter(r => r.actor && r.actor !== me && (r.kind === 'move' ? !['plan','promesse','annonce','fid'].includes((r.n || {}).type) : true)).filter(ntVis);
     const fresh = NT.loaded ? rows.filter(r => r.at > (NT.lastPop || ntSeen())) : [];
     NT.rows = rows; NT.loaded = true; if(rows[0]) NT.lastPop = rows[0].at > NT.lastPop ? rows[0].at : NT.lastPop;
     if(fresh.length){ toast(`${ntIcon(fresh[0])} ${jrWho(fresh[0].actor).replace(/ \(.*\)$/, '')} ${ntText(fresh[0]).replace(/<[^>]+>/g, '')}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}`); try{ navigator.vibrate && navigator.vibrate(120); }catch(_){} }
