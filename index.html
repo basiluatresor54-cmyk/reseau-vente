@@ -5823,17 +5823,17 @@ async function afterLogin(){
   const {data:{session}} = await sb.auth.getSession();
   if(!session){ showAuth('login'); return; }
   ONLINE.user = session.user;
-  authShell(`<p class="note">Chargement de vos boutiques…</p>`);
+  authShell(`<p class="note"><span class="spin-sm" aria-hidden="true"></span>Chargement de vos boutiques…</p>`);
   try{ const inv = await sb.rpc('accept_invites'); if(inv.data > 0) toast('Invitation acceptée ✅'); }catch(_){}
   try{ const ad = await sb.rpc('am_i_admin'); ONLINE.admin = !!ad.data; }catch(_){ }
   loadPrice(); loadPayInfo(); loadPlans();
   try{
     const [shops, mem] = await Promise.all([
       sb.from('shops').select('id,name,settings,status,paid_until,plan'),
-      sb.from('members').select('shop_id,role,livreur_id,display_name').eq('user_id', session.user.id)
+      sb.from('members').select('shop_id,role,livreur_id,display_name,perms').eq('user_id', session.user.id)
     ]);
     if(shops.error) throw shops.error; if(mem.error) throw mem.error;
-    ONLINE.shops = mem.data.map(x => Object.assign({}, shops.data.find(s => s.id === x.shop_id), {role:x.role, livreur_id:x.livreur_id, my_name:x.display_name || ''})).filter(s => s.id);
+    ONLINE.shops = mem.data.map(x => Object.assign({}, shops.data.find(s => s.id === x.shop_id), {role:x.role, livreur_id:x.livreur_id, my_name:x.display_name || '', perms:x.perms || null})).filter(s => s.id);
     ONLINE.offline = false;
   }catch(err){
     let last = null; try{ last = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); }catch(_){}
@@ -5916,6 +5916,7 @@ function showCreateShop(){
 function openShop(shop){
   if(!shop) return;
   ONLINE.shop = shop; ONLINE.role = shop.role || ONLINE.role; window.APP_ROLE = ONLINE.role; document.documentElement.classList.toggle('role-vendeur', ONLINE.role === 'vendeur');
+  ONLINE.perms = shop.perms || null; permClass();
   { const md = (ONLINE.user && ONLINE.user.user_metadata) || {}; window.APP_ME = ONLINE.user ? {id:ONLINE.user.id, name:shop.my_name || md.name || telPretty(md.phone || '') || ''} : null; }
   KEY = 'stock_online_' + shop.id;
   S = load();
@@ -6025,7 +6026,7 @@ render = function(){
         <div class="dl"><span>Nom</span><span>${esc(meta.name || '—')}</span></div>
         <div class="dl"><span>Téléphone</span><span>${esc(telPretty(meta.phone || ''))}</span></div>
         <div class="dl"><span>Boutique</span><span>${esc(ONLINE.shop.name)}</span></div>
-        <div class="dl"><span>Rôle</span><span>${ROLE_TXT[ONLINE.role] || '—'}</span></div>
+        <div class="dl"><span>Rôle</span><span>${ROLE_TXT[ONLINE.role] || '—'}</span></div>${['gerant','vendeur'].includes(ONLINE.role) && ONLINE.perms ? `<div class="note" style="margin:4px 0 6px">Vos tâches (choisies par le patron) : ${esc((ONLINE.role === 'vendeur' ? VEND_EXTRA : PERMS.map(x => x[0])).filter(k => canDo(k)).map(k => PERM_T[k]).join(', ') || 'aucune')}</div>` : ''}
         <div class="dl"><span>Formule</span><span>${PLAN_TXT[isPro(ONLINE.shop) ? 'pro' : 'simple']}</span></div>
         <div class="dl"><span>Abonnement</span><span>${si ? esc(si.short) : '—'}</span></div>
         ${si && si.cls !== 'ok' ? `<div class="dl"><span>Tarif</span><span><b>${subPrice()}</b></span></div>` : ''}
@@ -6072,10 +6073,29 @@ async function pushDirty(){
   for(let i = 0; i < d.length; i += 200){
     const batch = d.slice(i, i + 200);
     const {error} = await sb.from('items').upsert(batch.map(x => ({shop_id:ONLINE.shop.id, kind:x.kind, id:x.id, data:x.data, deleted:x.deleted})), {onConflict:'shop_id,kind,id'});
-    if(error) throw error;
+    if(error && !permRefused(error)) throw error;
+    if(error){ await pushOneByOne(batch); continue; }
     batch.forEach(x => META.h[x.key] = x.h); saveMeta();
     SYNC.pending = Math.max(0, SYNC.pending - batch.length); paintSync();
   }
+}
+// Une opération refusée par le serveur (tâche non autorisée par le patron) ne bloque plus toute la synchro :
+// on envoie une par une, et ce qui est refusé revient comme avant sur le téléphone.
+const permRefused = e => !!e && /ne vous a pas donné|Réservé au patron ou au gérant/i.test(String(e.message || ''));
+async function pushOneByOne(batch){
+  const refused = [];
+  for(const x of batch){
+    const {error} = await sb.from('items').upsert([{shop_id:ONLINE.shop.id, kind:x.kind, id:x.id, data:x.data, deleted:x.deleted}], {onConflict:'shop_id,kind,id'});
+    if(!error){ META.h[x.key] = x.h; continue; }
+    if(!permRefused(error)) throw error;
+    refused.push(error.message);
+    const arrName = ARR[x.kind], arr = arrName && S[arrName];
+    const {data} = await sb.from('items').select('kind,id,data,deleted').eq('shop_id', ONLINE.shop.id).eq('kind', x.kind).eq('id', x.id).maybeSingle();
+    if(data) applyRow(data);
+    else if(arr){ const i = arr.findIndex(y => String(y.id) === String(x.id)); if(i >= 0) arr.splice(i, 1); delete META.h[x.key]; }
+  }
+  saveMeta(); SYNC.pending = Math.max(0, SYNC.pending - batch.length);
+  if(refused.length){ rawSave(); render(); toast(refused[0] + (refused.length > 1 ? ' (' + refused.length + ' opérations annulées)' : ' : opération annulée')); }
 }
 function applyRow(r){
   const arrName = ARR[r.kind]; if(!arrName) return false;
@@ -6101,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '1ff7f8a391';
+const APP_BUILD = 'e735d6ecb1';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -6326,13 +6346,65 @@ document.addEventListener('click', e => {
   toast(ONLINE.role === 'livreur' ? 'Accès livreur : lecture seule.' : 'Abonnement inactif : lecture seule. Contactez BASILUA TECH.');
 }, true);
 
+// Tâches de l'équipe : ce que le patron autorise pour chaque gérant / vendeur (vide = droits du rôle)
+const PERMS = [
+  ['ventes', 'Ventes et commandes', 'Enregistrer les ventes et commandes, changer le statut, encaisser les crédits'],
+  ['livraisons', 'Envois aux livreurs', 'Envoyer le stock aux livreurs et enregistrer les retours'],
+  ['stock', 'Entrées de stock', 'Entrées de stock, contrôles de stock, plans d\'achat'],
+  ['pertes', 'Pertes', 'Déclarer un produit perdu ou abîmé'],
+  ['paiements', 'Paiements de la boutique en ligne', 'Confirmer les paiements Mobile Money des clients'],
+  ['produits', 'Produits et prix', 'Créer ou modifier les produits, les prix et les promos'],
+  ['livreurs', 'Fiches des livreurs', 'Ajouter, modifier ou retirer un livreur'],
+  ['argent', 'Argent', 'Dépenses, versements des livreurs, commissions payées'],
+  ['supprimer', 'Supprimer', 'Supprimer une vente ou une opération'],
+  ['benefice', 'Voir le bénéfice', 'Prix d\'achat, bénéfice, dépenses et rapports']
+];
+const PERM_T = Object.fromEntries(PERMS.map(x => [x[0], x[1]]));
+const VEND_EXTRA = ['ventes', 'livraisons', 'stock', 'pertes', 'paiements'];
+const permDef = (role, k) => role === 'proprietaire' || role === 'gerant' || (role === 'vendeur' && ['ventes', 'livraisons'].includes(k));
+const permSet = k => !!(ONLINE.perms && typeof ONLINE.perms[k] === 'boolean');
+function canDo(k){
+  const r = ONLINE.role; if(r === 'proprietaire') return true;
+  if(!['gerant', 'vendeur'].includes(r)) return false;
+  return permSet(k) ? ONLINE.perms[k] : permDef(r, k);
+}
+const permsOf = (role, perms) => Object.fromEntries(PERMS.map(([k]) => [k, perms && typeof perms[k] === 'boolean' ? perms[k] : permDef(role, k)]));
+const ACT_PERM = {'new:vente':'ventes', quick:'ventes', status:'ventes', editsale:'ventes', cmdnew:'ventes', cmdedit:'ventes', cmdpay:'ventes', cmdstep:'ventes', cmdcancel:'ventes', cancelorder:'ventes', promform:'ventes', promok:'ventes', promsale:'ventes', webprep:'ventes',
+  'new:envoi':'livraisons', 'new:retour':'livraisons',
+  'new:entree':'stock', stockupd:'stock', invform:'stock', invdel:'stock', planform:'stock', plandone:'stock', plandel:'stock', planfor:'stock', lotarrive:'stock', rachat:'stock',
+  'new:perte':'pertes', webok:'paiements', webko:'paiements',
+  'new:produit':'produits', newpack:'produits', editprod:'produits', delprod:'produits', importxl:'produits', preset:'produits',
+  newliv:'livreurs', editliv:'livreurs', delliv:'livreurs',
+  money:'argent', declok:'argent', declko:'argent', paydel:'argent',
+  delmove:'supprimer', cmddel:'supprimer', fourndel:'supprimer', transdel:'supprimer', promdel:'supprimer'};
+const NOBEN_VIEWS = ['bilan', 'rapport', 'livre', 'depenses'];
+function permOfAction(a){
+  const n = a.split(':')[0];
+  if(n === 'nav') return NOBEN_VIEWS.includes(a.split(':')[1]) ? 'benefice' : null;
+  return ACT_PERM[a] || (n !== 'new' ? ACT_PERM[n] : null) || null;
+}
+function permClass(){ document.documentElement.classList.toggle('role-nobenef', ONLINE.role === 'gerant' && !canDo('benefice')); }
+document.head.insertAdjacentHTML('beforeend', '<style>html.role-nobenef .cost{display:none!important}</style>');
+// Mise à jour des droits quand le patron les change (au retour sur l'application)
+async function refreshPerms(){
+  if(!ONLINE.shop || !ONLINE.user || !['gerant', 'vendeur'].includes(ONLINE.role) || ONLINE.offline) return;
+  try{ const {data} = await sb.from('members').select('perms').eq('shop_id', ONLINE.shop.id).eq('user_id', ONLINE.user.id).maybeSingle();
+    if(data && JSON.stringify(data.perms || null) !== JSON.stringify(ONLINE.perms)){ ONLINE.perms = data.perms || null; ONLINE.shop.perms = ONLINE.perms; permClass(); render(); toast('Le patron a changé vos tâches'); } }catch(_){}
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') refreshPerms(); });
 // Compte « Vendeur » : actions réservées au patron / gérant
 const VB_NAME = ['newpack','editprod','delprod','delmove','money','stockupd','freshstart','planform','plandone','plandel','planfor','invform','invdel','declok','declko','backup','csv','preset','demo','editliv','delliv','feeadd','shipcoadd','shipcodel','importwb','rachat','importxl'];
 const VB_FULL = ['new:produit','new:entree','new:perte'];
 document.addEventListener('click', e => {
-  if(ONLINE.role !== 'vendeur') return;
+  if(!['vendeur','gerant'].includes(ONLINE.role)) return;
   const t = e.target.closest('[data-a]'); if(!t) return; const a = t.dataset.a || '', n = a.split(':')[0];
-  if(!VB_FULL.includes(a) && !VB_NAME.includes(n)) return;
+  const perm = permOfAction(a);
+  if(perm){
+    if(canDo(perm)){ if(ONLINE.role !== 'vendeur' || VEND_EXTRA.includes(perm) || (!VB_FULL.includes(a) && !VB_NAME.includes(n))) return; }
+    else if(ONLINE.role === 'gerant' || permSet(perm)){ e.preventDefault(); e.stopImmediatePropagation(); toast('Le patron ne vous a pas donné ce droit : ' + PERM_T[perm] + '.'); return; }
+  }
+  if(ONLINE.role !== 'vendeur') return;
+  if(!VB_FULL.includes(a) && !VB_NAME.includes(n) && !perm) return;
   e.preventDefault(); e.stopImmediatePropagation(); toast('Réservé au patron ou au gérant (compte Vendeur).');
 }, true);
 // Import des données de l'ancienne application WB Stock (même téléphone / même navigateur)
@@ -6441,8 +6513,8 @@ const TEAM = {members:null, invites:null, loading:false, err:''};
 async function loadTeam(){
   if(!ONLINE.shop) return; TEAM.loading = true;
   const [m, i] = await Promise.all([
-    sb.from('members').select('user_id,role,display_name,phone,livreur_id,created_at').eq('shop_id', ONLINE.shop.id),
-    sb.from('invites').select('phone,role,livreur_id,display_name,created_at').eq('shop_id', ONLINE.shop.id)
+    sb.from('members').select('user_id,role,display_name,phone,livreur_id,created_at,perms').eq('shop_id', ONLINE.shop.id),
+    sb.from('invites').select('phone,role,livreur_id,display_name,created_at,perms').eq('shop_id', ONLINE.shop.id)
   ]);
   TEAM.loading = false; TEAM.err = (m.error || i.error) ? rpcErr(m.error || i.error) : '';
   TEAM.members = m.data || []; TEAM.invites = i.data || [];
@@ -6489,14 +6561,14 @@ CUSTOM.equipe = () => {
   if(ONLINE.role !== 'proprietaire') return `<div class="card empty">Réservé au propriétaire.</div>`;
   if(TEAM.members === null) return `<div class="card empty">Chargement…</div>`;
   const R2 = {proprietaire:'Propriétaire', gerant:'Gérant', vendeur:'Vendeur', livreur:'Livreur'};
-  return `<div class="card" style="margin-bottom:12px"><p class="note"><b>Gérant</b> : peut tout enregistrer (ventes, stock, dépenses).<br><b>Livreur</b> : voit seulement ses livraisons, son stock et sa commission, et marque « Livré ».</p>
+  return `<div class="card" style="margin-bottom:12px"><p class="note"><b>Gérant</b> : peut tout enregistrer (ventes, stock, dépenses).<br><b>Livreur</b> : voit seulement ses livraisons, son stock et sa commission, et marque « Livré ».<br><b>Tâches</b> : touchez « Tâches » à côté d'un gérant ou d'un vendeur pour cocher ce qu'il a le droit de faire.</p>
     <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700;color:var(--brand)">👥 Les rôles en détail : qui voit quoi, qui fait quoi</summary><div style="margin-top:10px">${roleInfoHTML('vendeur')}${roleInfoHTML('gerant')}${roleInfoHTML('livreur')}${roleInfoHTML('proprietaire')}</div></details></div>
   ${teamPlanCard()}
   ${TEAM.err ? `<div class="subban bad">${esc(TEAM.err)}</div>` : ''}
   <div class="sec"><h2>Membres</h2></div>
-  <div class="list">${TEAM.members.map(m => `<div class="it"><div class="ic c-brand">${esc(initials(m.display_name || '?'))}</div><div class="m"><div class="t">${esc(m.display_name || 'Sans nom')}</div><div class="d">${R2[m.role]}${m.livreur_id ? ' · fiche ' + esc(lname(m.livreur_id)) : ''} · ${esc(telPretty(m.phone || ''))}</div></div>${m.role !== 'proprietaire' ? `<button class="btn sm ghost-bad" data-a="rmmember:${m.user_id}">Retirer</button>` : ''}</div>`).join('')}</div>
+  <div class="list">${TEAM.members.map(m => `<div class="it"><div class="ic c-brand">${esc(initials(m.display_name || '?'))}</div><div class="m"><div class="t">${esc(m.display_name || 'Sans nom')}</div><div class="d">${R2[m.role]}${m.livreur_id ? ' · fiche ' + esc(lname(m.livreur_id)) : ''} · ${esc(telPretty(m.phone || ''))}</div>${permLine(m)}</div>${['gerant','vendeur'].includes(m.role) ? `<button class="btn sm" data-a="permsm:${m.user_id}">Tâches</button>` : ''}${m.role !== 'proprietaire' ? `<button class="btn sm ghost-bad" data-a="rmmember:${m.user_id}">Retirer</button>` : ''}</div>`).join('')}</div>
   <div class="sec"><h2>Invitations en attente</h2></div>
-  <div class="list">${TEAM.invites.length ? TEAM.invites.map(i => `<div class="it"><div class="ic c-loss">${ico('send')}</div><div class="m"><div class="t">${esc(i.display_name || telPretty(i.phone))}</div><div class="d">${R2[i.role]}${i.livreur_id ? ' · ' + esc(lname(i.livreur_id)) : ''} · ${esc(telPretty(i.phone))}</div></div><a class="btn sm wa" href="${waLink('+' + i.phone, inviteMsg(i))}" target="_blank" rel="noopener">${ico('wa')}</a><button class="btn sm" data-a="delinv:${i.phone}">✕</button></div>`).join('') : '<div class="empty">Aucune invitation en attente</div>'}</div>
+  <div class="list">${TEAM.invites.length ? TEAM.invites.map(i => `<div class="it"><div class="ic c-loss">${ico('send')}</div><div class="m"><div class="t">${esc(i.display_name || telPretty(i.phone))}</div><div class="d">${R2[i.role]}${i.livreur_id ? ' · ' + esc(lname(i.livreur_id)) : ''} · ${esc(telPretty(i.phone))}</div>${permLine(i)}</div>${['gerant','vendeur'].includes(i.role) ? `<button class="btn sm" data-a="permsi:${i.phone}">Tâches</button>` : ''}<a class="btn sm wa" href="${waLink('+' + i.phone, inviteMsg(i))}" target="_blank" rel="noopener">${ico('wa')}</a><button class="btn sm" data-a="delinv:${i.phone}">✕</button></div>`).join('') : '<div class="empty">Aucune invitation en attente</div>'}</div>
   <div style="margin-top:12px"><button class="btn primary block" data-a="invite">+ Inviter une personne</button></div>`;
 };
 CUSTOM_AFTER.equipe = () => { if(TEAM.members === null && !TEAM.loading) loadTeam(); };
@@ -6508,14 +6580,14 @@ function inviteSheet(pre = {}){
   const cc = String(S.settings.cc || '243');
   sheet('Inviter une personne', `<form id="invf">
     ${field('Rôle', `<select name="role"><option value="livreur" ${pre.role !== 'gerant' && pre.role !== 'vendeur' ? 'selected' : ''}>Livreur</option><option value="vendeur" ${pre.role === 'vendeur' ? 'selected' : ''}>Vendeur</option><option value="gerant" ${pre.role === 'gerant' ? 'selected' : ''}>Gérant</option></select>`)}
-    <div id="invRole"></div><div id="invLiv">${field('Fiche du livreur *', `<select name="liv"><option value="">Choisir…</option>${S.livreurs.slice().sort(byName).map(l => `<option value="${l.id}" ${l.id === pre.liv ? 'selected' : ''}>${esc(l.name)} (${esc(l.city || '')})</option>`).join('')}</select>`, S.livreurs.length ? 'Ses livraisons et sa commission viennent de cette fiche' : 'Ajoutez d\'abord le livreur dans l\'onglet Livreurs')}</div>
+    <div id="invRole"></div><div id="invPerms"></div><div id="invLiv">${field('Fiche du livreur *', `<select name="liv"><option value="">Choisir…</option>${S.livreurs.slice().sort(byName).map(l => `<option value="${l.id}" ${l.id === pre.liv ? 'selected' : ''}>${esc(l.name)} (${esc(l.city || '')})</option>`).join('')}</select>`, S.livreurs.length ? 'Ses livraisons et sa commission viennent de cette fiche' : 'Ajoutez d\'abord le livreur dans l\'onglet Livreurs')}</div>
     ${field('Nom', `<input name="name" value="${esc(pre.name || '')}" placeholder="Ex : Marla">`)}
     <div class="row3" style="grid-template-columns:1.1fr 2fr">${field('Pays', `<select name="cc">${ccOptions(cc)}</select>`)}${field('Téléphone (son compte) *', `<input name="phone" type="tel" required value="${esc(pre.phone || '')}" placeholder="0812345678">`)}</div>
     <p class="note" style="margin:-4px 0 12px">La personne devra créer son compte avec ce numéro exact.</p>
     <p class="auth-msg" id="invMsg"></p>
     <button class="btn primary block">Créer l'invitation</button></form>`);
   const f = $('#invf'), E = f.elements;
-  const sw = () => { $('#invLiv').hidden = E.role.value !== 'livreur'; $('#invRole').innerHTML = roleInfoHTML(E.role.value, true); };
+  const sw = () => { $('#invLiv').hidden = E.role.value !== 'livreur'; $('#invRole').innerHTML = roleInfoHTML(E.role.value, true); $('#invPerms').innerHTML = ['gerant','vendeur'].includes(E.role.value) ? `<div class="card" style="margin-bottom:12px"><b>Tâches de cette personne</b><p class="note" style="margin:2px 0 8px">Cochez ce qu'elle a le droit de faire. Vous pourrez changer plus tard.</p>${permBoxes(E.role.value, null)}</div>` : ''; };
   E.role.onchange = sw; sw();
   E.liv.onchange = () => { const l = liv(E.liv.value); if(l){ if(!E.name.value) E.name.value = l.name; if(!E.phone.value && l.phone) E.phone.value = l.phone; } };
   f.onsubmit = async e => {
@@ -6525,6 +6597,7 @@ function inviteSheet(pre = {}){
     if(E.role.value === 'livreur' && !E.liv.value){ $('#invMsg').textContent = 'Choisissez la fiche du livreur.'; return; }
     const {error} = await sb.rpc('create_invite', {p_shop:ONLINE.shop.id, p_phone:d, p_role:E.role.value, p_livreur_id:E.role.value === 'livreur' ? E.liv.value : null, p_name:E.name.value.trim() || null});
     if(error){ $('#invMsg').textContent = rpcErr(error); return; }
+    if(['gerant','vendeur'].includes(E.role.value)){ const pp = permRead(f, E.role.value); if(pp){ const r2 = await sb.rpc('set_invite_perms', {p_shop:ONLINE.shop.id, p_phone:d, p_perms:pp}); if(r2.error) toast(rpcErr(r2.error)); } }
     const inv = {phone:d, role:E.role.value, livreur_id:E.liv.value, display_name:E.name.value.trim()};
     sheet('Invitation créée ✅', `<p class="note" style="margin-bottom:12px">Envoyez maintenant le lien à la personne. Elle rejoindra automatiquement votre boutique en créant son compte avec le numéro <b>${esc(telPretty(d))}</b>.</p>
       <a class="btn wa block" href="${waLink('+' + d, inviteMsg(inv))}" target="_blank" rel="noopener">${ico('wa')} Envoyer l'invitation par WhatsApp</a>
@@ -6533,6 +6606,36 @@ function inviteSheet(pre = {}){
   };
 }
 A.invite = () => inviteSheet();
+// Cases à cocher des tâches (gérant : tout, à décocher ; vendeur : ventes et envois, + quelques tâches en plus)
+function permBoxes(role, perms){
+  const cur = permsOf(role, perms), keys = role === 'vendeur' ? VEND_EXTRA : PERMS.map(x => x[0]);
+  return `<div class="permbox">${PERMS.filter(x => keys.includes(x[0])).map(([k, t, d]) => `<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line,#e5e7eb);cursor:pointer"><input type="checkbox" name="perm_${k}" ${cur[k] ? 'checked' : ''} style="width:22px;height:22px;margin-top:2px;flex:none"><span><b>${esc(t)}</b><br><span class="note">${esc(d)}</span></span></label>`).join('')}</div>${role === 'vendeur' ? '<p class="note" style="margin-top:6px">Un vendeur ne voit jamais les prix d\'achat ni le bénéfice. Pour donner plus de droits (produits, argent, livreurs…), invitez la personne comme <b>Gérant</b> et décochez ce que vous ne voulez pas.</p>' : ''}`;
+}
+// Lit les cases : null si tout est comme par défaut (rien à enregistrer)
+function permRead(form, role){
+  const keys = role === 'vendeur' ? VEND_EXTRA : PERMS.map(x => x[0]), out = {}; let diff = false;
+  keys.forEach(k => { const el = form.elements['perm_' + k]; if(!el) return; out[k] = !!el.checked; if(out[k] !== permDef(role, k)) diff = true; });
+  return diff ? out : null;
+}
+function permLine(m){
+  if(!['gerant','vendeur'].includes(m.role)) return '';
+  const keys = m.role === 'vendeur' ? VEND_EXTRA : PERMS.map(x => x[0]), cur = permsOf(m.role, m.perms), on = keys.filter(k => cur[k]);
+  const custom = !!(m.perms && Object.keys(m.perms).length && keys.some(k => cur[k] !== permDef(m.role, k)));
+  return `<div class="note" style="margin-top:2px">${custom ? 'Tâches choisies : ' + on.length + ' / ' + keys.length + (on.length ? ' (' + esc(on.map(k => PERM_T[k]).join(', ')) + ')' : ' (aucune)') : 'Tâches : celles du rôle (par défaut)'}</div>`;
+}
+function permSheet(who, role, perms, save){
+  sheet('Tâches de ' + (who || 'cette personne'), `<form id="permf" novalidate><p class="note" style="margin-bottom:6px">${role === 'gerant' ? 'Un gérant peut tout faire au départ. Décochez ce que vous ne voulez pas qu\'il fasse.' : 'Un vendeur enregistre les ventes et les envois. Cochez les tâches en plus que vous lui confiez.'}</p>
+    ${permBoxes(role, perms)}<p class="note" style="margin:8px 0 12px">La personne voit le changement la prochaine fois qu'elle ouvre l'application. Le serveur refuse aussi ce qui n'est pas coché.</p>
+    <p class="auth-msg" id="permMsg"></p><button class="btn primary block">Enregistrer les tâches</button>
+    <button type="button" class="btn block" style="margin-top:8px" id="permDef">Remettre les tâches par défaut</button></form>`);
+  const f = $('#permf');
+  f.onsubmit = async e => { e.preventDefault(); const pp = permRead(f, role); const err = await save(pp); if(err){ $('#permMsg').textContent = err; return; } closeSheet(); toast('Tâches enregistrées'); TEAM.members = null; if(view === 'equipe') render(); };
+  $('#permDef').onclick = async () => { const err = await save(null); if(err){ $('#permMsg').textContent = err; return; } closeSheet(); toast('Tâches remises par défaut'); TEAM.members = null; if(view === 'equipe') render(); };
+}
+A.permsm = (uid) => { const m = (TEAM.members || []).find(x => x.user_id === uid); if(!m) return;
+  permSheet(m.display_name, m.role, m.perms, async pp => { const {error} = await sb.rpc('set_member_perms', {p_shop:ONLINE.shop.id, p_user:uid, p_perms:pp}); return error ? rpcErr(error) : ''; }); };
+A.permsi = (phone) => { const i = (TEAM.invites || []).find(x => x.phone === phone); if(!i) return;
+  permSheet(i.display_name || telPretty(i.phone), i.role, i.perms, async pp => { const {error} = await sb.rpc('set_invite_perms', {p_shop:ONLINE.shop.id, p_phone:phone, p_perms:pp}); return error ? rpcErr(error) : ''; }); };
 A.invliv = (id) => { const l = liv(id); inviteSheet({role:'livreur', liv:id, name:l && l.name, phone:l && l.phone}); };
 A.delinv = async (phone) => { if(!await ask('Annuler cette invitation ?', 'Annuler l\'invitation')) return; const {error} = await sb.rpc('delete_invite', {p_shop:ONLINE.shop.id, p_phone:phone}); if(error) return toast(rpcErr(error)); TEAM.members = null; render(); };
 A.rmmember = async (uid) => { if(!await ask('Retirer cette personne de la boutique ? Elle n\'aura plus accès aux données.', 'Retirer')) return; const {error} = await sb.rpc('remove_member', {p_shop:ONLINE.shop.id, p_user:uid}); if(error) return toast(rpcErr(error)); toast('Personne retirée'); TEAM.members = null; render(); };
@@ -7194,7 +7297,7 @@ A.declphoto = async (id) => {
   const {data, error} = await sb.storage.from('captures').createSignedUrl(d.photo, 3600);
   if(error || !data) return toast('Capture indisponible : ' + rpcErr(error));
   sheet('Capture du versement', `<p class="note" style="margin-bottom:8px">${amt(num(d.amount), d.cur)} · ${esc(lname(d.liv))} · ${esc(d.method || '')}${d.ref ? ' · réf ' + esc(d.ref) : ''}</p><img src="${data.signedUrl}" alt="Capture" style="width:100%;border-radius:12px;background:#fff">
-    ${d.status === 'attente' && !['livreur','vendeur'].includes(ONLINE.role) ? `<div class="btns" style="margin-top:12px"><button class="btn primary" data-a="declok:${d.id}">Confirmer</button><button class="btn ghost-bad" data-a="declko:${d.id}">Refuser</button></div>` : ''}`);
+    ${d.status === 'attente' && !['livreur','vendeur'].includes(ONLINE.role) && canDo('argent') ? `<div class="btns" style="margin-top:12px"><button class="btn primary" data-a="declok:${d.id}">Confirmer</button><button class="btn ghost-bad" data-a="declko:${d.id}">Refuser</button></div>` : ''}`);
 };
 // Propriétaire / gérant : confirmer ou refuser
 A.decllist = () => {
@@ -7228,7 +7331,7 @@ const rawLivSheet2 = livSheet;
 livSheet = function(id){
   rawLivSheet2(id);
   const pend = declsOf(id).filter(d => d.status === 'attente');
-  if(pend.length && !['livreur','vendeur'].includes(ONLINE.role)) $('#shb').insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px;border:2px solid var(--warn)"><b>💸 Versement(s) à confirmer</b><div class="list" style="box-shadow:none;margin-top:6px">${pend.map(d => declRow(d, true)).join('')}</div></div>`);
+  if(pend.length && !['livreur','vendeur'].includes(ONLINE.role) && canDo('argent')) $('#shb').insertAdjacentHTML('afterbegin', `<div class="card" style="margin-bottom:12px;border:2px solid var(--warn)"><b>💸 Versement(s) à confirmer</b><div class="list" style="box-shadow:none;margin-top:6px">${pend.map(d => declRow(d, true)).join('')}</div></div>`);
 };
 
 /* ---------- Démarrage ---------- */
@@ -7423,7 +7526,7 @@ A.trscan = (v, el) => { const f = el.closest('form'); scanCode('Scannez le produ
 const WEB = {list:null, t:0, busy:false, f:'check', pre:null};
 const WEB_ST = {averifier:['Payée · à vérifier', 'p-attente'], confirme:['Payée', 'p-livre'], nonrecu:['Paiement non reçu', 'p-annule'], livraison:['À la livraison', 'p-encours'], traite:['Traitée', 'p-livre']};
 const webRole = () => !!(ONLINE.shop && ['proprietaire','gerant','vendeur'].includes(ONLINE.role));
-const webCanPay = () => !!(ONLINE.shop && ['proprietaire','gerant'].includes(ONLINE.role));
+const webCanPay = () => !!(ONLINE.shop && ['proprietaire','gerant','vendeur'].includes(ONLINE.role) && canDo('paiements'));
 const webSig = () => (WEB.list || []).map(o => o.id + o.status).join(',');
 const webCheck = () => (WEB.list || []).filter(o => o.status === 'averifier');
 const webFresh = () => (WEB.list || []).filter(o => o.status === 'livraison');
@@ -8104,6 +8207,206 @@ function annSection(){ const S0 = ADM.shops; if(S0 === null) return '<div class=
   if(view === 'abosadmin'){ const h = [...main.querySelectorAll('.sec h2')].find(x => x.textContent.trim() === 'Tous les paiements');
     if(h) h.parentElement.insertAdjacentHTML('beforebegin', `<div class="sec"><h2>Annoncer le programme ambassadeur</h2></div>${annSection()}`); }
 }catch(e){ console.error(e); } }; })();
+
+/* Tâches de l'équipe : un gérant sans « Voir le bénéfice » ne voit pas les pages de chiffres */
+(() => { const r0 = render; render = function(){ if(ONLINE.shop && ONLINE.role === 'gerant' && !canDo('benefice') && NOBEN_VIEWS.includes(view)) view = 'home'; const out = r0.apply(this, arguments);
+  if(view === 'plus' && ONLINE.shop && ['gerant','vendeur'].includes(ONLINE.role) && ONLINE.perms){ const M = document.getElementById('main'); if(M && !M.querySelector('#myTasks')) M.insertAdjacentHTML('afterbegin', `<div class="card" id="myTasks" style="margin-bottom:12px"><b>Vos tâches</b><p class="note" style="margin-top:4px">Choisies par le patron : ${esc((ONLINE.role === 'vendeur' ? VEND_EXTRA : PERMS.map(x => x[0])).filter(k => canDo(k)).map(k => PERM_T[k]).join(', ') || 'aucune')}</p></div>`); }
+  return out; }; })();
+
+/* =================================================================
+   Personnaliser (sur ce téléphone) : onglets du bas, couleur, mode sombre,
+   taille du texte, cartes de l'accueil. Rien n'est changé pour les autres.
+   ================================================================= */
+const PERSO_KEY = 'stock_perso';
+const persoGet = () => { try{ const o = JSON.parse(localStorage.getItem(PERSO_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; }catch(_){ return {}; } };
+const persoSet = o => { try{ localStorage.setItem(PERSO_KEY, JSON.stringify(o)); }catch(_){} };
+CSUB.perso = 'Personnaliser';
+const TAB_ALL = [['home','Accueil','home'],['stock','Stock','box'],['ventes','Ventes','truck'],['livreurs','Livreurs','user'],['clients','Clients','tag'],['credits','Crédits','coin'],['bilan','Bilan','book'],['depenses','Dépenses','cash'],['import','Import','send']];
+const TAB_MAX = 4;
+function tabAllowed(k){
+  if(!TAB_ALL.some(x => x[0] === k)) return false;
+  if(ONLINE.role === 'vendeur' && typeof VEND_VIEWS !== 'undefined' && !VEND_VIEWS.includes(k)) return false;
+  if(NOBEN_VIEWS.includes(k) && ONLINE.role === 'gerant' && !canDo('benefice')) return false;
+  if(k === 'import' && typeof has === 'function' && !has('imp')) return false;
+  return true;
+}
+const PARENT_SAVED = {};
+function persoTabs(){ const t = persoGet().tabs; if(!Array.isArray(t)) return null; const ok = t.filter(tabAllowed).slice(0, TAB_MAX); return ok.length ? ok : null; }
+{
+  const nav0 = navItems;
+  navItems = function(){
+    const t = ONLINE.role === 'livreur' ? null : persoTabs();
+    // une page mise en onglet n'a plus de bouton « Retour » vers Plus
+    Object.keys(PARENT_SAVED).forEach(k => { if(!t || !t.includes(k)){ PARENT[k] = PARENT_SAVED[k]; delete PARENT_SAVED[k]; } });
+    if(!t) return nav0.apply(this, arguments);
+    t.forEach(k => { if(k in PARENT && k !== 'import'){ PARENT_SAVED[k] = PARENT[k]; delete PARENT[k]; } });
+    return t.map(k => TAB_ALL.find(x => x[0] === k)).concat([['plus', 'Plus', 'more']]);
+  };
+}
+// Couleur choisie sur ce téléphone (sinon celle de la boutique)
+{
+  const ab0 = applyBrand;
+  applyBrand = function(){
+    const mc = persoGet().color;
+    if(!mc || !/^#[0-9a-f]{6}$/i.test(mc)) return ab0.apply(this, arguments);
+    const c0 = S.settings.color; S.settings.color = mc;
+    try{ return ab0.apply(this, arguments); } finally { S.settings.color = c0; }
+  };
+}
+// Taille du texte
+const ZOOMS = [['1', 'Normal'], ['1.08', 'Grand'], ['1.16', 'Très grand']];
+function applyZoom(){ if(!document.body) return; const z = persoGet().zoom; document.body.style.zoom = z && z !== '1' ? z : ''; }
+applyZoom();
+// Cartes de l'accueil que l'on peut cacher
+const HOME_CARDS = [
+  ['cover', 'Photo de couverture', {sel:'.cover'}],
+  ['onb', 'Vos premiers pas', {txt:/^Vos premiers pas/}],
+  ['jour', 'Vente rapide et rapport du jour', {fn:e => e.matches('.quickbtn') || (e.matches('.daycard') && !/Clôture/.test(e.textContent) && !/Objectif/i.test(e.textContent))}],
+  ['cloture', 'Clôture de caisse', {fn:e => e.matches('.daycard') && /Clôture de caisse/.test(e.textContent)}],
+  ['goals', 'Objectifs de ventes', {fn:e => e.matches('button.card, .card') && /objectifs? de vente/i.test(e.textContent) && e.textContent.length < 400}],
+  ['avenir', 'Livraisons à venir', {sec:'Livraisons à venir'}],
+  ['surv', 'À surveiller', {txt:/^À surveiller/}],
+  ['kpis', 'Chiffres clés (bénéfice, à livrer, stock)', {sel:'.chips, .kpis'}],
+  ['march', 'Ma marchandise', {sec:'Ma marchandise'}],
+  ['argent', "Où va l'argent", {sec:"Où va l'argent"}],
+  ['graph', 'Graphique des ventes (14 jours)', {sec:'Ventes livrées'}],
+  ['villes', 'Ventes par ville', {sec:'Ventes par ville'}],
+  ['top', 'Meilleurs produits', {sec:'Meilleurs produits'}],
+  ['alertes', 'Alertes stock bas', {sec:'Alertes stock bas'}]
+];
+function homeHide(){
+  const hide = persoGet().hide; if(!Array.isArray(hide) || !hide.length) return 0;
+  const M = document.getElementById('main'); if(!M) return 0;
+  const root = M.querySelector(':scope > .enter') || M;
+  let n = 0, hit = false;
+  const off = e => { if(e && e.style.display !== 'none'){ e.style.display = 'none'; e.dataset.persoHidden = '1'; hit = true; } };
+  HOME_CARDS.forEach(([k, , f]) => {
+    if(!hide.includes(k)) return; if(hit) n++; hit = false;
+    if(f.sel) root.querySelectorAll(f.sel).forEach(e => { if(e.closest('.cover') === e || e.parentElement === root || e.parentElement === M) off(e); });
+    if(f.txt || f.fn) [...root.children].forEach(e => { const h = (e.querySelector('b, h2') || {}).textContent || ''; if((f.txt && f.txt.test(h.trim())) || (f.fn && f.fn(e))) off(e); });
+    if(f.sec) root.querySelectorAll('.sec').forEach(s => { const h = ((s.querySelector('h2') || {}).textContent || '').trim(); if(!h.startsWith(f.sec)) return;
+      off(s); let x = s.nextElementSibling; while(x && !x.classList.contains('sec')){ off(x); x = x.nextElementSibling; } });
+  });
+  if(hit) n++;
+  return n;
+}
+CUSTOM.perso = () => {
+  const P = persoGet(), cur = persoTabs() || navItems().map(x => x[0]).filter(k => k !== 'plus');
+  const avail = TAB_ALL.filter(x => tabAllowed(x[0]));
+  const hide = Array.isArray(P.hide) ? P.hide : [];
+  const seg = (items, on, act) => `<div class="seg">${items.map(([k, l]) => `<button type="button" class="${on === k ? 'on' : ''}" data-a="${act}:${k}">${l}</button>`).join('')}</div>`;
+  return `<div class="card" style="margin-bottom:12px"><p class="note">Ces choix sont pour <b>ce téléphone</b> seulement. Ils ne changent rien pour les autres personnes ni pour vos données.</p></div>
+  <div class="sec"><h2>Onglets en bas de l'écran</h2></div>
+  <div class="card" style="margin-bottom:12px"><p class="note" style="margin-bottom:8px">Choisissez jusqu'à ${TAB_MAX} onglets et leur ordre. « Plus » reste toujours à droite.</p>
+    <div class="list" id="tabList">${cur.map((k, i) => { const x = TAB_ALL.find(y => y[0] === k); return x ? `<div class="it"><div class="ic c-brand">${ico(x[2])}</div><div class="m"><div class="t">${i + 1}. ${esc(x[1])}</div></div>
+      <button class="btn sm" style="padding:6px 10px" data-a="ptab:up:${k}" ${i === 0 ? 'disabled' : ''} aria-label="Monter">▲</button><button class="btn sm" style="padding:6px 10px" data-a="ptab:down:${k}" ${i === cur.length - 1 ? 'disabled' : ''} aria-label="Descendre">▼</button><button class="btn sm ghost-bad" data-a="ptab:del:${k}" ${cur.length <= 1 ? 'disabled' : ''} aria-label="Retirer">✕</button></div>` : ''; }).join('')}</div>
+    ${avail.filter(x => !cur.includes(x[0])).length ? `<p class="note" style="margin:10px 0 6px">Ajouter un onglet${cur.length >= TAB_MAX ? ' (retirez-en un d\'abord)' : ''} :</p><div class="btns" style="flex-wrap:wrap">${avail.filter(x => !cur.includes(x[0])).map(x => `<button class="btn sm" data-a="ptab:add:${x[0]}" ${cur.length >= TAB_MAX ? 'disabled' : ''}>+ ${esc(x[1])}</button>`).join('')}</div>` : ''}
+    ${P.tabs ? `<button class="btn block" style="margin-top:10px" data-a="ptab:reset:x">Remettre les onglets d'origine</button>` : ''}</div>
+  <div class="sec"><h2>Couleur de l'application</h2></div>
+  <div class="card" style="margin-bottom:12px"><div class="colors">${COLORS.map(c => `<button type="button" style="background:${c}" class="${(P.color || '').toLowerCase() === c.toLowerCase() ? 'on' : ''}" data-a="pcolor:${c}" aria-label="${c}"></button>`).join('')}</div>
+    <button class="btn sm" style="margin-top:10px" data-a="pcolor:shop" ${P.color ? '' : 'disabled'}>Couleur de la boutique${P.color ? '' : ' (actuelle)'}</button></div>
+  <div class="sec"><h2>Mode sombre et style</h2></div>
+  <div class="card" style="margin-bottom:12px"><div class="f"><span>Apparence</span>${seg(Object.entries(THEMES), themePref(), 'theme')}<small class="note">Le mode sombre repose les yeux le soir.</small></div>
+    <div class="f" style="margin-top:10px"><span>Style</span>${seg([['verre','Verre (élégant)'],['simple','Simple (léger)']], glassPref(), 'style')}<small class="note">« Simple » est plus rapide sur les petits téléphones.</small></div>
+    <div class="f" style="margin-top:10px"><span>Taille du texte</span>${seg(ZOOMS, P.zoom || '1', 'pzoom')}</div></div>
+  ${ONLINE.role !== 'livreur' ? `<div class="sec"><h2>Cartes de l'accueil</h2></div>
+  <div class="card" style="margin-bottom:12px"><p class="note" style="margin-bottom:6px">Décochez ce que vous ne voulez pas voir sur l'accueil.</p>
+    ${HOME_CARDS.map(([k, l]) => `<label style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line,#e5e7eb);cursor:pointer"><input type="checkbox" data-pcard="${k}" ${hide.includes(k) ? '' : 'checked'} style="width:22px;height:22px;flex:none"><span>${esc(l)}</span></label>`).join('')}
+    ${hide.length ? `<button class="btn block" style="margin-top:10px" data-a="pcards:all">Tout afficher</button>` : ''}</div>` : ''}
+  <button class="btn block" data-a="preset_perso">Tout remettre comme au départ</button>`;
+};
+CUSTOM_AFTER.perso = () => {
+  document.querySelectorAll('#main [data-pcard]').forEach(c => c.onchange = () => {
+    const P = persoGet(), h = new Set(Array.isArray(P.hide) ? P.hide : []);
+    if(c.checked) h.delete(c.dataset.pcard); else h.add(c.dataset.pcard);
+    P.hide = [...h]; persoSet(P); toast(c.checked ? 'Carte affichée sur l\'accueil' : 'Carte cachée de l\'accueil');
+  });
+};
+A.ptab = (arg) => {
+  const [op, k] = String(arg).split(':'); const P = persoGet();
+  let t = persoTabs() || navItems().map(x => x[0]).filter(x => x !== 'plus');
+  const i = t.indexOf(k);
+  if(op === 'up' && i > 0) [t[i - 1], t[i]] = [t[i], t[i - 1]];
+  else if(op === 'down' && i >= 0 && i < t.length - 1) [t[i + 1], t[i]] = [t[i], t[i + 1]];
+  else if(op === 'del' && i >= 0 && t.length > 1) t.splice(i, 1);
+  else if(op === 'add' && i < 0 && t.length < TAB_MAX && tabAllowed(k)) t.push(k);
+  if(op === 'reset') delete P.tabs; else P.tabs = t;
+  persoSet(P); render(); toast(op === 'reset' ? 'Onglets d\'origine remis' : 'Onglets mis à jour');
+};
+A.pcolor = (c) => { const P = persoGet(); if(c === 'shop') delete P.color; else if(/^#[0-9a-f]{6}$/i.test(c)) P.color = c; persoSet(P); render(); toast(c === 'shop' ? 'Couleur de la boutique remise' : 'Couleur changée sur ce téléphone'); };
+A.pzoom = (z) => { const P = persoGet(); if(z === '1') delete P.zoom; else if(ZOOMS.some(x => x[0] === z)) P.zoom = z; persoSet(P); applyZoom(); render(); };
+A.pcards = () => { const P = persoGet(); delete P.hide; persoSet(P); render(); toast('Toutes les cartes sont affichées'); };
+A.preset_perso = async () => { if(!await ask('Remettre les onglets, la couleur, la taille du texte et les cartes de l\'accueil comme au départ sur ce téléphone ?', 'Tout remettre', false)) return; persoSet({}); applyZoom(); render(); toast('Tout est remis comme au départ'); };
+(() => { const r0 = render; render = function(){ try{ navItems(); }catch(_){} const out = r0.apply(this, arguments);
+  try{
+    if(view === 'home' && ONLINE.shop && ONLINE.role !== 'livreur'){
+      const n = homeHide(), M = document.getElementById('main');
+      if(M && !M.querySelector('#persoLink')) M.insertAdjacentHTML('beforeend', `<div style="text-align:center;margin:14px 0 4px"><button class="btn sm" id="persoLink" data-a="nav:perso">${n ? n + ' carte(s) cachée(s) · ' : ''}Personnaliser l'accueil et les onglets</button></div>`);
+    }
+    if(view === 'plus' && ONLINE.shop && ONLINE.role !== 'livreur'){ const M = document.getElementById('main'); if(M && !M.querySelector('[data-a="nav:perso"]')) M.insertAdjacentHTML('afterbegin', `<div class="list menu" style="margin-bottom:12px"><button class="it" data-a="nav:perso"><div class="ic c-brand">${ico('set')}</div><div class="m"><div class="t">Personnaliser</div><div class="d" style="white-space:normal">Onglets du bas, couleur, mode sombre, taille du texte, cartes de l'accueil</div></div>${ico('chev')}</button></div>`); }
+  }catch(_){}
+  return out; }; })();
+
+/* =================================================================
+   Animations légères : barre de chargement, squelettes, transitions
+   d'onglets, animation de réussite. Coupées si le téléphone demande
+   « moins d'animations », allégées en style « Simple ».
+   ================================================================= */
+document.head.insertAdjacentHTML('beforeend', `<style id="animcss">
+#netbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s;overflow:hidden}
+#netbar.on{opacity:1}
+#netbar::before{content:'';position:absolute;top:0;bottom:0;left:-40%;width:40%;background:var(--brand,#0F766E);border-radius:3px;animation:netslide 1.1s ease-in-out infinite}
+@keyframes netslide{0%{left:-40%}100%{left:100%}}
+.skel{display:grid;gap:10px;padding:4px 0}
+.skel i{display:block;height:14px;border-radius:8px;background:linear-gradient(90deg,var(--line,#e5e7eb) 25%,color-mix(in srgb,var(--line,#e5e7eb) 45%,transparent) 50%,var(--line,#e5e7eb) 75%);background-size:200% 100%;animation:skel 1.2s linear infinite}
+.skel i:nth-child(1){width:60%;height:18px}.skel i:nth-child(2){width:92%}.skel i:nth-child(3){width:78%}.skel i:nth-child(4){width:85%}
+.skel .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@keyframes skel{0%{background-position:200% 0}100%{background-position:-200% 0}}
+#nav button.on.pop svg{animation:navpop .32s cubic-bezier(.2,.9,.3,1.4)}
+@keyframes navpop{0%{transform:scale(.8)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+#toast.ok::before{content:'';display:inline-block;vertical-align:-4px;width:18px;height:18px;margin-right:8px;border-radius:50%;background:#16a34a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center/14px no-repeat;animation:okpop .4s cubic-bezier(.2,.9,.3,1.5)}
+@keyframes okpop{0%{transform:scale(0)}100%{transform:scale(1)}}
+.btn.is-busy{position:relative;color:transparent!important}
+.btn.is-busy::after{content:'';position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2.5px solid currentColor;border-color:var(--brand-ink,#fff) var(--brand-ink,#fff) var(--brand-ink,#fff) transparent;animation:spin .7s linear infinite}
+.btn:not(.primary).is-busy::after{border-color:var(--brand,#0F766E) var(--brand,#0F766E) var(--brand,#0F766E) transparent}
+.spin-sm{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border-radius:50%;border:2px solid var(--brand,#0F766E);border-right-color:transparent;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+html:not(.glass) .skel i{animation:none}
+@media (prefers-reduced-motion:reduce){#netbar::before{animation:none;left:0;width:100%;opacity:.6}.skel i,#nav button.on.pop svg,#toast.ok::before,.spin-sm,.btn.is-busy::after{animation:none!important}}
+</style>`);
+// Barre de chargement : visible quand l'application parle au serveur plus de 0,3 s
+const NET = {n:0, t:null, last:0};
+function netPaint(){ let b = document.getElementById('netbar'); if(!b && document.body){ document.body.insertAdjacentHTML('afterbegin', '<div id="netbar" aria-hidden="true"></div>'); b = document.getElementById('netbar'); } if(b) b.classList.toggle('on', NET.n > 0); }
+function netStart(){ NET.n++; NET.last = Date.now(); if(!NET.t) NET.t = setTimeout(() => { NET.t = null; netPaint(); }, 300); }
+function netEnd(){ NET.n = Math.max(0, NET.n - 1); if(!NET.n){ clearTimeout(NET.t); NET.t = null; netPaint(); document.querySelectorAll('.btn.is-busy').forEach(b => b.classList.remove('is-busy')); } }
+if(window.fetch){ const f0 = window.fetch.bind(window); window.fetch = function(u){ const url = String(u && u.url || u || ''); const watch = /supabase\.co\//.test(url); if(watch) netStart(); const p = f0.apply(this, arguments); return watch ? p.finally(netEnd) : p; }; }
+if(sb && typeof sb.rpc === 'function' && !/supabase\.co/.test(String(sb.supabaseUrl || ''))){ const r0 = sb.rpc.bind(sb); sb.rpc = function(){ netStart(); const p = r0.apply(this, arguments); Promise.resolve(p).finally(netEnd); return p; }; }
+// Bouton qui tourne pendant l'envoi d'un formulaire (jamais plus de 10 s)
+document.addEventListener('submit', e => { const f = e.target; if(!(f instanceof HTMLFormElement) || !f.closest('#ov')) return;
+  const b = f.querySelector('button.primary:not([type=button]), button:not([type])'); if(!b) return;
+  setTimeout(() => { if(NET.n > 0){ b.classList.add('is-busy'); setTimeout(() => b.classList.remove('is-busy'), 10000); } }, 60); });
+// Squelettes à la place du texte « Chargement… »
+function skelize(root){
+  if(!root || !root.querySelectorAll) return;
+  const list = root.matches && root.matches('.empty') ? [root] : [...root.querySelectorAll('.empty')];
+  list.forEach(e => { if(e.dataset.skel || e.textContent.trim() !== 'Chargement…') return; e.dataset.skel = '1'; e.innerHTML = '<div class="skel" role="status"><i></i><i></i><i></i><i></i><span class="sr">Chargement…</span></div>'; e.style.textAlign = 'left'; });
+}
+try{ new MutationObserver(ms => { for(const m of ms) for(const n of m.addedNodes) if(n.nodeType === 1) skelize(n); }).observe(document.body || document.documentElement, {childList:true, subtree:true}); }catch(_){}
+// Animation de réussite sur les messages positifs
+{
+  const t0 = toast;
+  toast = function(msg){
+    const r = t0.apply(this, arguments);
+    try{ const el = document.getElementById('toast'), m = String(msg || '');
+      const good = /(enregistr|ajouté|confirmé|créée?|envoyé|mis(e)? à jour|remis|activé|acceptée?|reçu|payé|validé|changée?s?|copié|importé|chargé|affichée?s?|cachée)/i.test(m) && !/(refus|erreur|impossible|pas donné|réservé|échec|introuvable|invalide|manque|hors ligne|lecture seule|pas activé)/i.test(m);
+      if(el){ el.classList.remove('ok'); if(good){ void el.offsetWidth; el.classList.add('ok'); } } }catch(_){}
+    return r;
+  };
+}
+// Petit rebond de l'onglet choisi (seulement quand on change d'onglet)
+(() => { let last = ''; const r0 = render; render = function(){ const out = r0.apply(this, arguments);
+  try{ const on = document.querySelector('#nav button.on'), k = on ? on.dataset.a : ''; if(on && last && k !== last) on.classList.add('pop'); last = k; }catch(_){}
+  return out; }; })();
 
 </script>
 </body>
