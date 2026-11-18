@@ -427,7 +427,7 @@ const ICON = {
 };
 const ico = (n, cls='i') => `<svg class="${cls}" viewBox="0 0 24 24">${ICON[n]}</svg>`;
 const STATUS = {attente:'À livrer', encours:'En cours', livre:'Livré', annule:'Annulé'};
-const MOTIFS = ['Cassé / abîmé','Périmé','Perdu / volé','Écart inventaire','Cadeau / échantillon','Usage interne','Autre'];
+const MOTIFS = ['Cassé / abîmé','Périmé','Perdu / volé','Écart inventaire','Cadeau / échantillon','Usage interne','Transfert vers un autre magasin','Autre'];
 const DEPCATS = ['Transport','Expédition colis (vers une ville)','Publicité Facebook','Boutique / loyer','Emballage','Crédit / internet','Salaire / aide','Autre'];
 const countryCities = () => (typeof CITY_BY_COUNTRY !== 'undefined' && CITY_BY_COUNTRY[S.settings.country || 'RDC']) || CITIES;
 const CITIES = ['Kinshasa','Lubumbashi','Bukavu','Kolwezi','Goma','Kisangani','Matadi','Mbuji-Mayi','Kananga'];
@@ -611,7 +611,7 @@ function livStats(id){
     for(const [pid, q] of lines(m.pid, m.qty)){
       if(m.type === 'envoi'){ r.got += q; P(pid).got += q; }
       else if(m.type === 'retour'){ r.back += q; P(pid).back += q; }
-      else if(m.type === 'perte'){ r.lost += q; P(pid).lost += q; }
+      else if(m.type === 'perte' && !m.tr){ r.lost += q; P(pid).lost += q; }
       else if(m.type === 'ajust'){ r.got += q; P(pid).got += q; }
       else if(m.type === 'vente' && m.status === 'livre'){ r.sold += q; P(pid).sold += q; }
       else if(m.type === 'vente' && m.status !== 'annule'){ r.pend += q; P(pid).pend += q; }
@@ -891,7 +891,7 @@ function prodFlow(moves = S.moves){
       if(m.type === 'entree' || m.type === 'ajust') g(pid).in += q;
       else if(m.type === 'vente' && m.status === 'livre') g(pid).sold += q;
       else if(m.type === 'vente' && m.status !== 'annule') g(pid).pend += q;
-      else if(m.type === 'perte') g(pid).lost += q;
+      else if(m.type === 'perte' && !m.tr) g(pid).lost += q;
     }
   }
   return F;
@@ -5030,6 +5030,7 @@ function bcApply(f, c){
   if(f.id === 'pf'){ const cur = bcList(E.code.value), one = bcList(c).length === 1 && /\s/.test(bcNorm(c));
     E.code.value = !cur.length || one ? bcNorm(c) : cur.includes(bcNorm(c)) ? E.code.value : cur.concat([bcNorm(c)]).join(', ');
     E.code.dispatchEvent(new Event('input', {bubbles:true})); if(!f.dataset.pid) qrFill(f, c); return; }
+  if(f.trAddCode){ f.trAddCode(c); return; }
   const p = prodByCode(c); if(!p){ unknownCode(c); return; }
   if(!E.pid || ![...E.pid.options].some(o => o.value === p.id)){ toast('« ' + p.name + ' » ne peut pas être choisi ici'); return; }
   if(E.pid.value === p.id && E.qty){ E.qty.value = num(E.qty.value) + 1; E.qty.dispatchEvent(new Event('input', {bubbles:true})); }
@@ -5719,7 +5720,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '6037a710de';
+const APP_BUILD = '7ed0d7a622';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -6901,6 +6902,120 @@ function notifyShop(to, title, bodyTxt, extra){
 }
 window.onSaleCreated = rec => { if(rec.liv && ONLINE.role !== 'livreur') notifyShop('livreur', '🛵 Nouvelle livraison', `${pname(rec.pid)} × ${rec.qty}${rec.client ? ' — ' + rec.client : ''}\n📅 ${whenTxt(rec)}${rec.addr ? '\n📍 ' + rec.addr : ''}`, {livreur_id:rec.liv, tag:'new-' + rec.id}); };
 pushCheck();
+
+/* ---------- Plusieurs magasins : « Tous mes magasins » (chiffres de chaque magasin + total) et envoi de stock d'un magasin à l'autre ----------
+   Pour le patron et les gérants qui ont au moins deux magasins. Les autres magasins sont lus sur le serveur (lecture seule). */
+const multiShops = () => (ONLINE.shops || []).filter(s => ['proprietaire', 'gerant'].includes(s.role));
+const multiOn = () => !!ONLINE.shop && !ONLINE.offline && ['proprietaire', 'gerant'].includes(ONLINE.role) && multiShops().length >= 2;
+async function multiItems(id){
+  const out = [];
+  for(let a = 0; a < 30000; a += 1000){
+    const {data, error} = await sb.from('items').select('kind,id,data,deleted').eq('shop_id', id).eq('deleted', false).range(a, a + 999);
+    if(error) throw error; out.push(...(data || [])); if(!data || data.length < 1000) break;
+  }
+  return out;
+}
+function multiState(s, rows){
+  const st = {settings:Object.assign(defaults().settings, s.settings || {}, {shop:s.name, setup:true}), products:[], livreurs:[], moves:[]};
+  rows.forEach(r => { const a = ARR[r.kind]; if(a && !r.deleted && r.data) st[a].push(r.data); });
+  return st;
+}
+// Calcule avec les données d'un autre magasin (on remplace S le temps du calcul, sans attente au milieu)
+function withState(st, fn){ const keep = S; S = st; try{ return fn(); } finally { S = keep; } }
+function shopFigures(){
+  const t = stats('jour'), mo = stats('mois'), st = stockAt(); let cost = 0, sale = 0, pcs = 0;
+  S.products.filter(p => !isKit(p)).forEach(p => { const q = totalOf(st, p.id); if(q > 0){ cost += q * unitCostUSD(p); sale += q * toUSD(num(p.sell), p.cur); if(!decUnit(p)) pcs += q; } });
+  return {dayCA:t.ca, dayN:t.nv, dayNet:t.net, monCA:mo.ca, monNet:mo.net, pend:mo.pending, stockCost:cost, stockSale:sale, pcs, nprod:S.products.filter(p => !isKit(p)).length, low:(typeof rachatList === 'function' ? rachatList().length : 0)};
+}
+let MULTI = {at:0, rows:null, per:'jour'};
+async function multiSheet(force){
+  sheet('Tous mes magasins', `<div class="chips" style="margin-bottom:10px"><button class="chip ${MULTI.per === 'jour' ? 'on' : ''}" data-mper="jour">Aujourd'hui</button><button class="chip ${MULTI.per === 'mois' ? 'on' : ''}" data-mper="mois">Ce mois</button><button class="chip" data-mref>Actualiser</button></div><div id="multib"><p class="note">Chargement des magasins…</p></div>`);
+  const ov = $('#ov');
+  ov.querySelector('.chips').onclick = e => { const b = e.target.closest('button'); if(!b) return; if(b.dataset.mper){ MULTI.per = b.dataset.mper; ov.querySelectorAll('[data-mper]').forEach(x => x.classList.toggle('on', x === b)); paint(); } else multiSheet(true); };
+  const paint = () => {
+    const box = $('#multib'); if(!box || !MULTI.rows) return; const P = MULTI.per === 'jour';
+    const T = MULTI.rows.reduce((t, [, f]) => { if(!f) return t; ['dayCA', 'dayNet', 'monCA', 'monNet', 'stockCost', 'stockSale', 'dayN', 'pend', 'low'].forEach(k => t[k] = (t[k] || 0) + f[k]); return t; }, {});
+    box.innerHTML = `<div class="kpis" style="margin-bottom:12px"><div class="kpi hero"><div class="l">Tous les magasins · ${P ? "aujourd'hui" : 'ce mois'}</div><div class="v num">${money(P ? T.dayCA : T.monCA)}</div><div class="s">Bénéfice ${money(P ? T.dayNet : T.monNet)}${P ? ' · ' + (T.dayN || 0) + ' vente(s)' : ''}</div></div>
+      <div class="kpi"><div class="l">Stock (prix d'achat)</div><div class="v num">${money(T.stockCost)}</div><div class="s">${money(T.stockSale)} au prix de vente</div></div>
+      <div class="kpi"><div class="l">À surveiller</div><div class="v num">${(T.low || 0)}</div><div class="s">produit(s) presque fini(s) · ${T.pend || 0} commande(s) à livrer</div></div></div>
+      ${MULTI.rows.map(([s, f, err]) => `<div class="card" style="margin-bottom:10px;${s.id === ONLINE.shop.id ? 'border:2px solid var(--brand)' : ''}">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><div class="ic c-brand" style="flex:none">${esc(initials(s.name))}</div><div style="flex:1;min-width:0"><b>${esc(s.name)}</b><div class="note">${esc(ROLE_TXT[s.role] || '')}${s.id === ONLINE.shop.id ? ' · ouvert maintenant' : ''}</div></div></div>
+        ${f ? `<div class="dl"><span>Ventes ${P ? "aujourd'hui" : 'ce mois'}</span><b class="num">${money(P ? f.dayCA : f.monCA)}</b></div>
+        <div class="dl"><span>Bénéfice ${P ? "aujourd'hui" : 'ce mois'}</span><span class="num ${(P ? f.dayNet : f.monNet) < 0 ? 'red' : 'green'}">${money(P ? f.dayNet : f.monNet)}</span></div>
+        <div class="dl"><span>Stock</span><span class="num">${fmt(Math.round(f.pcs))} pièce(s) · ${money(f.stockCost)}</span></div>
+        <div class="dl"><span>Presque fini(s) · à livrer</span><span class="num">${f.low} · ${f.pend}</span></div>` : `<p class="note red">${esc(err || 'Impossible de lire ce magasin')}</p>`}
+        ${s.id === ONLINE.shop.id ? '' : `<button class="btn sm block" style="margin-top:8px" data-mopen="${s.id}">Ouvrir ce magasin</button>`}</div>`).join('')}
+      <p class="note">Les chiffres sont en dollars, avec le taux de chaque magasin.</p>`;
+    box.querySelectorAll('[data-mopen]').forEach(b => b.onclick = () => openShop(ONLINE.shops.find(s => s.id === b.dataset.mopen)));
+  };
+  if(!force && MULTI.rows && Date.now() - MULTI.at < 60000){ paint(); return; }
+  const rows = [];
+  for(const s of multiShops()){
+    if(s.id === ONLINE.shop.id){ rows.push([s, shopFigures()]); continue; }
+    try{ const st = multiState(s, await multiItems(s.id)); rows.push([s, withState(st, shopFigures)]); }
+    catch(e){ rows.push([s, null, navigator.onLine === false ? 'Pas de connexion internet' : 'Impossible de lire ce magasin pour le moment']); }
+  }
+  MULTI = {at:Date.now(), rows, per:MULTI.per}; paint();
+}
+// Envoyer du stock vers un autre magasin : sortie ici (sans perte d'argent), entrée là-bas (même coût)
+function transferSheet(pid){
+  const dests = multiShops().filter(s => s.id !== ONLINE.shop.id), st = stockAt();
+  const prods = S.products.filter(p => !isKit(p) && qAt(st, '', p.id) > 0).sort(byName);
+  if(!dests.length){ toast('Il faut un deuxième magasin où vous êtes patron ou gérant'); return; }
+  if(!prods.length){ toast('Aucun produit au dépôt à envoyer'); return; }
+  const row = id => `<div class="kitrow" style="grid-template-columns:1fr 76px 34px"><select name="tp"><option value="">— produit —</option>${prods.map(p => `<option value="${p.id}" ${p.id === id ? 'selected' : ''}>${esc(p.name)} · ${qv(p, qAt(st, '', p.id))} au dépôt</option>`).join('')}</select><input name="tq" type="number" min="0" step="any" value="${id ? 1 : ''}" placeholder="Qté"><button type="button" class="btn sm" data-tdel>✕</button></div>`;
+  sheet('Envoyer vers un autre magasin', `<form id="trf"><p class="note" style="margin-bottom:10px">La marchandise sort du dépôt de « ${esc(ONLINE.shop.name)} » et entre dans le dépôt de l'autre magasin, au même prix d'achat. Ce n'est pas une perte : le bénéfice ne change pas.</p>
+    ${field('Vers le magasin *', `<select name="dest" required>${dests.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>`)}
+    ${typeof scanBar === 'function' ? scanBar().replace('data-a="scanpick"', 'data-a="trscan"') : ''}
+    <div id="trRows">${row(pid || '')}</div><button type="button" class="btn sm" id="trAdd" style="margin:4px 0 12px">+ Autre produit</button>
+    <div class="row2">${field('Date', `<input name="date" type="date" required value="${today()}">`)}${field('Note', '<input name="note" maxlength="80" placeholder="Ex : chauffeur, camion…">')}</div>
+    <button class="btn primary block" id="trGo">Envoyer</button></form>`);
+  const f = $('#trf');
+  $('#trAdd').onclick = () => $('#trRows').insertAdjacentHTML('beforeend', row(''));
+  $('#trRows').onclick = e => { const b = e.target.closest('[data-tdel]'); if(b && f.querySelectorAll('#trRows .kitrow').length > 1) b.parentElement.remove(); };
+  f.trAddCode = c => { const p = prodByCode(c); if(!p){ toast('Code ' + c + ' : aucun produit'); return; } if(!prods.includes(p)){ toast('« ' + p.name + ' » : rien au dépôt'); return; }
+    const sels = [...f.querySelectorAll('[name=tp]')], hit = sels.find(s => s.value === p.id);
+    if(hit){ const q = hit.parentElement.querySelector('[name=tq]'); q.value = num(q.value) + 1; }
+    else { let s = sels.find(x => !x.value); if(!s){ $('#trRows').insertAdjacentHTML('beforeend', row('')); s = [...f.querySelectorAll('[name=tp]')].pop(); } s.value = p.id; s.parentElement.querySelector('[name=tq]').value = 1; }
+    toast(p.name); };
+  f.onsubmit = async e => { e.preventDefault(); if(!sb || ONLINE.offline || navigator.onLine === false){ toast('Connexion internet nécessaire pour envoyer vers un autre magasin'); return; }
+    const E = f.elements, dest = dests.find(s => s.id === E.dest.value); if(!dest) return;
+    const L = []; [...f.querySelectorAll('#trRows .kitrow')].forEach(r => { const p = prod(r.querySelector('[name=tp]').value), q = num(r.querySelector('[name=tq]').value); if(p && q > 0){ const x = L.find(y => y[0] === p); if(x) x[1] += q; else L.push([p, q]); } });
+    if(!L.length){ toast('Choisissez un produit et une quantité'); return; }
+    const date = E.date.value || today(), note = E.note.value.trim(), ts = Date.now();
+    const outs = L.map(([p, q], i) => ({id:uid(), ts:ts + i, type:'perte', pid:p.id, qty:r3(q), loc:'', motif:'Transfert vers un autre magasin', costU:0, tr:dest.id, trn:dest.name, date, note:'Vers « ' + dest.name + ' »' + (note ? ' · ' + note : '')}));
+    const err = checkStock(S.moves.concat(outs), L.map(([p]) => p.id)); if(err){ toast(err); return; }
+    if(!await ask(`Envoyer ${L.length} produit(s) vers « ${dest.name} » ?`, 'Envoyer', false)) return;
+    const btn = $('#trGo'); btn.disabled = true; btn.textContent = 'Envoi…';
+    try{
+      // Produits de l'autre magasin : même code-barres, sinon même nom ; sinon on crée la fiche (copie)
+      const there = (await multiItems(dest.id)).filter(r => r.kind === 'product').map(r => r.data);
+      const dsets = Object.assign({}, defaults().settings, dest.settings || {}), rows = [];
+      L.forEach(([p, q], i) => {
+        const codes = bcList(p.code);
+        let d = there.find(x => codes.length && bcList(x.code).some(c => codes.includes(c))) || there.find(x => norm(x.name).trim() === norm(p.name).trim());
+        if(!d){ d = Object.assign(JSON.parse(JSON.stringify(p)), {id:uid()}); delete d.fid; delete d.commCity; there.push(d); rows.push({shop_id:dest.id, kind:'product', id:String(d.id), data:d, deleted:false}); }
+        // coût dans la devise de la fiche de l'autre magasin
+        const cu = unitCostUSD(p), cost = d.cur === 'FC' ? Math.round(cu * num(dsets.rate || 2300)) : r4(cu);
+        rows.push({shop_id:dest.id, kind:'move', id:uid(), data:null, deleted:false, _m:{ts:ts + i, type:'entree', pid:d.id, qty:r3(q), cost, date, note:'Reçu de « ' + ONLINE.shop.name + ' »' + (note ? ' · ' + note : ''), trFrom:ONLINE.shop.id}});
+      });
+      rows.forEach(r => { if(r._m){ r.data = Object.assign({id:r.id}, r._m); delete r._m; } });
+      const {error} = await sb.from('items').upsert(rows, {onConflict:'shop_id,kind,id'}); if(error) throw error;
+      S.moves.push(...outs); save(); closeSheet(); render(); MULTI.at = 0;
+      toast(`Envoyé vers « ${dest.name} » ✅`);
+    }catch(err){ btn.disabled = false; btn.textContent = 'Envoyer'; toast('Envoi impossible : ' + (authErr ? authErr(err) : 'réessayez')); }
+  };
+}
+A.multi = () => multiSheet(false);
+A.transfer = id => transferSheet(id || '');
+A.trscan = (v, el) => { const f = el.closest('form'); scanCode('Scannez le produit à envoyer').then(c => c && f.trAddCode(c)); };
+// Entrées : accueil (carte), Plus (menu), Stock (bouton)
+(() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
+  if(!multiOn()) return; const main = $('#main'); if(!main) return; const n = multiShops().length;
+  if(view === 'home') main.insertAdjacentHTML('afterbegin', `<button class="card daycard" data-a="multi" style="width:100%;margin-bottom:12px"><span><b>Tous mes magasins</b> · ${n} magasins</span><span class="note">Ventes et stock de chacun ›</span></button>`);
+  if(view === 'plus') main.insertAdjacentHTML('afterbegin', `<div class="list menu" style="margin-bottom:12px"><button class="it" data-a="multi"><div class="ic c-brand">${ico('box')}</div><div class="m"><div class="t">Tous mes magasins</div><div class="d" style="white-space:normal">Ventes, bénéfice et stock de vos ${n} magasins, et le total</div></div>${ico('chev')}</button><button class="it" data-a="transfer"><div class="ic c-send">${ico('send')}</div><div class="m"><div class="t">Envoyer vers un autre magasin</div><div class="d" style="white-space:normal">Du stock de ce magasin vers un autre</div></div>${ico('chev')}</button></div>`);
+  if(view === 'stock'){ const b = main.querySelector('[data-a="new:envoi"]'); if(b) b.parentElement.insertAdjacentHTML('afterend', '<button class="btn block" data-a="transfer" style="margin-top:8px">Envoyer vers un autre magasin</button>'); }
+}catch(_){ } }; })();
 
 </script>
 </body>
