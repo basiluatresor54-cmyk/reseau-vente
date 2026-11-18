@@ -6101,7 +6101,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '604e01091f';
+const APP_BUILD = '1ff7f8a391';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -7541,7 +7541,7 @@ function mmWire(){ const f = $('#mmf'); if(!f) return;
 /* Abonnement : le patron tape le code de son paiement ; BASILUA TECH vérifie et active en un clic */
 const SUBP = {list:null, t:0};
 async function loadSubPays(){ if(!sb || !ONLINE.user || Date.now() - SUBP.t < 60000) return; SUBP.t = Date.now();
-  try{ const {data} = await sb.from('sub_payments').select('id,created_at,status,months,amount,op,code,until').eq('user_id', ONLINE.user.id).order('created_at', {ascending:false}).limit(5); const had = subPending().length; SUBP.list = data || []; if(view === 'reglages' && subPending().length !== had) render(); }catch(_){} }
+  try{ const {data} = await sb.from('sub_payments').select('id,created_at,status,months,amount,op,code,until,decided_at,reason,pro').eq('user_id', ONLINE.user.id).order('created_at', {ascending:false}).limit(20); const had = JSON.stringify(SUBP.list); SUBP.list = data || []; if(view === 'reglages' && JSON.stringify(SUBP.list) !== had) render(); }catch(_){} }
 const subPending = () => (SUBP.list || []).filter(x => x.status === 'averifier');
 { const rawPaySheet = paySheet; paySheet = function(){ rawPaySheet.apply(this, arguments); try{ subPayWire(); }catch(_){} }; }
 function subPayWire(){
@@ -7571,25 +7571,31 @@ async function loadAdmPays(){ if(!ONLINE.admin) return; ADMP.t = Date.now();
 function admPayRows(){ const L = ADMP.list; if(L === null) return '';
   const pend = L.filter(x => x.status === 'averifier'), done = L.filter(x => x.status !== 'averifier').slice(0, 8);
   const row = x => `<div class="card" style="margin-bottom:8px${x.status === 'averifier' ? ';border:2px solid var(--brand)' : ''}"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc((x.names || [x.shop]).join(', '))}</b><span class="pill ${x.status === 'averifier' ? 'p-attente' : x.status === 'confirme' ? 'p-livre' : 'p-annule'}">${x.status === 'averifier' ? 'À vérifier' : x.status === 'confirme' ? 'Activé' : 'Refusé'}</span></div>
-    <div class="note" style="margin-top:4px">${esc(x.owner_name || '')}${x.owner_phone ? ' · ' + esc(telPretty(x.owner_phone)) : ''} · ${esc(fmtDate(String(x.created_at).slice(0, 10)))}</div>
+    <div class="note" style="margin-top:4px">${esc(x.owner_name || '')}${x.owner_phone ? ' · ' + esc(telPretty(x.owner_phone)) : ''} · envoyé le ${esc(dtTxt(x.created_at))}${x.parrain ? ' · filleul de ' + esc(x.parrain) : ''}</div>
     <div class="dl"><span>Formule</span><span>${x.months} mois${x.pro ? ' · Pro' : ''}${x.n > 1 ? ' · ' + x.n + ' magasins' : ''}</span></div>
     <div class="dl"><span>Montant</span><span class="num"><b>${fmt(num(x.amount))} $</b> (≈ ${subFc(num(x.amount))})</span></div>
     <div class="dl"><span>${esc(x.op)}</span><span><b class="num" style="font-size:17px">${esc(x.code)}</b></span></div>
     ${x.payer ? `<div class="dl"><span>Payé depuis</span><span>${esc(x.payer)}</span></div>` : ''}
-    ${x.status === 'averifier' ? `<div class="btns" style="margin-top:8px"><button class="btn primary" data-a="admpayok:${x.id}">Reçu : activer</button><button class="btn ghost-bad" data-a="admpayko:${x.id}">Pas reçu</button></div>` : x.until ? `<p class="note">Actif jusqu'au ${esc(fmtDate(x.until, true))}</p>` : ''}</div>`;
+    ${x.status === 'averifier' ? `<div class="btns" style="margin-top:8px"><button class="btn primary" data-a="admpayok:${x.id}">Reçu : activer</button><button class="btn ghost-bad" data-a="admpayko:${x.id}">Pas reçu</button></div>` : x.status === 'refuse' ? `<p class="note" style="color:var(--bad)">Refusé le ${esc(dtTxt(x.decided_at))}${x.reason ? ' : ' + esc(x.reason) : ''}</p>` : `<p class="note">Validé le ${esc(dtTxt(x.decided_at))}${x.until ? " · actif jusqu'au " + esc(fmtDate(x.until, true)) : ''}</p>`}</div>`;
   return `<div class="sec"><h2>Paiements d'abonnement à vérifier (${pend.length})</h2><button class="link" data-a="admpayreload">Actualiser</button></div>
+    <button class="card" data-a="nav:abosadmin" style="width:100%;text-align:left;margin-bottom:8px;border:2px solid var(--brand);cursor:pointer;font:inherit;color:inherit"><b>Ouvrir le tableau des abonnements</b><div class="note" style="margin-top:4px">Tous les paiements, calendrier, abonnements qui expirent, export Excel</div></button>
     ${pend.length ? pend.map(row).join('') : '<div class="card empty" style="margin-bottom:8px">Aucun paiement en attente.</div>'}
     ${done.length ? `<details class="card" style="margin-bottom:12px"><summary><b>Derniers paiements traités</b></summary><div style="margin-top:8px">${done.map(row).join('')}</div></details>` : ''}`; }
 A.admpayreload = () => loadAdmPays();
 A.admpayok = async id => { const x = (ADMP.list || []).find(y => y.id === id); if(!x) return;
   if(!await ask(`Vous avez bien reçu ${fmt(num(x.amount))} $ par ${x.op} (code ${x.code}) ?`, 'Oui, activer', false)) return;
   const {data, error} = await sb.rpc('admin_decide_sub_payment', {p_id:id, p_ok:true}); if(error) return toast(rpcErr(error));
+  const first = !(ADMP.list || []).some(y => y.id !== x.id && y.status === 'confirme' && y.owner_phone && y.owner_phone === x.owner_phone);
   x.status = 'confirme'; x.until = data && data.until; toast('Abonnement activé'); loadAdmin(); loadAdmPays();
-  if(x.owner_phone) sheet('Abonnement activé', `<p class="note" style="margin-bottom:10px">Prévenez le client :</p><a class="btn wa block" href="${waLink(x.owner_phone, `Bonjour ${x.owner_name || ''} 👋\nNous avons bien reçu votre paiement de ${fmt(num(x.amount))} $ (code ${x.code}). Votre abonnement Réseau & Vente${x.pro ? ' Pro' : ''} est activé${x.until ? " jusqu'au " + fmtDate(x.until, true) : ''}. Merci pour votre confiance 🙏\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Envoyer la confirmation</a>`); };
+  if(x.owner_phone) sheet('Abonnement activé', `<p class="note" style="margin-bottom:10px">Prévenez le client :</p><a class="btn wa block" href="${waLink(x.owner_phone, `Bonjour ${x.owner_name || ''} 👋\nNous avons bien reçu votre paiement de ${fmt(num(x.amount))} $ (code ${x.code}). Votre abonnement Réseau & Vente${x.pro ? ' Pro' : ''} est activé${x.until ? " jusqu'au " + fmtDate(x.until, true) : ''}. Merci pour votre confiance 🙏${first ? ambWelcome() : ''}\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Envoyer la confirmation</a>`); };
 A.admpayko = async id => { const x = (ADMP.list || []).find(y => y.id === id); if(!x) return;
-  if(!await ask('Ce paiement n\'est pas arrivé ? L\'abonnement ne sera pas activé.', 'Pas reçu')) return;
-  const {error} = await sb.rpc('admin_decide_sub_payment', {p_id:id, p_ok:false}); if(error) return toast(rpcErr(error));
-  x.status = 'refuse'; render();
+  const reason = await new Promise(res => { sheet('Paiement non reçu', `<p class="note" style="margin-bottom:10px">Pourquoi ? Le client verra cette raison dans son application.</p>
+      <div class="list">${['Paiement non trouvé', 'Montant incorrect', 'Code de transaction invalide', 'Numéro de paiement inconnu'].map(r => `<button class="it" data-rsn="${esc(r)}"><div class="m"><div class="t">${esc(r)}</div></div></button>`).join('')}</div>
+      <form id="rsnF" style="margin-top:10px">${field('Autre raison', `<input name="r" placeholder="Écrivez la raison">`)}<button class="btn block">Valider</button></form>`);
+    $('#shb').onclick = e => { const b = e.target.closest('[data-rsn]'); if(b) res(b.dataset.rsn); };
+    $('#rsnF').onsubmit = e => { e.preventDefault(); e.stopPropagation(); const v = e.target.elements.r.value.trim(); if(v) res(v); }; });
+  const {error} = await sb.rpc('admin_decide_sub_payment', {p_id:id, p_ok:false, p_reason:reason}); if(error) return toast(rpcErr(error));
+  x.status = 'refuse'; x.reason = reason; x.decided_at = new Date().toISOString(); render();
   if(x.owner_phone) sheet('Paiement non trouvé', `<a class="btn wa block" href="${waLink(x.owner_phone, `Bonjour ${x.owner_name || ''} 👋\nNous n'avons pas trouvé votre paiement par ${x.op} (code ${x.code}). Pouvez-vous vérifier le code, ou nous envoyer la capture du paiement ? Merci 🙏\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Écrire au client</a>`); };
 // Branchements : accueil, Plus, Réglages, Mon compte, espace BASILUA TECH
 (() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
@@ -7940,6 +7946,163 @@ A.ambxlsx = async () => { const d = ADMR.d; if(!d) return; toast('Préparation d
 // Menu Plus de BASILUA TECH
 (() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
   if(view === 'plus' && ONLINE.admin){ const m = $('#main [data-a="nav:admin"]'); if(m) m.insertAdjacentHTML('afterend', `<button class="it" data-a="nav:ambadmin"><div class="ic c-in">${ico('user')}</div><div class="m"><div class="t">Tableau des ambassadeurs</div><div class="d" style="white-space:normal">Filleuls, gains, retraits à payer, réglages</div></div>${ico('chev')}</button>`); }
+}catch(e){ console.error(e); } }; })();
+
+/* ---------- Abonnements : historique pour chaque client + tableau complet pour BASILUA TECH ---------- */
+const SUB_ST = {averifier:['En vérification', 'p-attente'], confirme:['Validé', 'p-livre'], refuse:['Refusé', 'p-annule']};
+function subHistCard(){ const L = SUBP.list || []; if(!L.length) return '';
+  return `<div class="sec" style="margin-top:4px"><h2>Mes paiements d'abonnement</h2></div><div class="list" style="margin-bottom:6px">${L.map(x => `<div class="it" style="cursor:default;align-items:flex-start"><div class="m"><div class="t">${fmt(num(x.amount))} $ · ${x.months} mois${x.pro ? ' Pro' : ''}</div>
+    <div class="d">Envoyé le ${esc(dtTxt(x.created_at))} · ${esc(x.op)} · code ${esc(x.code)}</div>
+    ${x.status === 'confirme' ? `<div class="d" style="color:var(--ok)">Validé le ${esc(dtTxt(x.decided_at))}${x.until ? " · actif jusqu'au " + esc(fmtDate(x.until, true)) : ''}</div>` : x.status === 'refuse' ? `<div class="d" style="color:var(--bad);white-space:normal">Refusé le ${esc(dtTxt(x.decided_at))}${x.reason ? ' : ' + esc(x.reason) : ''}. Vérifiez le code ou envoyez la capture à BASILUA TECH.</div>` : '<div class="d">BASILUA TECH vérifie votre paiement, en général dans l\'heure.</div>'}
+    ${x.status === 'confirme' ? `<button class="btn sm" style="margin-top:6px" data-a="subrecu:${x.id}">Télécharger le reçu</button>` : ''}</div><div class="r"><span class="pill ${(SUB_ST[x.status] || [])[1] || ''}">${(SUB_ST[x.status] || [x.status])[0]}</span></div></div>`).join('')}</div>`; }
+// Reçu de paiement (image) pour le client
+const dtFull = iso => { if(!iso) return ''; const d = new Date(iso); return d.toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'}) + ' à ' + String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0'); };
+A.subrecu = async id => { const x = (SUBP.list || []).find(y => y.id === id); if(!x) return;
+  const W = 800, H = 1180, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d'), F = (w, s) => `${w} ${s}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  const T = (t, xx, y, f, col, al) => { c.font = f; c.fillStyle = col; c.textAlign = al || 'left'; c.fillText(t, xx, y); };
+  c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.fillStyle = '#0F766E'; c.fillRect(0, 0, W, 150);
+  T('BASILUA TECH · Réseau & Vente', 50, 70, F(800, 34), '#fff'); T('Reçu de paiement d\'abonnement', 50, 115, F(500, 26), '#e6fffa');
+  const me = (ONLINE.user && ONLINE.user.user_metadata) || {};
+  const rows = [['Reçu n°', String(x.id).replace(/-/g, '').slice(0, 10).toUpperCase()], ['Client', me.name || ''], ['Téléphone', telPretty(me.phone || '')], ['Boutique', ONLINE.shop.name],
+    ['Formule', x.months + ' mois' + (x.pro ? ' · Pro' : '')], ['Montant', fmt(num(x.amount)) + ' $ (≈ ' + subFc(num(x.amount)) + ')'], ['Payé par', x.op], ['Code de la transaction', x.code],
+    ['Envoyé le', dtFull(x.created_at)], ['Validé le', dtFull(x.decided_at)], ['Abonnement actif jusqu\'au', x.until ? fmtDate(x.until, true) : 'sans limite']];
+  let y = 220; rows.forEach(([k, v], i) => { if(i % 2 === 0){ c.fillStyle = '#f3f6f8'; c.fillRect(40, y - 40, W - 80, 64); } T(k, 60, y, F(500, 24), '#5b6472'); T(String(v), W - 60, y, F(800, 26), '#111827', 'right'); y += 64; });
+  c.fillStyle = '#e8f7ee'; c.fillRect(40, y + 10, W - 80, 90); T('PAIEMENT VALIDÉ', W / 2, y + 68, F(900, 36), '#15803d', 'center');
+  T('Merci pour votre confiance. WhatsApp BASILUA TECH : +243 851 507 510', W / 2, H - 40, F(500, 20), '#5b6472', 'center');
+  cv.toBlob(b => { const name = 'recu-abonnement-' + String(x.decided_at || x.created_at).slice(0, 10) + '.jpg', url = URL.createObjectURL(b);
+    sheet('Reçu de paiement', `<img src="${url}" alt="Reçu" style="width:100%;border-radius:12px;margin-bottom:10px"><a class="btn primary block" href="${url}" download="${name}">Enregistrer le reçu</a>`); }, 'image/jpeg', 0.92); };
+/* Tableau des abonnements (BASILUA TECH) */
+CSUB.abosadmin = 'Tableau des abonnements';
+const ABT = {f:'tous', q:'', calAll:false};
+function abosShops(){ return (ADM.shops || []); }
+CUSTOM.abosadmin = () => {
+  if(!ONLINE.admin) return `<div class="card empty">Accès réservé.</div>`;
+  const P = ADMP.list, S0 = ADM.shops; if(P === null || S0 === null) return `<div class="card empty">Chargement…</div>`;
+  const t = today(), m0 = t.slice(0, 7), conf = P.filter(x => x.status === 'confirme'), pend = P.filter(x => x.status === 'averifier');
+  const moisTot = conf.filter(x => String(x.decided_at || '').slice(0, 7) === m0).reduce((a, x) => a + num(x.amount), 0);
+  const actifs = S0.filter(s => s.status === 'actif' && (!s.paid_until || s.paid_until >= t)), essais = S0.filter(s => s.status === 'essai' && (!s.paid_until || s.paid_until >= t));
+  const soon = S0.filter(s => s.status !== 'bloque' && s.paid_until && s.paid_until >= t && daysTo(s.paid_until) <= 7).sort((a, b) => a.paid_until.localeCompare(b.paid_until));
+  const exp = S0.filter(s => s.status !== 'bloque' && s.paid_until && s.paid_until < t && daysTo(s.paid_until) >= -30).sort((a, b) => b.paid_until.localeCompare(a.paid_until));
+  const q = norm0(ABT.q), list = P.filter(x => (ABT.f === 'tous' || x.status === ABT.f) && (!q || norm0([x.shop, (x.names || []).join(' '), x.owner_name, x.owner_phone, x.code].join(' ')).includes(q)));
+  const relMsg = s => { const d = daysTo(s.paid_until), who = s.owner_name ? ' ' + s.owner_name : '';
+    return d >= 0 ? `Bonjour${who} 👋\nVotre abonnement Réseau & Vente pour « ${s.name} » se termine ${d === 0 ? "aujourd'hui" : 'dans ' + d + ' jour(s)'} (le ${fmtDate(s.paid_until, true)}).\nPour ne rien perdre, renouvelez dans l'application : Plus > Activer mon abonnement, puis tapez le code de votre paiement. Merci 🙏\nBASILUA TECH`
+      : `Bonjour${who} 👋\nVotre abonnement Réseau & Vente pour « ${s.name} » a expiré le ${fmtDate(s.paid_until, true)}. Toutes vos données sont gardées : renouvelez dans l'application (Plus > Activer mon abonnement) pour reprendre. Merci 🙏\nBASILUA TECH`; };
+  const shopRow = s => `<div class="it" style="cursor:default"><div class="m"><div class="t">${esc(s.name)}${isPro(s) ? ' · Pro' : ''}</div><div class="d">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}</div><div class="d">${daysTo(s.paid_until) >= 0 ? 'Se termine le ' + esc(fmtDate(s.paid_until, true)) + ' (' + (daysTo(s.paid_until) === 0 ? "aujourd'hui" : 'dans ' + daysTo(s.paid_until) + ' j') + ')' : 'Expiré le ' + esc(fmtDate(s.paid_until, true))}${s.status === 'essai' ? ' · essai' : ''}</div></div><div class="r">${s.owner_phone ? `<a class="btn sm wa" href="${waLink(s.owner_phone, relMsg(s))}" target="_blank" rel="noopener">${ico('wa')} Relancer</a>` : ''}</div></div>`;
+  return `<div class="kpis">
+    <div class="kpi"><div class="l">Encaissé ce mois</div><div class="v num pos">${fmt(Math.round(moisTot * 100) / 100)} $</div><div class="s">${conf.filter(x => String(x.decided_at || '').slice(0, 7) === m0).length} paiement(s) validé(s)</div></div>
+    <div class="kpi"><div class="l">À vérifier</div><div class="v num ${pend.length ? 'neg' : ''}">${pend.length}</div><div class="s">paiement(s) en attente</div></div>
+    <div class="kpi"><div class="l">Abonnés actifs</div><div class="v num pos">${actifs.length}</div><div class="s">${essais.length} en essai gratuit</div></div>
+    <div class="kpi"><div class="l">Expirent bientôt</div><div class="v num">${soon.length}</div><div class="s">dans les 7 jours${soon.some(x => x.status === 'essai') ? ' (dont ' + soon.filter(x => x.status === 'essai').length + ' essai)' : ''} · ${exp.length} expiré(s)</div></div></div>
+  ${admPayRows().replace(/<button class="card" data-a="nav:abosadmin"[\s\S]*?<\/button>/, '')}
+  <div class="sec"><h2>À relancer (${soon.length + exp.length})</h2></div>
+  <div class="list" style="margin-bottom:8px">${[...soon, ...exp].map(shopRow).join('') || '<div class="empty">Personne à relancer pour le moment.</div>'}</div>
+  <div class="sec"><h2>Tous les paiements</h2></div>
+  <input class="search" type="search" placeholder="Boutique, client, téléphone, code…" value="${esc(ABT.q)}" oninput="ABT.q=this.value;render()">
+  <div class="chips wrapc" style="margin:8px 0">${[['tous','Tous'],['averifier','À vérifier'],['confirme','Validés'],['refuse','Refusés']].map(([k, tt]) => `<button class="chip ${ABT.f === k ? 'on' : ''}" data-a="abf:${k}">${tt}</button>`).join('')}</div>
+  <div class="list">${list.map(x => `<div class="it" style="cursor:default;align-items:flex-start"><div class="m"><div class="t">${esc((x.names || [x.shop]).join(', '))} · ${fmt(num(x.amount))} $</div>
+    <div class="d">${esc(x.owner_name || '')}${x.owner_phone ? ' · ' + esc(telPretty(x.owner_phone)) : ''}${x.parrain ? ' · filleul de ' + esc(x.parrain) : ''}</div>
+    <div class="d">${x.months} mois${x.pro ? ' Pro' : ''} · ${esc(x.op)} · code <b>${esc(x.code)}</b></div>
+    <div class="d">Envoyé le ${esc(dtTxt(x.created_at))}${x.decided_at ? ' · ' + (x.status === 'refuse' ? 'refusé' : 'validé') + ' le ' + esc(dtTxt(x.decided_at)) : ''}${x.until ? " · jusqu'au " + esc(fmtDate(x.until, true)) : ''}${x.reason ? ' · ' + esc(x.reason) : ''}</div></div>
+    <div class="r"><span class="pill ${(SUB_ST[x.status] || [])[1] || ''}">${x.status === 'averifier' ? 'À vérifier' : (SUB_ST[x.status] || [x.status])[0]}</span></div></div>`).join('') || '<div class="empty">Aucun paiement.</div>'}</div>
+  <div class="sec"><h2>Calendrier</h2></div>
+  <div class="card" id="abCal" style="margin-bottom:8px">${abosCal(P)}</div>
+  <button class="btn block" style="margin:8px 0 12px" data-a="abxlsx">Télécharger tout le tableau (Excel)</button>`;
+};
+function abosCal(P){ const E = [];
+  P.forEach(x => { const who = (x.names || [x.shop]).join(', ') + (x.owner_name ? ' (' + x.owner_name + ')' : '');
+    E.push({at:x.created_at, k:['Paiement envoyé', 'var(--info)'], who, info:x.months + ' mois · ' + x.op + ' · code ' + x.code, amount:x.amount});
+    if(x.decided_at) E.push({at:x.decided_at, k:x.status === 'refuse' ? ['Refusé', 'var(--bad)'] : ['Validé', 'var(--ok)'], who, info:x.status === 'refuse' ? (x.reason || '') : (x.until ? "actif jusqu'au " + fmtDate(x.until, true) : ''), amount:x.status === 'refuse' ? null : x.amount}); });
+  E.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  if(!E.length) return '<p class="note">Rien pour le moment.</p>';
+  let out = '', day = ''; (ABT.calAll ? E : E.slice(0, 25)).forEach(e => { const d = new Date(e.at), dk = iso10(d);
+    if(dk !== day){ day = dk; out += `<div style="font-weight:800;margin:${out ? '12px' : '0'} 0 4px;text-transform:capitalize">${esc(d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'}))}</div>`; }
+    out += `<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)"><b class="num" style="min-width:48px">${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}</b><div style="flex:1;min-width:0"><span style="color:${e.k[1]};font-weight:700">${esc(e.k[0])}</span> · ${esc(e.who)}<div class="note">${esc(e.info)}</div></div>${e.amount != null ? `<b class="num">${fmt(num(e.amount))} $</b>` : ''}</div>`; });
+  return out + (!ABT.calAll && E.length > 25 ? `<button class="btn block" style="margin-top:8px" data-a="abcalall">Voir tout (${E.length})</button>` : ''); }
+A.abcalall = () => { ABT.calAll = true; render(); };
+A.abf = k => { ABT.f = k; render(); };
+A.abxlsx = () => { const P = ADMP.list || [], S0 = ADM.shops || [];
+  const blob = xlsxBlob([
+    {name:'Paiements', widths:[26,20,16,10,8,12,18,14,18,18,14,26,20], rows:[['Boutique(s)','Client','Téléphone','Statut','Mois','Montant ($)','Réseau','Code','Envoyé le','Traité le','Actif jusqu\'au','Raison du refus','Parrain'],
+      ...P.map(x => [(x.names || [x.shop]).join(', '), x.owner_name || '', x.owner_phone || '', (SUB_ST[x.status] || [x.status])[0], +x.months, num(x.amount), x.op || '', x.code || '', dtTxt(x.created_at), dtTxt(x.decided_at), x.until || '', x.reason || '', x.parrain || ''])]},
+    {name:'Boutiques', widths:[26,20,16,10,10,14], rows:[['Boutique','Propriétaire','Téléphone','Statut','Formule','Jusqu\'au'],
+      ...S0.map(s => [s.name, s.owner_name || '', s.owner_phone || '', s.status, isPro(s) ? 'Pro' : 'Simple', s.paid_until || 'sans limite'])]}]);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'abonnements-' + today() + '.xlsx'; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500); };
+CUSTOM_AFTER.abosadmin = () => {
+  const bk = $('#main .back'); if(bk){ bk.dataset.a = 'nav:admin'; bk.textContent = '‹ Espace BASILUA TECH'; }
+  if((ADMP.list === null && !ADMP.t) || Date.now() - ADMP.t > 60000) loadAdmPays().then(() => { if(view === 'abosadmin') render(); });
+  if(ADM.shops === null && !ADM.loading) loadAdmin().then(() => { if(view === 'abosadmin') render(); });
+};
+// Branchements : Mon compte (historique), Plus (BASILUA TECH)
+(() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
+  const main = $('#main'); if(!main || !ONLINE.shop) return;
+  if(view === 'reglages' && ONLINE.role === 'proprietaire'){ loadSubPays(); const h = subHistCard(); const c = [...main.querySelectorAll('.sec h2')].find(x => x.textContent.trim() === 'Mon compte'); if(h && c){ const card = c.parentElement.nextElementSibling; if(card) card.insertAdjacentHTML('afterend', h); } }
+  if(view === 'plus' && ONLINE.admin){ const m = $('#main [data-a="nav:admin"]'); if(m) m.insertAdjacentHTML('afterend', `<button class="it" data-a="nav:abosadmin"><div class="ic c-in">${ico('book')}</div><div class="m"><div class="t">Tableau des abonnements</div><div class="d" style="white-space:normal">Paiements, calendrier, expirations, relances</div></div>${ico('chev')}</button>`); }
+}catch(e){ console.error(e); } }; })();
+
+/* ---------- Paiement reçu en espèces (main à main) : enregistré comme les autres, avec reçu pour le client ---------- */
+function cashSheet(sid){ const S0 = (ADM.shops || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  if(!S0.length){ toast('Chargement des boutiques…'); loadAdmin().then(() => cashSheet(sid)); return; }
+  const s0 = S0.find(s => s.id === sid) || null;
+  sheet('Paiement reçu en espèces', `<p class="note" style="margin-bottom:10px">Pour un client qui vous a payé en main. Le paiement est enregistré comme les autres : le client le voit dans son application avec son reçu, et il compte dans vos chiffres (et pour l'ambassadeur s'il en a un).</p>
+    <form id="cashF" novalidate>
+      ${field('Boutique *', `<select name="shop" required><option value="">Choisir…</option>${S0.map(s => `<option value="${s.id}" ${s0 && s0.id === s.id ? 'selected' : ''}>${esc(s.name)} · ${esc(s.owner_name || '')}</option>`).join('')}</select>`)}
+      <div class="row2">${field('Formule *', `<select name="m">${[[1,'1 mois'],[3,'3 mois'],[6,'6 mois'],[12,'1 an']].map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`)}${field('Montant reçu ($) *', `<input name="amt" type="number" step="0.01" min="0.01" required>`)}</div>
+      <label class="f" style="display:flex;gap:10px;align-items:center;margin:0 0 10px"><input type="checkbox" name="pro" style="width:22px;height:22px;min-height:0"><span style="margin:0">Formule Pro</span></label>
+      ${field('Note (facultatif)', `<input name="note" maxlength="30" placeholder="Ex : payé au bureau">`)}
+      <div class="f"><span>L'abonnement</span>
+        <label style="display:flex;gap:10px;align-items:center;margin:6px 0"><input type="radio" name="ext" value="1" checked style="width:20px;height:20px;min-height:0"> Activer / prolonger maintenant</label>
+        <label style="display:flex;gap:10px;align-items:center;margin:6px 0"><input type="radio" name="ext" value="0" style="width:20px;height:20px;min-height:0"> Déjà activé à la main (enregistrer le paiement seulement)</label></div>
+      <button class="btn primary block" id="cashGo">Enregistrer le paiement</button></form>`);
+  const f = $('#cashF'), E = f.elements;
+  const fill = () => { const s = S0.find(x => x.id === E.shop.value); if(!s) return; const pl = planList(admOwnN(s), E.pro.checked).find(x => x.n === +E.m.value); if(pl) E.amt.value = pl.p; };
+  if(s0) E.pro.checked = isPro(s0); fill();
+  E.shop.onchange = () => { const s = S0.find(x => x.id === E.shop.value); if(s) E.pro.checked = isPro(s); fill(); }; E.m.onchange = fill; E.pro.onchange = fill;
+  f.onsubmit = async e => { e.preventDefault(); e.stopPropagation(); const s = S0.find(x => x.id === E.shop.value), amt = num(E.amt.value), ext = f.querySelector('[name=ext]:checked').value === '1';
+    if(!s) return toast('Choisissez la boutique'); if(!(amt > 0)) return toast('Montant invalide');
+    if(!await ask(`Enregistrer <b>${usd(amt)}</b> reçus en espèces de « ${esc(s.name)} » pour ${E.m.selectedOptions[0].textContent}${E.pro.checked ? ' Pro' : ''} ?${ext ? ' L\'abonnement sera prolongé.' : ' L\'abonnement ne change pas (déjà activé).'}`, 'Enregistrer', false)) return;
+    const first = !(ADMP.list || []).some(y => y.status === 'confirme' && y.owner_phone && y.owner_phone === s.owner_phone);
+    const b = $('#cashGo'); b.disabled = true;
+    const {data, error} = await sb.rpc('admin_record_cash_payment', {p_shop:s.id, p_months:+E.m.value, p_pro:E.pro.checked, p_amount:amt, p_note:E.note.value.trim(), p_extend:ext});
+    if(error){ b.disabled = false; return toast(rpcErr(error)); }
+    toast('Paiement enregistré'); ADMP.t = 0; loadAdmPays(); loadAdmin();
+    sheet('Paiement enregistré', `<div class="card" style="margin-bottom:10px"><div class="dl"><span>Boutique</span><span><b>${esc(s.name)}</b></span></div><div class="dl"><span>Montant</span><span><b>${usd(amt)}</b> en espèces</span></div><div class="dl"><span>Code du reçu</span><span><b>${esc(data.code)}</b></span></div><div class="dl"><span>Actif jusqu'au</span><span>${data.until ? esc(fmtDate(data.until, true)) : 'sans limite'}</span></div></div>
+      <p class="note" style="margin-bottom:10px">Le client a reçu une notification. Il voit ce paiement et son reçu dans Réglages > Mon compte.</p>
+      ${s.owner_phone ? `<a class="btn wa block" href="${waLink(s.owner_phone, `Bonjour ${s.owner_name || ''} 👋\nNous avons bien reçu votre paiement en espèces de ${usd(amt)} pour Réseau & Vente (reçu ${data.code}). Votre abonnement est actif${data.until ? " jusqu'au " + fmtDate(data.until, true) : ''}.\nVotre reçu est dans l'application : Plus > Réglages > Mon compte.\nMerci pour votre confiance 🙏${first ? ambWelcome() : ''}\nBASILUA TECH`)}" target="_blank" rel="noopener">${ico('wa')} Prévenir le client</a>` : ''}`); };
+}
+A.cashpay = sid => cashSheet(typeof sid === 'string' ? sid : '');
+{ const a0 = A.admshop; A.admshop = async function(id){ await a0.apply(this, arguments); try{ const shb = $('#shb'); if(shb && !shb.querySelector('[data-a^="cashpay"]')) shb.insertAdjacentHTML('afterbegin', `<button class="btn primary block" style="margin-bottom:10px" data-a="cashpay:${id}">Enregistrer un paiement reçu en espèces</button>`); }catch(_){} }; }
+// Tableau des abonnements : bouton en haut
+(() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
+  if(view === 'abosadmin' && ONLINE.admin){ const k = $('#main .kpis'); if(k) k.insertAdjacentHTML('afterend', `<button class="btn primary block" style="margin-top:12px" data-a="cashpay">Enregistrer un paiement reçu en espèces</button>`); }
+}catch(e){ console.error(e); } }; })();
+
+/* ---------- Faire connaître le programme ambassadeur : messages prêts pour les clients en essai et les abonnés ---------- */
+const admCfg = () => Object.assign({}, REF_DEF, (ADMR.d && ADMR.d.cfg) || {});
+const ambWelcome = () => { const c = admCfg(); return `\n\n🎁 Bonne nouvelle : avec ce premier abonnement, vous êtes maintenant *ambassadeur* ! Invitez d'autres commerçants et gagnez *${c.pct1} %* de leur premier paiement, puis ${c.pct2} % à chaque renouvellement, retirés par Mobile Money. Ouvrez l'application : Plus > Gagner de l'argent.`; };
+function annMsg(kind, s){ const c = admCfg(), who = s && s.owner_name ? ' ' + s.owner_name : '', shop = s ? ' pour « ' + s.name + ' »' : '';
+  if(kind === 'essai') return `Bonjour${who} 👋\nMerci d'essayer Réseau & Vente${shop} !\n\n🎁 Nouveau : après votre premier abonnement, vous devenez automatiquement *ambassadeur* et vous pouvez gagner de l'argent : *${c.pct1} %* sur chaque commerçant que vous invitez, puis ${c.pct2} % à chaque renouvellement, retirés par Mobile Money.\n\nActivez votre abonnement dans l'application : Plus > Activer mon abonnement.\nBASILUA TECH`;
+  return `Bonjour${who} 👋\nMerci pour votre abonnement à Réseau & Vente 🙏\n\n🆕 Mise à jour : vous pouvez maintenant gagner de l'argent avec l'application ! Devenez *ambassadeur* : invitez d'autres commerçants et gagnez *${c.pct1} %* de leur premier paiement, puis ${c.pct2} % à chaque renouvellement, retirés par Mobile Money dès ${c.min} $.\n\nOuvrez l'application : Plus > Gagner de l'argent.\nBASILUA TECH`; }
+const annSent = () => { try{ return JSON.parse(localStorage.getItem('stock_amb_annonce') || '{}'); }catch(_){ return {}; } };
+A.annsent = (v, el) => { if(el && el.href) window.open(el.href, '_blank', 'noopener'); const m = annSent(); m[v] = today(); try{ localStorage.setItem('stock_amb_annonce', JSON.stringify(m)); }catch(_){} if(el){ const it = el.closest('.it'); if(it){ const r = it.querySelector('.annok'); if(r) r.textContent = 'Envoyé aujourd\'hui'; } } };
+A.anncopy = k => copyText(annMsg(k, null));
+function annSection(){ const S0 = ADM.shops; if(S0 === null) return '<div class="card empty">Chargement…</div>';
+  const t = today(), sent = annSent(), myPh = ((ONLINE.user && ONLINE.user.user_metadata) || {}).phone || '';
+  const ess = S0.filter(s => s.status === 'essai' && (!s.paid_until || s.paid_until >= t) && s.owner_phone && s.owner_phone !== myPh);
+  const abo = S0.filter(s => s.status === 'actif' && (!s.paid_until || s.paid_until >= t) && s.owner_phone && s.owner_phone !== myPh);
+  const row = (s, k) => `<div class="it" style="cursor:default"><div class="m"><div class="t">${esc(s.name)}</div><div class="d">${esc(s.owner_name || '—')} · ${esc(telPretty(s.owner_phone || ''))}</div><div class="d annok">${sent[k + ':' + s.id] ? 'Envoyé le ' + esc(fmtDate(sent[k + ':' + s.id])) : ''}</div></div><div class="r"><a class="btn sm wa" href="${waLink(s.owner_phone, annMsg(k, s))}" target="_blank" rel="noopener" data-a="annsent:${k}:${s.id}">${ico('wa')} Envoyer</a></div></div>`;
+  return `<p class="note" style="margin:0 2px 8px">Messages prêts pour faire connaître le programme. Touchez « Envoyer » : WhatsApp s'ouvre avec le message. Vous pouvez aussi copier le message pour un groupe ou votre statut.</p>
+    <details class="card" style="margin-bottom:8px"><summary><b>Clients en essai (${ess.length})</b> · « après votre premier abonnement, devenez ambassadeur »</summary>
+      <button class="btn sm" style="margin:8px 0" data-a="anncopy:essai">Copier le message</button><div class="list">${ess.map(s => row(s, 'essai')).join('') || '<div class="empty">Personne en essai.</div>'}</div></details>
+    <details class="card" style="margin-bottom:8px"><summary><b>Clients abonnés (${abo.length})</b> · « merci, mise à jour : gagnez de l'argent »</summary>
+      <button class="btn sm" style="margin:8px 0" data-a="anncopy:abo">Copier le message</button><div class="list">${abo.map(s => row(s, 'abo')).join('') || '<div class="empty">Aucun abonné pour le moment.</div>'}</div></details>`; }
+// Dans le tableau des ambassadeurs (et un raccourci dans celui des abonnements)
+(() => { const r0 = render; render = function(){ r0.apply(this, arguments); try{
+  if(!ONLINE.admin) return; const main = $('#main'); if(!main) return;
+  if(view === 'ambadmin'){ if(ADM.shops === null && !ADM.loading) loadAdmin().then(() => { if(view === 'ambadmin') render(); });
+    const h = [...main.querySelectorAll('.sec h2')].find(x => x.textContent.trim() === 'Tous les ambassadeurs');
+    if(h) h.parentElement.insertAdjacentHTML('beforebegin', `<div class="sec"><h2>Faire connaître le programme</h2></div>${annSection()}`); }
+  if(view === 'abosadmin'){ const h = [...main.querySelectorAll('.sec h2')].find(x => x.textContent.trim() === 'Tous les paiements');
+    if(h) h.parentElement.insertAdjacentHTML('beforebegin', `<div class="sec"><h2>Annoncer le programme ambassadeur</h2></div>${annSection()}`); }
 }catch(e){ console.error(e); } }; })();
 
 </script>
