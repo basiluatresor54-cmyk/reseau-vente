@@ -4984,7 +4984,7 @@ function scanCode(title){
         <div style="position:absolute;left:8%;right:8%;top:34%;height:24%;border:3px solid #fff;border-radius:18px;box-shadow:0 0 0 9999px rgba(0,0,0,.35)"></div>
         <div id="scanmsg" style="position:absolute;left:0;right:0;top:calc(34% - 54px);text-align:center;font-weight:700;font-size:17px;text-shadow:0 1px 4px #000">${esc(title || 'Placez le code-barres dans le cadre')}</div></div>
       <div style="background:#111;padding:14px 14px calc(14px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center">
-        <input id="scanin" autocomplete="off" placeholder="ou tapez le code" style="flex:1;min-width:0;min-height:46px;border-radius:12px;border:0;padding:0 12px;font-size:16px">
+        <input id="scanin" autocomplete="off" placeholder="ou tapez le code" style="flex:1;min-width:0;min-height:46px;border-radius:12px;border:0;padding:0 12px;font-size:16px;color:#111;background:#fff">
         <button class="btn sm primary" id="scanok" style="min-height:46px">OK</button><button class="btn sm" id="scanx" style="min-height:46px">Fermer</button></div></div>`);
     const ov = $('#scanov'), v = ov.querySelector('video'); let stream = null, done = false, timer = null;
     const stop = () => { done = true; clearTimeout(timer); try{ stream && stream.getTracks().forEach(t => t.stop()); }catch(_){} ov.remove(); };
@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '78e51e9f2c';
+const APP_BUILD = 'd371fc0714';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
