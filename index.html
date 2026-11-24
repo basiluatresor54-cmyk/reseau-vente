@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'd371fc0714';
+const APP_BUILD = 'ac56b36763';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -8407,6 +8407,153 @@ try{ new MutationObserver(ms => { for(const m of ms) for(const n of m.addedNodes
 (() => { let last = ''; const r0 = render; render = function(){ const out = r0.apply(this, arguments);
   try{ const on = document.querySelector('#nav button.on'), k = on ? on.dataset.a : ''; if(on && last && k !== last) on.classList.add('pop'); last = k; }catch(_){}
   return out; }; })();
+
+/* ---------- Commandes import : retrait du client (qui a récupéré, reste payé, frais de transport, reçu) ---------- */
+(() => {
+  if(typeof cmdSheet !== 'function' || typeof cmdCalc !== 'function') return;
+  const calc0 = cmdCalc;
+  cmdCalc = function(c){ const k = calc0(c), R = c && c.retrait;
+    k.fraisU = R && num(R.fraisAmt) > 0 ? usdOf(R.fraisAmt, R.fraisCur || k.cur) : 0;
+    if(k.fraisU){ k.margeU += k.fraisU; } return k; };
+  const amtR = (a, cur) => amtX(num(a), cur || '$');
+  function retraitMsg(c){ const R = c.retrait || {}, k = cmdCalc(c), st = S.settings;
+    const lines = [`Bonjour ${c.client || ''},`, '', `*Reçu de retrait* — commande ${cmdNo(c)}`, `${c.title || 'Commande'}${num(c.qty) > 1 ? ' × ' + c.qty : ''}`, '',
+      `Total : ${amtR(k.total, k.cur)}`];
+    if(num(R.payAmt) > 0) lines.push(`Payé aujourd'hui : ${amtR(R.payAmt, R.payCur)}${R.payPay ? ' (' + R.payPay + ')' : ''}`);
+    lines.push(`Total payé : ${amtR(k.paid, k.cur)}`);
+    if(num(R.fraisAmt) > 0) lines.push(`Frais de transport payés : ${amtR(R.fraisAmt, R.fraisCur)}${R.fraisPay ? ' (' + R.fraisPay + ')' : ''}`);
+    lines.push(k.reste > 0 ? `*Reste à payer : ${amtR(k.reste, k.cur)}*` : '*Tout est réglé. Merci !*', '',
+      `Récupéré par : ${R.self ? (c.client || 'le client') : (R.by || '-')}${R.byPhone ? ' — ' + R.byPhone : ''}`, `Date : ${dAbs(R.date || today(), 1)}`, '',
+      `${st.shop || ''}`.trim());
+    return lines.join('\n').trim(); }
+  function retraitCard(c){ const R = c.retrait; if(!R) return '';
+    return `<div class="card" id="retraitCard" style="margin-top:10px"><b>Retrait du client</b>
+      <div class="dl"><span>Récupéré par</span><span>${esc(R.self ? (c.client || 'Le client') : (R.by || '-'))}${R.byPhone ? ' · ' + esc(R.byPhone) : ''}</span></div>
+      <div class="dl"><span>Date</span><span>${dAbs(R.date || today(), 1)}</span></div>
+      ${num(R.payAmt) > 0 ? `<div class="dl"><span>Reste payé au retrait</span><span class="num">${amtR(R.payAmt, R.payCur)}${R.payPay ? ' · ' + esc(R.payPay) : ''}</span></div>` : ''}
+      ${num(R.fraisAmt) > 0 ? `<div class="dl"><span>Frais de transport payés</span><span class="num">${amtR(R.fraisAmt, R.fraisCur)}${R.fraisPay ? ' · ' + esc(R.fraisPay) : ''}</span></div>` : ''}
+      ${R.note ? `<p class="note" style="margin-top:6px">${esc(R.note)}</p>` : ''}
+      ${c.phone ? `<a class="btn wa block" style="margin-top:8px" href="${waLink(c.phone, retraitMsg(c))}" target="_blank" rel="noopener">${ico('wa')} Envoyer le reçu de retrait</a>` : `<button class="btn block" style="margin-top:8px" data-a="retraitcopy:${c.id}">Copier le reçu de retrait</button>`}
+    </div>`; }
+  const sheet0 = cmdSheet;
+  cmdSheet = function(id){ const out = sheet0.apply(this, arguments);
+    try{ const c = cmds().find(x => x.id === id), box = document.getElementById('shb'); if(!c || !box) return out;
+      const stepBtn = box.querySelector('[data-a^="cmdstep:"]');
+      if(c.step === 'arrive' && !c.retrait){
+        const b = `<button class="btn primary block" style="margin-top:12px" data-a="cmdretrait:${c.id}">Retrait du client : il récupère sa commande</button>`;
+        if(stepBtn) stepBtn.insertAdjacentHTML('beforebegin', b); else { const k = box.querySelector('.kpis'); if(k) k.insertAdjacentHTML('afterend', b); }
+      }
+      if(c.retrait){ const steps = [...box.querySelectorAll('.card')].find(x => /Étapes/.test(x.textContent)); const h = retraitCard(c);
+        if(steps) steps.insertAdjacentHTML('beforebegin', h); else box.insertAdjacentHTML('beforeend', h); }
+    }catch(_){ }
+    return out; };
+  function retraitForm(id){ const c = cmds().find(x => x.id === id); if(!c) return; const k = cmdCalc(c);
+    const pays = PAYS.map(p => p ? `<option>${p}</option>` : '<option value="">—</option>').join(''), curs = cur => curOpts(cur || k.cur, [['$','$'],['FC',LC()]]);
+    sheet('Retrait du client', `<form id="rtf"><p class="note" style="margin-bottom:10px">${esc(c.title)} · ${cmdNo(c)} · reste à payer <b>${amtX(k.reste, k.cur)}</b></p>
+      ${field('Qui récupère ?', `<select name="who"><option value="self">${esc(c.client || 'Le client')} lui-même</option><option value="other">Une autre personne</option></select>`)}
+      <div id="rtOther" hidden><div class="row2">${field('Nom de la personne *', `<input name="by" maxlength="60">`)}${field('Téléphone', `<input name="byPhone" type="tel" placeholder="+243 …">`)}</div></div>
+      <div class="sec" style="margin:10px 0 6px"><h2>Reste de l'argent payé maintenant</h2></div>
+      <div class="row3">${field('Montant', `<input name="payAmt" type="number" step="any" min="0" value="${k.reste > 0 ? k.reste : ''}" placeholder="0">`)}${field('Devise', `<select name="payCur">${curs(k.cur)}</select>`)}${field('Payé en', `<select name="payPay">${pays}</select>`)}</div>
+      <div class="sec" style="margin:10px 0 6px"><h2>Frais de transport payés par le client</h2></div>
+      <div class="row3">${field('Montant', `<input name="fraisAmt" type="number" step="any" min="0" placeholder="0">`)}${field('Devise', `<select name="fraisCur">${curs(k.cur)}</select>`)}${field('Payé en', `<select name="fraisPay">${pays}</select>`)}</div>
+      <p class="note" style="margin:-2px 0 8px">Laissez 0 si le transport est déjà compris dans le prix.</p>
+      <div class="row2">${field('Date du retrait', `<input name="date" type="date" value="${today()}">`)}${field('Note', `<input name="note" maxlength="120" placeholder="Ex : pièce d'identité vue">`)}</div>
+      <button class="btn primary block">Valider le retrait</button></form>`);
+    const f = $('#rtf'); f.elements.who.onchange = () => { $('#rtOther').hidden = f.elements.who.value !== 'other'; };
+    f.onsubmit = e => { e.preventDefault(); e.stopPropagation(); const E = f.elements, self = E.who.value !== 'other';
+      if(!self && !E.by.value.trim()){ toast('Écrivez le nom de la personne qui récupère'); E.by.focus(); return; }
+      const d = E.date.value || today(), payAmt = num(E.payAmt.value), fraisAmt = num(E.fraisAmt.value);
+      if(payAmt < 0 || fraisAmt < 0) return;
+      c.pays = c.pays || [];
+      if(payAmt > 0) c.pays.push({id:uid(), date:d, amt:payAmt, cur:E.payCur.value, pay:E.payPay.value, retrait:true});
+      c.retrait = {self, by:self ? '' : E.by.value.trim(), byPhone:self ? '' : E.byPhone.value.trim(), date:d, ts:Date.now(),
+        payAmt, payCur:E.payCur.value, payPay:payAmt > 0 ? E.payPay.value : '', fraisAmt, fraisCur:E.fraisCur.value, fraisPay:fraisAmt > 0 ? E.fraisPay.value : '',
+        note:E.note.value.trim(), user:(ONLINE.user && ONLINE.user.user_metadata && ONLINE.user.user_metadata.name) || ''};
+      c.step = 'livre'; c.steps = Object.assign({}, c.steps, {livre:d});
+      save(); closeSheet(); render(); cmdSheet(c.id);
+      const r = cmdCalc(c).reste; if(r > 0) toast('Retrait enregistré. Il reste ' + amtX(r, cmdCalc(c).cur) + ' à payer.'); else cheer('Retrait validé, commande réglée', 70); };
+  }
+  Object.assign(A, {
+    cmdretrait: id => { closeSheet(); retraitForm(id); },
+    retraitcopy: id => { const c = cmds().find(x => x.id === id); if(c) copyText(retraitMsg(c)); }
+  });
+
+  /* Téléphone commandé : marque, modèle, mémoire, couleur, IMEI / n° de série, garantie */
+  const TBRANDS = ['Apple (iPhone)','Samsung','Tecno','Infinix','itel','Xiaomi','Redmi','Oppo','Vivo','Huawei','Honor','Realme','Google Pixel','Nokia','Motorola','OnePlus'];
+  const TGARS = ['', 'Sans garantie', '7 jours', '1 mois', '3 mois', '6 mois', '1 an'];
+  const telHas = c => !!(c && (c.marque || c.modele || c.mem || c.coul || c.sn || c.gar));
+  const telGarDate = c => (c.retrait && c.retrait.date) || (c.steps || {}).livre || '';
+  const telGar = (c, plain) => { if(!c.gar) return ''; const d = telGarDate(c);
+    if(!d) return plain ? 'Garantie : ' + c.gar : esc('Garantie : ' + c.gar + ' (commence au retrait)');
+    return garTxt({type:'vente', status:'livre', gar:c.gar, date:d, ldate:d, ddate:d}, plain); };
+  function telFields(c){ c = c || {};
+    return `<details class="card" id="telw" style="margin:10px 0;border:1.5px dashed var(--line)" ${telHas(c) ? 'open' : ''}><summary><b>Téléphone : marque, modèle, IMEI</b> <span class="note">(optionnel)</span></summary><div style="margin-top:10px">
+      <div class="row2">${field('Marque', `<input name="t_marque" list="tBrandDL" maxlength="40" value="${esc(c.marque || '')}" placeholder="Ex : Samsung">`)}${field('Modèle / série', `<input name="t_modele" maxlength="60" value="${esc(c.modele || '')}" placeholder="Ex : Galaxy A54">`)}</div>
+      <datalist id="tBrandDL">${TBRANDS.map(x => `<option value="${x}">`).join('')}</datalist>
+      <div class="row2">${field('Mémoire', `<input name="t_mem" maxlength="30" value="${esc(c.mem || '')}" placeholder="Ex : 8 Go / 256 Go">`)}${field('Couleur', `<input name="t_coul" maxlength="30" value="${esc(c.coul || '')}" placeholder="Ex : Noir">`)}</div>
+      ${field('IMEI ou numéro de série', `<textarea name="t_sn" rows="1" maxlength="900" style="min-height:48px" placeholder="Ex : 356938035643809 (tapez *#06# sur le téléphone)">${esc(c.sn || '')}</textarea>`, 'Un numéro par pièce, séparés par une virgule ou à la ligne')}<div id="tsnwarn"></div>
+      ${field('Garantie', `<select name="t_gar">${TGARS.map(g => `<option value="${g}" ${(c.gar || '') === g ? 'selected' : ''}>${g || '—'}</option>`).join('')}</select>`)}
+    </div></details>`; }
+  function telRead(E){ const v = n => (E[n] ? String(E[n].value || '').trim() : '');
+    return {marque:v('t_marque'), modele:v('t_modele'), mem:v('t_mem'), coul:v('t_coul'), sn:v('t_sn'), gar:v('t_gar')}; }
+  function telApply(c, t){ ['marque','modele','mem','coul','sn','gar'].forEach(k => { if(t[k]) c[k] = t[k]; else delete c[k]; }); }
+  function telWarnBind(f, qty){ const E = f.elements; if(!E.t_sn) return; const run = () => { const w = f.querySelector('#tsnwarn'); if(!w) return;
+      const L = snList(E.t_sn.value), out = [];
+      L.forEach(t => { if(/^\d+$/.test(t) && t.length === 15 && !luhn(t)) out.push(`Le numéro ${esc(t)} semble faux : vérifiez-le (tapez *#06# sur le téléphone).`);
+        else if(/^\d+$/.test(t) && t.length >= 13 && t.length <= 17 && t.length !== 15) out.push(`${esc(t)} : un IMEI a 15 chiffres (celui-ci en a ${t.length}).`); });
+      const q = typeof qty === 'function' ? qty() : qty; if(L.length && q > 0 && L.length !== q) out.push(`La commande a ${q} pièce(s) mais vous avez noté ${L.length} numéro(s).`);
+      w.innerHTML = out.length ? `<p class="note red" style="margin:-4px 0 10px">${out.join('<br>')}</p>` : ''; };
+    E.t_sn.addEventListener('input', run); if(E.qty) E.qty.addEventListener('input', run); run(); }
+  const telLines = c => { const L = []; const mm = [c.marque, c.modele, c.mem, c.coul].filter(Boolean).join(' · ');
+    if(mm) L.push('Téléphone : ' + mm); if(c.sn) L.push('IMEI / N° de série : ' + snList(c.sn).join(', ')); const g = telGar(c, 1); if(g) L.push(g); return L; };
+  function telCard(c){ if(!telHas(c)) return '';
+    const row = (l, v, mono) => v ? `<div class="dl"><span>${l}</span><span${mono ? ' style="font-family:ui-monospace,monospace;word-break:break-all;text-align:right"' : ''}>${esc(v)}</span></div>` : '';
+    return `<div class="card" id="telCard" style="margin-top:10px"><b>Téléphone</b>${row('Marque', c.marque)}${row('Modèle / série', c.modele)}${row('Mémoire', c.mem)}${row('Couleur', c.coul)}${row('IMEI / N° de série', c.sn ? snList(c.sn).join(', ') : '', 1)}${c.gar ? `<div class="dl"><span>Garantie</span><span>${telGar(c)}</span></div>` : ''}</div>`; }
+  // Fiche de la commande : carte « Téléphone »
+  const sheet1 = cmdSheet;
+  cmdSheet = function(id){ const out = sheet1.apply(this, arguments);
+    try{ const c = cmds().find(x => x.id === id), box = document.getElementById('shb'); if(!c || !box || !telHas(c)) return out;
+      const ref = box.querySelector('#retraitCard') || [...box.querySelectorAll('.card')].find(x => /Étapes/.test(x.textContent));
+      if(ref) ref.insertAdjacentHTML('beforebegin', telCard(c)); else box.insertAdjacentHTML('beforeend', telCard(c));
+    }catch(_){ }
+    return out; };
+  // Formulaire de commande (nouvelle ou modifiée) : bloc « Téléphone »
+  if(typeof cmdForm === 'function'){ const form0 = cmdForm;
+    cmdForm = function(id){ const out = form0.apply(this, arguments);
+      try{ const f = document.getElementById('cmdf'); if(!f) return out; const c = id ? cmds().find(x => x.id === id) : null;
+        const t = f.elements.title, at = t && t.closest('.f'); if(at) at.insertAdjacentHTML('afterend', telFields(c)); else f.insertAdjacentHTML('afterbegin', telFields(c));
+        telWarnBind(f, () => Math.max(1, Math.round(num(f.elements.qty && f.elements.qty.value) || 1)));
+        f.addEventListener('submit', () => { const vals = telRead(f.elements), before = new Set(cmds().map(x => x.id));
+          queueMicrotask(() => { const tgt = c || cmds().find(x => !before.has(x.id)); if(!tgt) return; const had = JSON.stringify([tgt.marque, tgt.modele, tgt.mem, tgt.coul, tgt.sn, tgt.gar]);
+            telApply(tgt, vals); if(JSON.stringify([tgt.marque, tgt.modele, tgt.mem, tgt.coul, tgt.sn, tgt.gar]) !== had){ save(); if(document.getElementById('shb')) cmdSheet(tgt.id); } }); }, true);
+      }catch(_){ }
+      return out; }; }
+  // Retrait : on vérifie / complète le téléphone au moment où le client le prend
+  const rform0 = retraitForm;
+  retraitForm = function(id){ rform0(id); try{ const f = document.getElementById('rtf'), c = cmds().find(x => x.id === id); if(!f || !c) return;
+      const btn = f.querySelector('button.primary'); btn.insertAdjacentHTML('beforebegin', telFields(c)); telWarnBind(f, Math.max(1, Math.round(num(c.qty) || 1)));
+      f.addEventListener('submit', () => { if(c.retrait) return; const vals = telRead(f.elements); queueMicrotask(() => { if(!c.retrait) return; telApply(c, vals); save(); if(document.getElementById('shb')) cmdSheet(c.id); }); }, true);
+    }catch(_){ } };
+  A.cmdretrait = id => { closeSheet(); retraitForm(id); };
+  // Reçu de retrait : marque, modèle, IMEI, garantie
+  const rmsg0 = retraitMsg;
+  retraitMsg = function(c){ const t = rmsg0(c), L = telLines(c); if(!L.length) return t;
+    const head = `${c.title || 'Commande'}${num(c.qty) > 1 ? ' × ' + c.qty : ''}`; return t.replace(head, head + '\n' + L.join('\n')); };
+  // « Vérifier un IMEI » : cherche aussi dans les commandes import
+  if(typeof imeiSheet === 'function'){ const im0 = imeiSheet;
+    imeiSheet = function(){ const out = im0.apply(this, arguments);
+      try{ const q = $('#imq'); if(!q) return out; const run = () => { const box = $('#imr'), v = q.value.replace(/\s+/g, '').toLowerCase(); if(!box) return;
+          box.querySelectorAll('.impsn').forEach(x => x.remove()); if(v.length < 4) return;
+          const L = cmds().filter(c => c.sn && snList(c.sn).some(t => t.toLowerCase().includes(v))); if(!L.length) return;
+          const empty = box.querySelector('.card.empty'); if(empty) empty.remove();
+          box.insertAdjacentHTML('beforeend', `<div class="list impsn" style="margin-top:8px">${L.map(c => `<button class="it" data-a="cmd:${c.id}"><div class="m"><div class="t">${esc([c.marque, c.modele].filter(Boolean).join(' ') || c.title)} · commande import</div>
+            <div class="d" style="font-family:ui-monospace,monospace">${esc(snList(c.sn).filter(t => t.toLowerCase().includes(v)).join(', '))}</div>
+            <div class="d">${cmdNo(c)} · ${esc(c.client || 'client')}${c.phone ? ' · ' + esc(c.phone) : ''}${c.retrait ? ' · retiré le ' + esc(fmtDate(c.retrait.date)) : ''}</div>${c.gar ? `<div class="d">${telGar(c)}</div>` : ''}</div>
+            <div class="r"><span class="note">${esc(stepOf(c.step)[1])}</span></div></button>`).join('')}</div>`); };
+        q.addEventListener('input', run); run(); }catch(_){ }
+      return out; }; }
+  window.__retrait = {retraitMsg: c => retraitMsg(c)};
+})();
 
 </script>
 </body>
