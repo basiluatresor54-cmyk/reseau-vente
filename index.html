@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '93fa252ad5';
+const APP_BUILD = '0f7b4f6dde';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -8864,6 +8864,82 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
         G.oninput = upd; if(C) C.onchange = upd;
       }catch(_){ }
       return out; }; }
+})();
+
+/* ---------- Versements déclarés : doublons, montant anormal (FC tapé en $), notification qui ouvre la validation ---------- */
+(() => {
+  if(typeof declsOf !== 'function') return;
+  const hm = ts => { if(!ts) return ''; const d = new Date(ts); return String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0'); };
+  const same = (a, b) => { const x = declUSD(a), y = declUSD(b); return x > 0 && Math.abs(x - y) <= Math.max(0.5, x * 0.01); };
+  function dupOf(d){ return declsOf(d.liv).find(o => o.id !== d.id && o.date === d.date && (o.status === 'attente' || o.status === 'confirme') && same(o, d) && (o.ts || 0) < (d.ts || Infinity)) || null; }
+  function oweUSD(lid){ try{ return Math.max(0, livStats(lid).toRemit); }catch(_){ return 0; } }
+  // Un montant en $ beaucoup trop grand : sûrement des francs congolais tapés en dollars
+  function looksFC(d, owe){ if(d.cur !== '$' || num(d.amount) < 1000) return false; const o = owe != null ? owe : oweUSD(d.liv); return num(d.amount) > Math.max(o * 5, o + 300); }
+  window.__decl = {dupOf, looksFC};
+  const row0 = declRow;
+  declRow = function(d, owner){ let h = row0.apply(this, arguments);
+    try{ if(!owner || d.status !== 'attente') return h; const w = [], dup = dupOf(d), rt = num(d.rate) || rate();
+      if(dup) w.push(`<div class="d" style="color:var(--bad);font-weight:700;white-space:normal">Doublon possible : ${amt(num(dup.amount), dup.cur)} déjà déclaré ${dup.ts ? 'à ' + hm(dup.ts) : 'ce jour'} (${dup.status === 'confirme' ? 'déjà confirmé' : 'en attente'}). Ne confirmez qu'un seul des deux.</div><button class="btn sm ghost-bad" style="margin-top:4px" data-a="declkodup:${d.id}">Refuser : doublon</button>`);
+      if(looksFC(d)) w.push(`<div class="d" style="color:var(--warn,#b45309);font-weight:700;white-space:normal">Montant anormal : ${esc(lname(d.liv))} doit ${money(oweUSD(d.liv))}. C'était sûrement ${amt(num(d.amount), 'FC')} (≈ ${money(num(d.amount) / rt)}).</div><button class="btn sm" style="margin-top:4px" data-a="declokfc:${d.id}">Confirmer en FC</button>`);
+      if(w.length) h = h.replace(/(<div class="m">[\s\S]*?)(<\/div>\s*<div class="r">)/, (all, a, b) => a + w.join('') + b);
+    }catch(_){ }
+    return h; };
+  // Confirmer : prévenir avant d'ajouter deux fois le même argent
+  const ok0 = A.declok;
+  A.declok = async function(id){ const d = S.moves.find(m => m.id === id); if(!d || d.status !== 'attente') return;
+    const dup = dupOf(d);
+    if(dup && !await ask(`Attention : ${esc(lname(d.liv))} a déjà déclaré ${amt(num(dup.amount), dup.cur)} ${dup.ts ? 'à ' + hm(dup.ts) : 'aujourd\'hui'} (${dup.status === 'confirme' ? 'déjà confirmé' : 'en attente'}). Chaque confirmation AJOUTE l'argent. Confirmez seulement si c'est un 2e envoi reçu.`, 'C\'est un 2e envoi', false)) return;
+    if(looksFC(d) && !await ask(`${amt(num(d.amount), '$')} : c'est beaucoup plus que ce que ${esc(lname(d.liv))} doit (${money(oweUSD(d.liv))}). Si c'était des francs, touchez « Annuler » puis « Confirmer en FC ».`, 'Oui, ce sont des dollars', false)) return;
+    return ok0.apply(this, arguments); };
+  A.declokfc = async id => { const d = S.moves.find(m => m.id === id); if(!d || d.status !== 'attente') return;
+    const old = d.cur; d.cur = 'FC'; d.fixedCur = old;
+    const dup = dupOf(d);
+    if(dup && !await ask(`En francs, cela fait ${amt(num(d.amount), 'FC')} : le même montant que ${amt(num(dup.amount), dup.cur)} déjà déclaré ${dup.ts ? 'à ' + hm(dup.ts) : 'aujourd\'hui'} (${dup.status === 'confirme' ? 'déjà confirmé' : 'en attente'}). Confirmez seulement si c'est un 2e envoi reçu.`, 'C\'est un 2e envoi', false)){ d.cur = old; delete d.fixedCur; return; }
+    await ok0(id);
+    if(d.status !== 'confirme'){ d.cur = old; delete d.fixedCur; } else { save(); } render(); if(!$('#ov').hidden && $('#sht').textContent === 'Versements déclarés') A.decllist(); };
+  A.declkodup = async id => { const d = S.moves.find(m => m.id === id); if(!d || d.status !== 'attente') return; const dup = dupOf(d);
+    if(!await ask(`Refuser cette déclaration de ${amt(num(d.amount), d.cur)} (doublon) ? L'argent ne sera pas compté deux fois.`, 'Refuser', false)) return;
+    d.status = 'refuse'; d.reason = 'Doublon : déjà déclaré' + (dup && dup.ts ? ' à ' + hm(dup.ts) : ''); save(); render(); toast('Doublon refusé');
+    if(!$('#ov').hidden && $('#sht').textContent === 'Versements déclarés') A.decllist(); };
+  // La liste : d'abord celles à confirmer
+  const dl0 = A.decllist;
+  A.decllist = function(){ const out = dl0.apply(this, arguments);
+    try{ const L = declsOf(), pend = L.filter(d => d.status === 'attente'), rest = L.filter(d => d.status !== 'attente').slice(0, 30), box = document.querySelector('#shb .list'); if(!box || !L.length) return out;
+      box.outerHTML = `${pend.length ? `<div class="sec" style="margin-top:0"><h2>À confirmer (${pend.length})</h2></div><div class="list" style="margin-bottom:12px">${pend.map(d => declRow(d, true)).join('')}</div>` : '<div class="card" style="margin-bottom:12px"><p class="note">Rien à confirmer pour le moment.</p></div>'}
+        ${rest.length ? `<div class="sec"><h2>Déjà traités</h2></div><div class="list">${rest.map(d => declRow(d, true)).join('')}</div>` : ''}`; }catch(_){ }
+    return out; };
+  // Notification « a créé une déclaration de versement » : on la touche → la validation s'ouvre
+  if(typeof ntRow === 'function'){ const nr0 = ntRow;
+    ntRow = function(r){ const h = nr0.apply(this, arguments);
+      try{ if(r && r.kind === 'move' && ((r.n || {}).type === 'decl') && r.action !== 'delete' && !['livreur', 'vendeur'].includes(ONLINE.role) && /^<div /.test(h))
+          return h.replace(/^<div /, '<button data-a="decllist" style="width:100%;text-align:left" ').replace(/<\/div>$/, '</button>'); }catch(_){ }
+      return h; }; }
+  // Livreur : prévenir avant de déclarer deux fois, ou des francs en dollars
+  if(A.decl){ const d0 = A.decl;
+    A.decl = function(){ const out = d0.apply(this, arguments);
+      try{ const f = document.getElementById('declf'); if(!f) return out; let pass = false; const lid = ONLINE.shop && ONLINE.shop.livreur_id;
+        f.addEventListener('submit', async e => { if(pass){ pass = false; return; } const E = f.elements, d = {id:'new', liv:lid, amount:num(E.amount.value), cur:E.cur.value, rate:rate(), date:today(), ts:Date.now()};
+          if(!(d.amount > 0)) return; const dup = dupOf(d), fc = looksFC(d); if(!dup && !fc) return;
+          e.preventDefault(); e.stopImmediatePropagation();
+          if(fc){ const r = await ask(`${amt(d.amount, '$')} ? C'est beaucoup. Vous avez envoyé ${amt(d.amount, 'FC')} (francs) ?`, 'Oui, ce sont des FC', false);
+            if(r){ E.cur.value = 'FC'; } else if(!await ask(`Déclarer quand même ${amt(d.amount, '$')} (dollars) ?`, 'Oui, en dollars', false)) return; }
+          const d2 = Object.assign({}, d, {cur:E.cur.value}), dup2 = dupOf(d2);
+          if(dup2 && !await ask(`Vous avez déjà déclaré ${amt(num(dup2.amount), dup2.cur)} ${dup2.ts ? 'à ' + hm(dup2.ts) : 'aujourd\'hui'}. Est-ce un NOUVEL envoi d'argent ?`, 'Oui, un nouvel envoi', false)) { toast('Rien n\'a été envoyé : votre 1re déclaration suffit'); closeSheet(); return; }
+          pass = true; f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', {cancelable:true})); }, true);
+      }catch(_){ }
+      return out; }; }
+})();
+
+/* ---------- Commission de la semaine : comptée au jour de la LIVRAISON (pas au jour de la commande) ---------- */
+(() => {
+  if(typeof livStats !== 'function' || typeof mday !== 'function') return;
+  const ls0 = livStats;
+  livStats = function(id){ const r = ls0.apply(this, arguments);
+    try{ const ws = weekStart(); r.week = 0; r.weekN = 0; r.weekByProd = {};
+      for(const m of S.moves){ if(m.type !== 'vente' || m.status !== 'livre' || (m.liv !== id && m.loc !== id) || mday(m) < ws) continue;
+        const c = m.qty * num(m.commU); r.week += c; r.weekN++; const W = r.weekByProd[m.pid] = r.weekByProd[m.pid] || {q:0, c:0, a:0}; W.q += m.qty; W.c += c; W.a += saleUSD(m); }
+    }catch(_){ }
+    return r; };
 })();
 
 </script>
