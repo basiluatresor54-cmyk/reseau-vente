@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '8f0fdeb25e';
+const APP_BUILD = '1b5b7a7da3';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -9781,6 +9781,396 @@ html.fx.glass .daycard.halo-up,html.fx.glass .daycard.halo-dn{animation:haloP 3s
   A.pgradshopoff = () => { if(!isOwner()) return; delete S.settings.grad; const P = persoGet(); if(P.grad === '') delete P.grad; persoSet(P); save(); fin('Dégradé de la boutique enlevé'); };
   A.ptod = v => { try{ if(v === 'on') localStorage.setItem(TODK, 'on'); else localStorage.removeItem(TODK); }catch(_){ } applyTheme(); render(); toast(v === 'on' ? 'Couleurs selon l\'heure activées' : 'Couleurs selon l\'heure coupées'); };
   applyTheme(); try{ applyBrand(); }catch(_){ }
+})();
+
+/* =================================================================
+   Adresse par vocal et position sur la carte
+   - Vente : enregistrer un vocal, joindre un vocal (fichier), dicter l'adresse en texte, coller la position.
+   - WhatsApp → Partager → Réseau & Vente : le vocal (ou la position) arrive dans l'app (Android, app installée).
+   - Livreur : « Écouter l'adresse », « Y aller (carte) », « J'arrive » (message WhatsApp prêt).
+   Les vocaux sont gardés dans Supabase Storage (dossier privé « vocaux » de la boutique).
+   ================================================================= */
+(() => {
+  if(typeof ONLINE === 'undefined') return;
+  const BK = 'vocaux', LCK = 'vocaux-local', QK = 'stock_voice_q', MAXB = 3 * 1024 * 1024, MAXS = 120;
+  const shopId = () => ONLINE.shop && ONLINE.shop.id;
+  const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const canEdit = () => ONLINE.role !== 'livreur';
+  const SVG = {play:'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>', pause:'<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+    mic:'<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    clip:'<svg viewBox="0 0 24 24"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.6 1.6 0 0 1-2.3-2.3L15 7.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    pin:'<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="9.5" r="2.5" fill="currentColor"/></svg>',
+    go:'<svg viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>'};
+  document.head.insertAdjacentHTML('beforeend', `<style id="voccss">
+.vlist{display:flex;flex-direction:column;gap:8px;margin:6px 0}
+.vchip{display:flex;align-items:center;gap:10px;background:var(--brand-soft);border-radius:16px;padding:6px 10px 6px 6px;min-height:46px}
+.vchip .vp{flex:none;width:36px;height:36px;border-radius:50%;border:0;background:var(--brand);color:var(--brand-ink);display:grid;place-items:center;cursor:pointer}
+.vchip .vp svg{width:18px;height:18px}
+.vchip .vb{flex:1;height:6px;border-radius:3px;background:rgba(var(--brand-rgb),.18);overflow:hidden;min-width:40px}
+.vchip .vb i{display:block;height:100%;width:0;background:var(--brand);border-radius:3px}
+.vchip .vt{font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--muted)}
+.vchip .vl{font-size:13px;font-weight:700}
+.vchip .vx{flex:none;border:0;background:none;font-size:20px;color:var(--muted);width:30px;height:30px;cursor:pointer}
+.vchip.loading .vp{opacity:.6}
+.vchip.wait .vt::after{content:' · en attente d\\'envoi';font-weight:500}
+.vbtns{display:flex;gap:8px;flex-wrap:wrap}.vbtns .btn{flex:1;min-width:130px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.vbtns svg,.vgo svg,.vdict svg{width:18px;height:18px}
+.vrec{display:flex;align-items:center;gap:12px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);border-radius:16px;padding:10px 12px;margin-top:8px}
+.vrec .dot{width:12px;height:12px;border-radius:50%;background:#dc2626;animation:vpulse 1s ease-in-out infinite}
+@keyframes vpulse{50%{opacity:.25;transform:scale(.8)}}
+.vrec b{font-variant-numeric:tabular-nums;font-size:17px;flex:1}
+.vgeo{display:flex;gap:8px;margin-top:8px}.vgeo input{flex:1;min-width:0}
+.vdict{display:inline-flex;align-items:center;gap:6px;margin-top:6px}
+.vdict.on{background:#dc2626!important;color:#fff!important;border-color:#dc2626!important}
+.vgo{display:flex;align-items:center;justify-content:center;gap:8px}
+.vocRow{margin:6px 0 4px}
+.vocRow .btns{margin-top:6px}
+.jarr .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vtag{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;color:var(--brand-tx,var(--brand));margin-left:6px}
+.vtag svg{width:13px;height:13px}
+</style>`);
+  // ---------- Stockage : envoi, file d'attente hors ligne, copie locale
+  const cache = () => caches.open(LCK);
+  async function cachePut(p, b){ try{ (await cache()).put('https://rv.local/__vocal/' + p, new Response(b, {headers:{'Content-Type':b.type || 'audio/ogg'}})); }catch(_){ } }
+  async function cacheGet(p){ try{ const r = await (await cache()).match('https://rv.local/__vocal/' + p); return r ? await r.blob() : null; }catch(_){ return null; } }
+  const qGet = () => { try{ return JSON.parse(localStorage.getItem(QK) || '[]'); }catch(_){ return []; } };
+  const qSet = a => { try{ localStorage.setItem(QK, JSON.stringify(a)); }catch(_){ } };
+  function mimeOf(type, name){ const t = String(type || '').split(';')[0].trim().toLowerCase(); if(t.startsWith('audio/')) return t === 'audio/opus' ? 'audio/ogg' : t;
+    const e = (String(name || '').match(/\.([a-z0-9]+)$/i) || [])[1] || ''; return ({opus:'audio/ogg', ogg:'audio/ogg', oga:'audio/ogg', m4a:'audio/mp4', mp4:'audio/mp4', aac:'audio/aac', mp3:'audio/mpeg', amr:'audio/amr', wav:'audio/wav', webm:'audio/webm', '3gp':'audio/3gpp'})[e.toLowerCase()] || 'audio/ogg'; }
+  const extOf = t => ({'audio/ogg':'ogg', 'audio/mp4':'m4a', 'audio/aac':'aac', 'audio/mpeg':'mp3', 'audio/amr':'amr', 'audio/wav':'wav', 'audio/webm':'webm', 'audio/3gpp':'3gp'})[t] || 'ogg';
+  async function upload(p, b){ const {error} = await sb.storage.from(BK).upload(p, b, {contentType:b.type, upsert:false}); if(error && !/exist|duplicate/i.test(error.message || '')) throw error; }
+  function durOf(b){ return new Promise(res => { try{ const a = new Audio(), u = URL.createObjectURL(b); let done = false; const fin = v => { if(done) return; done = true; URL.revokeObjectURL(u); res(v); };
+    a.preload = 'metadata'; a.onloadedmetadata = () => fin(isFinite(a.duration) ? Math.round(a.duration) : null); a.onerror = () => fin(null); setTimeout(() => fin(null), 3000); a.src = u; }catch(_){ res(null); } }); }
+  async function attach(blob, src, name, d){
+    if(!blob || !blob.size) return null; if(blob.size > MAXB){ toast('Vocal trop long (3 Mo au plus, environ 3 minutes)'); return null; }
+    if(!shopId()){ toast('Connectez-vous d\'abord'); return null; }
+    const type = mimeOf(blob.type, name), b = blob.type === type ? blob : new Blob([blob], {type}), p = `${shopId()}/${rid()}.${extOf(type)}`;
+    await cachePut(p, b); if(d == null) d = await durOf(b);
+    let up = true; try{ if(!navigator.onLine) throw new Error('off'); await upload(p, b); }catch(_){ up = false; qSet([...qGet(), p]); }
+    return {p, d: d || null, src, ts: Date.now(), up};
+  }
+  let flushing = false;
+  async function flush(){ if(flushing || !navigator.onLine) return; flushing = true; try{ for(const p of qGet()){ const b = await cacheGet(p); try{ if(b) await upload(p, b); qSet(qGet().filter(x => x !== p)); }catch(_){ } } }finally{ flushing = false; } }
+  addEventListener('online', () => setTimeout(flush, 1500)); setTimeout(flush, 6000);
+  async function blobFor(p){ let b = await cacheGet(p); if(b) return b;
+    const {data, error} = await sb.storage.from(BK).createSignedUrl(p, 600); if(error || !data) throw error || new Error('no url');
+    const r = await fetch(data.signedUrl); if(!r.ok) throw new Error('http ' + r.status); b = await r.blob(); cachePut(p, b); return b; }
+  // ---------- Lecteur (un seul à la fois)
+  const AU = new Audio(); let cur = null, curUrl = '';
+  const mmss = s => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  const chips = p => [...document.querySelectorAll('.vchip')].filter(c => c.dataset.vp === p);
+  function paintChips(){ document.querySelectorAll('.vchip').forEach(c => { const on = cur && c.dataset.vp === cur && !AU.paused; c.querySelector('.vp').innerHTML = on ? SVG.pause : SVG.play;
+    if(cur && c.dataset.vp === cur){ const t = AU.currentTime || 0, D = isFinite(AU.duration) && AU.duration > 0 ? AU.duration : num(c.dataset.d); c.querySelector('.vb i').style.width = D ? Math.min(100, t / D * 100) + '%' : '0'; if(!AU.paused || t) c.querySelector('.vt').textContent = mmss(t) + (D ? ' / ' + mmss(D) : ''); }
+    else { c.querySelector('.vb i').style.width = '0'; c.querySelector('.vt').textContent = c.dataset.d ? mmss(c.dataset.d) : ''; } }); }
+  AU.addEventListener('timeupdate', paintChips); AU.addEventListener('pause', paintChips); AU.addEventListener('play', paintChips);
+  AU.addEventListener('ended', () => { AU.currentTime = 0; const p = cur; cur = null; paintChips(); chips(p).forEach(c => c.querySelector('.vt').textContent = c.dataset.d ? mmss(c.dataset.d) : ''); });
+  A.vplay = async (_, el) => { const c = el && el.closest('.vchip'); if(!c) return; const p = c.dataset.vp;
+    if(cur === p){ if(AU.paused) AU.play().catch(() => {}); else AU.pause(); return; }
+    AU.pause(); cur = p; c.classList.add('loading');
+    try{ const b = await blobFor(p); if(cur !== p) return; if(curUrl) URL.revokeObjectURL(curUrl); curUrl = URL.createObjectURL(b); AU.src = curUrl; await AU.play(); }
+    catch(_){ if(cur === p) cur = null; toast(navigator.onLine ? 'Vocal pas encore disponible' : 'Pas de connexion : le vocal n\'a pas encore été téléchargé'); }
+    finally { c.classList.remove('loading'); paintChips(); } };
+  const chipH = (v, i, lab, del) => `<div class="vchip${v.up === false && qGet().includes(v.p) ? ' wait' : ''}" data-vp="${esc(v.p)}" data-d="${v.d || ''}"><button type="button" class="vp" data-a="vplay" aria-label="Écouter">${SVG.play}</button>${lab ? `<span class="vl">${esc(lab)}</span>` : ''}<span class="vb"><i></i></span><span class="vt">${v.d ? mmss(v.d) : ''}</span>${del ? `<button type="button" class="vx" data-vdel="${i}" aria-label="Retirer">×</button>` : ''}</div>`;
+  // ---------- Position
+  function parseGeo(s){ s = String(s || '').trim(); if(!s) return null;
+    const m = s.match(/(?:[?&](?:q|ll|query|destination|daddr)=|@|^|\s)(-?\d{1,2}\.\d{2,})\s*,\s*(-?\d{1,3}\.\d{2,})/);
+    if(m){ const lat = +m[1], lng = +m[2]; if(Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return {lat:+lat.toFixed(6), lng:+lng.toFixed(6)}; }
+    const u = s.match(/https?:\/\/\S+/); if(u) return {url:u[0]};
+    return {q:s.slice(0, 200)}; }
+  const geoTxt = g => !g ? '' : g.lat != null ? g.lat + ', ' + g.lng : g.url || g.q || '';
+  const goUrl = g => !g ? '' : g.lat != null ? `https://www.google.com/maps/dir/?api=1&destination=${g.lat},${g.lng}` : g.url ? g.url : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(g.q)}`;
+  const mainOf = m => (window.__fee && window.__fee.mainOf) ? window.__fee.mainOf(m) : m;
+  window.__voc = {parseGeo, goUrl, attach, flush, blobFor, mimeOf, pending:null};
+  // ---------- Formulaire de vente
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(typeof moveForm === 'function'){ const mf0 = moveForm;
+    moveForm = function(type, opt){ const out = mf0.apply(this, arguments);
+      try{ const f = document.getElementById('mf'), E = f && f.elements, id = opt && opt.id, m0 = id ? S.moves.find(x => x.id === id) : null;
+        if(!f || !E.addr || (m0 ? m0.type : type) !== 'vente' || !canEdit()) return out;
+        const M0 = m0 ? mainOf(m0) : null;
+        let vs = M0 && Array.isArray(M0.voice) ? M0.voice.map(v => ({...v})) : [], geo = M0 && M0.geo ? geoTxt(M0.geo) : '';
+        const pend = window.__voc.pending; window.__voc.pending = null;
+        if(pend){ if(pend.voice) vs.push(pend.voice); if(pend.geo) geo = pend.geo; }
+        const at = E.addr.closest('.f') || E.addr.parentElement;
+        if(SR) E.addr.insertAdjacentHTML('afterend', `<button type="button" class="btn sm vdict" id="vDict">${SVG.mic}<span>Dicter l'adresse</span></button>`);
+        at.insertAdjacentHTML('afterend', `<div class="f" id="vocW"><span>Adresse en vocal et position</span>
+          <div class="vlist" id="vocL"></div>
+          <div class="vbtns"><button type="button" class="btn" id="vRec">${SVG.mic}Enregistrer un vocal</button><button type="button" class="btn" id="vFileB">${SVG.clip}Joindre un vocal</button><input type="file" id="vFile" accept="audio/*,.opus,.ogg,.m4a,.mp3,.aac,.amr,.wav" hidden></div>
+          <div class="vrec" id="vRecW" hidden><span class="dot"></span><b id="vRecT">0:00</b><button type="button" class="btn primary sm" id="vRecStop">Arrêter</button><button type="button" class="btn sm" id="vRecX">Annuler</button></div>
+          <div class="vgeo"><input name="f_geo" id="vGeo" placeholder="Position : collez le lien WhatsApp ou Google Maps" value="${esc(geo)}" autocomplete="off"><button type="button" class="btn sm" id="vPaste">${SVG.pin}Coller</button></div>
+          <small>Le livreur écoute le vocal et touche « Y aller » pour la carte. Astuce : dans WhatsApp, appui long sur le vocal du client → Partager → Réseau & Vente.</small></div>`);
+        const L = document.getElementById('vocL');
+        const draw = () => { L.innerHTML = vs.map((v, i) => chipH(v, i, 'Vocal ' + (i + 1), true)).join(''); };
+        draw();
+        L.addEventListener('click', e => { const x = e.target.closest('[data-vdel]'); if(!x) return; e.preventDefault(); if(cur && vs[+x.dataset.vdel] && vs[+x.dataset.vdel].p === cur){ AU.pause(); cur = null; } vs.splice(+x.dataset.vdel, 1); draw(); });
+        const add = async (blob, src, name, d) => { const v = await attach(blob, src, name, d); if(v){ vs.push(v); draw(); if(document.getElementById('isl') && window.__isl) window.__isl.show({ic:'✓', cls:'ok', t1:'Vocal ajouté', t2:v.up ? 'Envoyé' : 'Sera envoyé dès la connexion', am:v.d ? mmss(v.d) : ''}, 2200); } };
+        // Joindre un fichier
+        document.getElementById('vFileB').onclick = () => document.getElementById('vFile').click();
+        document.getElementById('vFile').onchange = e => { const fl = e.target.files && e.target.files[0]; e.target.value = ''; if(fl) add(fl, 'fichier', fl.name); };
+        // Enregistrer
+        let rec = null, chunks = [], t0 = 0, tick = 0, stream = null, cancel = false;
+        const RW = document.getElementById('vRecW'), RT = document.getElementById('vRecT'), RB = document.getElementById('vRec');
+        const stopAll = () => { clearInterval(tick); try{ stream && stream.getTracks().forEach(t => t.stop()); }catch(_){ } stream = null; RW.hidden = true; RB.disabled = false; };
+        RB.onclick = async () => {
+          if(!navigator.mediaDevices || !window.MediaRecorder) return toast('Ce téléphone ne permet pas d\'enregistrer ici. Utilisez « Joindre un vocal ».');
+          try{ stream = await navigator.mediaDevices.getUserMedia({audio:true}); }catch(_){ return toast('Micro refusé : autorisez le micro pour l\'application'); }
+          const mt = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+          try{ rec = new MediaRecorder(stream, mt ? {mimeType:mt, audioBitsPerSecond:24000} : undefined); }catch(_){ rec = new MediaRecorder(stream); }
+          chunks = []; cancel = false; rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+          rec.onstop = () => { const d = Math.round((Date.now() - t0) / 1000); stopAll(); if(cancel || !chunks.length) return; add(new Blob(chunks, {type:(rec.mimeType || mt || 'audio/webm')}), 'enreg', '', d); };
+          rec.start(1000); t0 = Date.now(); RW.hidden = false; RB.disabled = true; RT.textContent = '0:00';
+          tick = setInterval(() => { const s = (Date.now() - t0) / 1000; RT.textContent = mmss(s) + ' / ' + mmss(MAXS); if(s >= MAXS && rec && rec.state === 'recording') rec.stop(); }, 250);
+        };
+        document.getElementById('vRecStop').onclick = () => { if(rec && rec.state === 'recording') rec.stop(); };
+        document.getElementById('vRecX').onclick = () => { cancel = true; if(rec && rec.state === 'recording') rec.stop(); else stopAll(); };
+        // Coller la position
+        document.getElementById('vPaste').onclick = async () => { try{ const t = await navigator.clipboard.readText(); if(t){ document.getElementById('vGeo').value = t.trim(); const g = parseGeo(t); toast(g && g.lat != null ? 'Position collée' : 'Lien collé'); } else toast('Rien à coller'); }catch(_){ document.getElementById('vGeo').focus(); toast('Appui long dans la case puis « Coller »'); } };
+        // Dicter l'adresse
+        const DB = document.getElementById('vDict');
+        if(DB){ let r = null;
+          DB.onclick = e => { e.preventDefault(); if(r){ try{ r.stop(); }catch(_){ } return; }
+            try{ r = new SR(); }catch(_){ return toast('Dictée non disponible sur ce téléphone'); }
+            r.lang = 'fr-FR'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+            const base = E.addr.value.trim(); let fin = '';
+            r.onresult = ev => { let tmp = ''; for(let i = ev.resultIndex; i < ev.results.length; i++){ const t = ev.results[i][0].transcript; if(ev.results[i].isFinal) fin += t; else tmp += t; }
+              E.addr.value = (base ? base + ' ' : '') + (fin + tmp).trim(); };
+            r.onerror = ev => { if(ev && ev.error === 'not-allowed') toast('Micro refusé : autorisez le micro'); else if(ev && ev.error === 'network') toast('La dictée a besoin d\'internet'); };
+            r.onend = () => { r = null; DB.classList.remove('on'); DB.querySelector('span').textContent = 'Dicter l\'adresse'; };
+            try{ r.start(); DB.classList.add('on'); DB.querySelector('span').textContent = 'J\'écoute… (toucher pour arrêter)'; }catch(_){ r = null; } }; }
+        // Enregistrement de la vente : vocaux et position sur la commande
+        f.addEventListener('submit', () => { if(rec && rec.state === 'recording'){ try{ rec.stop(); }catch(_){ } }
+          const gv = parseGeo((document.getElementById('vGeo') || {}).value), list = vs.map(({p, d, src, ts}) => ({p, d, src, ts})), before = new Set(S.moves.map(x => x.id));
+          queueMicrotask(() => { const rec2 = (m0 && S.moves.find(x => x.id === m0.id)) || S.moves.filter(x => x.type === 'vente' && !before.has(x.id)).sort((a, b) => (a.ts || 0) - (b.ts || 0))[0]; if(!rec2) return;
+            const M = mainOf(rec2), was = JSON.stringify([M.voice, M.geo]);
+            if(list.length) M.voice = list; else delete M.voice; if(gv) M.geo = gv; else delete M.geo;
+            if(JSON.stringify([M.voice, M.geo]) !== was) save(); }); }, true);
+      }catch(e){ console.error(e); }
+      return out; }; }
+  // ---------- Fiche de la vente (patron, vendeur) : écouter, Y aller
+  if(typeof saleSheet === 'function'){ const ss0 = saleSheet;
+    saleSheet = function(id){ const out = ss0.apply(this, arguments);
+      try{ const m = S.moves.find(x => x.id === id); if(!m) return out; const M = mainOf(m); const vs = Array.isArray(M.voice) ? M.voice : [];
+        if(!vs.length && !M.geo) return out; const card = document.querySelector('#shb .card'); if(!card) return out;
+        card.insertAdjacentHTML('beforeend', `<div class="vocRow"><div class="vlist">${vs.map((v, i) => chipH(v, i, vs.length > 1 ? 'Adresse ' + (i + 1) : 'Écouter l\'adresse', false)).join('')}</div>${M.geo ? `<a class="btn block vgo" href="${esc(goUrl(M.geo))}" target="_blank" rel="noopener">${SVG.go}Y aller (carte)</a>` : ''}</div>`);
+      }catch(_){ }
+      return out; }; }
+  // ---------- Écran du livreur
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    try{ if(view === 'moi'){
+      document.querySelectorAll('#main .card[id^="mv-"]').forEach(c => { if(c.querySelector('.vocRow')) return; const m = S.moves.find(x => x.id === c.id.slice(3)); if(!m || m.type !== 'vente') return;
+        const M = mainOf(m), vs = Array.isArray(M.voice) ? M.voice : [], pendg = m.status === 'attente' || m.status === 'encours';
+        if(!vs.length && !M.geo && !(m.phone && pendg)) return;
+        const h = `<div class="vocRow"><div class="vlist">${vs.map((v, i) => chipH(v, i, vs.length > 1 ? 'Adresse ' + (i + 1) : 'Écouter l\'adresse', false)).join('')}</div>
+          <div class="btns">${M.geo ? `<a class="btn primary vgo" href="${esc(goUrl(M.geo))}" target="_blank" rel="noopener">${SVG.go}Y aller (carte)</a>` : ''}${m.phone && pendg ? `<button type="button" class="btn" data-a="jarrive" data-id="${m.id}">J'arrive</button>` : ''}</div></div>`;
+        const ad = [...c.querySelectorAll('.dl')].find(d => /^Adresse/.test((d.firstElementChild || {}).textContent || ''));
+        if(ad) ad.insertAdjacentHTML('afterend', h); else c.insertAdjacentHTML('beforeend', h); });
+      // garder les vocaux du jour sur le téléphone (écoute sans internet)
+      if(navigator.onLine) S.moves.forEach(m => { if(m.type === 'vente' && (m.status === 'attente' || m.status === 'encours') && Array.isArray(m.voice)) m.voice.forEach(v => { cacheGet(v.p).then(b => { if(!b) blobFor(v.p).catch(() => {}); }); }); });
+    }
+    // petit signe « vocal » dans les listes de ventes
+    document.querySelectorAll('#main button.it[data-a^="sale:"]').forEach(b => { if(b.querySelector('.vtag')) return; const m = S.moves.find(x => x.id === b.dataset.a.slice(5)); if(!m) return; const M = mainOf(m);
+      const has = Array.isArray(M.voice) && M.voice.length, g = !!M.geo; if(!has && !g) return; const t = b.querySelector('.t'); if(t) t.insertAdjacentHTML('beforeend', `<span class="vtag">${has ? SVG.mic + 'vocal' : ''}${g ? SVG.pin + (has ? '' : 'carte') : ''}</span>`); });
+    }catch(_){ }
+    return out; };
+  // « J'arrive » : message WhatsApp prêt
+  A.jarrive = (_, el) => { const m = S.moves.find(x => x.id === (el && el.dataset.id)); if(!m) return; const L = liv(m.liv);
+    const lines = (typeof orderLines === 'function' ? orderLines(m) : [m]), prods = lines.map(x => pname(x.pid) + ' × ' + x.qty).join(', ');
+    const due = lines.reduce((t, x) => t + (x.pre ? 0 : x.credit ? (x.creditMain ? num(x.acompte) : 0) : x.qty * x.price), 0), cu = m.cur || '$';
+    let fee = 0, fc = cu; try{ fee = feeFor(m) || 0; fc = window.__fee ? window.__fee.feeCurOf(m) : cu; }catch(_){ }
+    const pay = due || fee ? `\nÀ payer : ${due ? amt(due, cu) : ''}${due && fee ? ' + ' : ''}${fee ? amt(fee, fc) + ' (livraison)' : ''}.` : '';
+    const msg = n => `Bonjour ${m.client || ''},\nJe suis ${L ? L.name : 'votre livreur'}, livreur de ${S.settings.shop || 'la boutique'}. J'arrive dans ${n} minutes avec votre commande : ${prods}.${pay}\nMerci de rester joignable.`;
+    sheet('J\'arrive', `<div class="jarr"><p class="note" style="margin-bottom:10px">Choisissez dans combien de temps vous arrivez. WhatsApp s'ouvre avec le message prêt pour ${esc(m.client || 'le client')}.</p>
+      <div class="btns">${[5, 10, 15, 30].map(n => `<a class="btn ${n === 10 ? 'primary' : ''}" href="${waLink(m.phone, msg(n))}" target="_blank" rel="noopener" data-jn="${n}">${n} min</a>`).join('')}</div></div>`);
+    document.querySelectorAll('#shb [data-jn]').forEach(a => a.addEventListener('click', () => setTimeout(closeSheet, 300)));
+  };
+  // ---------- Vocal ou position partagés depuis WhatsApp
+  async function takeShare(){
+    let c; try{ c = await caches.open('partage'); }catch(_){ return; }
+    const meta = await c.match('https://rv.local/__partage/meta'); if(!meta) return; let M = {}; try{ M = await meta.json(); }catch(_){ }
+    const files = []; for(let i = 0; i < (M.n || 0); i++){ const r = await c.match('https://rv.local/__partage/f' + i); if(r) files.push({blob:await r.blob(), name:decodeURIComponent(r.headers.get('X-Name') || '')}); }
+    await Promise.all([c.delete('https://rv.local/__partage/meta'), ...Array.from({length:M.n || 0}, (_, i) => c.delete('https://rv.local/__partage/f' + i))]);
+    if(!canEdit()) return toast('Seuls le patron et les vendeurs peuvent ajouter un vocal');
+    const txt = [M.title, M.text, M.url].filter(Boolean).join(' '), g = parseGeo(txt), geo = g && (g.lat != null || g.url) ? geoTxt(g) : '';
+    if(!files.length && !geo) return toast('Rien à ajouter depuis le partage');
+    const voice = files.length ? await attach(files[0].blob, 'whatsapp', files[0].name) : null; if(files.length && !voice) return;
+    const P = S.moves.filter(m => m.type === 'vente' && (m.status === 'attente' || m.status === 'encours') && (typeof orderLines !== 'function' || orderLines(m)[0].id === m.id)).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 15);
+    window.__voc.share = {voice, geo};
+    sheet(voice ? 'Vocal reçu de WhatsApp' : 'Position reçue de WhatsApp', `${voice ? `<div class="vlist">${chipH(voice, 0, 'Écouter', false)}</div>` : `<p class="note">${SVG.pin} ${esc(geo)}</p>`}
+      <button class="btn primary block" style="margin:12px 0" data-a="vshare:new">Nouvelle vente avec ${voice ? 'ce vocal' : 'cette position'}</button>
+      ${P.length ? `<div class="sec" style="margin-top:4px"><h2>Ou l'ajouter à une commande en attente</h2></div><div class="list">${P.map(m => `<button class="it" data-a="vshare:${m.id}" style="width:100%"><div class="m"><div class="t">${esc(m.client || 'Client')}</div><div class="d">${esc(pname(m.pid))} × ${m.qty}${m.liv && liv(m.liv) ? ' · ' + esc(liv(m.liv).name) : ''} · ${esc(fmtDate(m.date))}</div></div><div class="r">›</div></button>`).join('')}</div>` : ''}`);
+  }
+  A.vshare = arg => { const s = window.__voc.share; if(!s) return; window.__voc.share = null;
+    if(arg === 'new'){ closeSheet(); window.__voc.pending = s; setTimeout(() => moveForm('vente'), 220); return; }
+    const m = S.moves.find(x => x.id === arg); if(!m) return; const M = mainOf(m);
+    if(s.voice) M.voice = [...(Array.isArray(M.voice) ? M.voice : []), {p:s.voice.p, d:s.voice.d, src:s.voice.src, ts:s.voice.ts}];
+    if(s.geo) M.geo = parseGeo(s.geo);
+    save(); closeSheet(); render(); toast((s.voice ? 'Vocal ajouté' : 'Position ajoutée') + ' à la commande de ' + (m.client || 'ce client'));
+    if(window.__isl) window.__isl.show({ic:'✓', cls:'ok', t1:s.voice ? 'Vocal ajouté' : 'Position ajoutée', t2:(m.client || '') + (m.liv && liv(m.liv) ? ' · ' + liv(m.liv).name + ' peut l\'écouter' : '')}, 3000);
+  };
+  window.__voc.takeShare = takeShare;
+  if(/[?&]partage=1\b/.test(location.search)){ try{ history.replaceState(null, '', location.pathname); }catch(_){ }
+    let n = 0; const tm = setInterval(() => { n++; if(ONLINE.shop && S && S.moves && document.getElementById('main') && document.getElementById('main').children.length){ clearInterval(tm); setTimeout(takeShare, 600); } else if(n > 60) clearInterval(tm); }, 500); }
+})();
+
+/* =================================================================
+   « Coller une commande WhatsApp » plus intelligent + prix de livraison par quartier
+   - Comprend une conversation copiée (plusieurs messages, avec « [date heure] Nom : »),
+     enlève les messages de la boutique, lit le nom de l'expéditeur, l'adresse écrite sans « Adresse : »,
+     la commune / le quartier, « je m'appelle… », « deux pommades », le lien de position.
+   - Bouton « Coller et remplir » (1 toucher).
+   - Frais de livraison : le prix de la ville reste par défaut ; on peut ajouter des quartiers plus chers
+     (ex. Maluku, Nsele). Le quartier est reconnu dans l'adresse et le prix se met tout seul.
+   ================================================================= */
+(() => {
+  if(typeof parseOrder !== 'function') return;
+  const nz = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’']/g, ' ');
+  const COMM = {Kinshasa:['Bandalungwa', 'Barumbu', 'Bumbu', 'Gombe', 'Kalamu', 'Kasa-Vubu', 'Kimbanseke', 'Kintambo', 'Kisenso', 'Lemba', 'Limete', 'Lingwala', 'Makala', 'Maluku', 'Masina', 'Matete', 'Mont-Ngafula', 'Ndjili', 'Ngaba', 'Ngaliema', 'Ngiri-Ngiri', 'Nsele', 'Selembao',
+      'Binza', 'Ma Campagne', 'UPN', 'Righini', 'Kingabwa', 'Matonge', 'Victoire', 'Delvaux', 'Kingasani', 'Mikondo', 'Pompage', 'Kinkole', 'Mitendi', 'Kimwenza', 'Bon Marché', 'Yolo', 'Kauka', 'Kinsuka', 'Mombele', 'Salongo', 'Kimbangu', 'Camp Luka', 'Ozone', 'Lukunga', 'Mbudi', 'Kibomango', 'Mpasa', 'Bibwa', 'Petro-Congo', 'Kasavubu'],
+    Lubumbashi:['Annexe', 'Kamalondo', 'Kampemba', 'Katuba', 'Kenya', 'Rwashi', 'Golf', 'Bel Air', 'Kassapa', 'Kigoma', 'Carrefour'], Kolwezi:['Dilala', 'Manika', 'Mutoshi', 'Kasulo', 'Musonoie', 'Kapata'], Likasi:['Kikula', 'Panda', 'Shituru', 'Mapodji'], Bukavu:['Ibanda', 'Kadutu', 'Bagira'], Goma:['Karisimbi', 'Himbi', 'Katindo', 'Kyeshero'], Matadi:['Nzanza', 'Mvuzi'], Kisangani:['Makiso', 'Tshopo', 'Kabondo', 'Mangobo']};
+  const ALLC = Object.entries(COMM).flatMap(([c, L]) => L.map(q => [q, c])).sort((a, b) => b[0].length - a[0].length);
+  const hasWord = (text, w) => { const T = ' ' + nz(text).replace(/[^a-z0-9]+/g, ' ') + ' ', W = ' ' + nz(w).replace(/[^a-z0-9]+/g, ' ').trim() + ' '; return W.trim() && T.includes(W); };
+  function communeOf(text){ for(const [q, c] of ALLC) if(hasWord(text, q)) return {q, c}; return null; }
+  const NUMW = {un:1, une:1, deux:2, trois:3, quatre:4, cinq:5, six:6, sept:7, huit:8, neuf:9, dix:10, douze:12, quinze:15, vingt:20};
+  const ADDR_KW = /\b(avenue|av\.?|rue|n°|no\s*\d|num[ée]ro\s*\d|r[ée]f(?:[ée]rence)?|rep[èe]re|arr[eê]t|croisement|en face|derri[eè]re|[àa] c[ôo]t[ée]|pr[eè]s de|quartier|commune|bloc|cit[ée]|camp|parcelle|immeuble|march[ée]|[ée]glise|[ée]cole|station|rond[- ]point|terminus|building|home|cel(?:lule)?)\b/i;
+  // Messages copiés depuis WhatsApp : « [25/11/2026 10:12] Jemima : … », « [10:12, 25/11/2026] Jemima: … », « 25/11/2026 10:12 - Jemima: … »
+  const PFX = [/^\[(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})[, ]+(?:à\s*)?(\d{1,2}[:h]\d{2})(?::\d{2})?\]\s*([^:]{1,40}?)\s*:\s?(.*)$/i,
+    /^\[(\d{1,2}[:h]\d{2})(?::\d{2})?[, ]+(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\]\s*([^:]{1,40}?)\s*:\s?(.*)$/i,
+    /^(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})[, ]+(?:à\s*)?(\d{1,2}[:h]\d{2})\s*[-–]\s*([^:]{1,40}?)\s*:\s?(.*)$/i];
+  const JUNK = /^(<?m[ée]dias? omis>?|<?media omitted>?|message vocal|image absente|vid[ée]o absente|ce message a [ée]t[ée] supprim[ée]|‎?(audio|image|vid[ée]o|sticker) omis)/i;
+  function clean(txt){
+    const L = String(txt || '').replace(/\r/g, '').replace(/[‎‏‪-‮]/g, '').split('\n'), msgs = []; let curM = null;
+    for(const raw of L){ let x = null; for(const re of PFX){ x = raw.trim().match(re); if(x) break; }
+      if(x){ curM = {who:x[3].trim(), lines:[x[4]]}; msgs.push(curM); } else if(curM) curM.lines.push(raw); else msgs.push(curM = {who:'', lines:[raw]}); }
+    const shop = nz(S.settings.shop || ''), me = nz((typeof ONLINE !== 'undefined' && ONLINE.user && ONLINE.user.user_metadata && (ONLINE.user.user_metadata.full_name || ONLINE.user.user_metadata.name)) || '');
+    const isShop = w => { const n = nz(w); return !!n && (n === 'vous' || n === 'you' || n === 'moi' || (shop && (n.includes(shop) || shop.includes(n))) || (me && n === me)); };
+    const senders = {}; msgs.forEach(m => { if(m.who && !isShop(m.who)) senders[m.who] = (senders[m.who] || 0) + m.lines.join(' ').length; });
+    // une personne qui envoie le modèle de commande = la boutique
+    msgs.forEach(m => { if(m.who && /pour commander, r[ée]pondez|merci pour votre int[ée]r[eê]t/i.test(m.lines.join(' '))) delete senders[m.who]; });
+    const named = Object.keys(senders), client = named.sort((a, b) => senders[b] - senders[a])[0] || '';
+    const keep = msgs.filter(m => !m.who || (named.length ? named.includes(m.who) : !isShop(m.who)));
+    const text = keep.map(m => m.lines.filter(l => !JUNK.test(l.trim())).join('\n')).join('\n').trim();
+    return {text, client, multi:msgs.filter(m => m.who).length > 0};
+  }
+  // Produits : « huiles », « pommades » doivent trouver « Huile », « Pommade » (le pluriel enlevait trop de lettres)
+  if(typeof bestProduct === 'function'){
+    bestProduct = function(text){
+      const st = w => w.length > 3 ? w.replace(/(s|x)$/, '').replace(/e$/, '') : w;
+      const toks = norm(text).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean).map(st), T = ' ' + toks.join(' ') + ' ';
+      const packWord = /\b(duo|kit|gamme|combo|ensemble|lot|pack|coffret)\b/.test(norm(text));
+      let best = null, bs = 0;
+      for(const p of S.products){ if(p.archived) continue;
+        const words = norm(p.name).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length >= 3 && !['pour', 'avec', 'des', 'les', 'une', 'piece', 'pieces', 'pack'].includes(w)).map(st);
+        if(!words.length) continue;
+        const hit = words.filter(w => T.includes(' ' + w + ' ')).length; let sc = hit * 10 - (words.length - hit);
+        if(isKit(p)) sc += packWord ? 15 : -2;
+        if(hit && sc > bs){ bs = sc; best = p.id; } }
+      return best; }; }
+  const p0 = parseOrder;
+  parseOrder = function(txt){
+    const C = clean(txt), t = C.multi ? C.text : String(txt || '');
+    const o = p0.call(this, t) || {};
+    try{
+      const lines = t.split('\n').map(l => l.replace(/^[\s*•\-–—]+/, '').replace(/\*/g, '').trim()).filter(Boolean);
+      // Nom : « je m'appelle … », « mon nom est … », « moi c'est … », sinon l'expéditeur WhatsApp
+      const BADN = /^(je|j|moi|nous|on|vous|voici|svp|stp|madame|monsieur|maman|papa|la|le|les|mon|ma|est|suis)\b/i;
+      const xn = t.match(/\b(?:je m[’' ]?appelle|mon nom(?: c[’' ]?est| est)?|moi c[’' ]?est)[ \t]+([A-ZÀ-Ÿa-zà-ÿ][\wà-ÿ'\-]+(?:[ \t]+[A-ZÀ-Ÿa-zà-ÿ][\wà-ÿ'\-]+)?)/i);
+      if(xn){ const w = xn[1].split(/[ \t]+/); if(w[1] && !/^[A-ZÀ-Ÿ]/.test(w[1])) w.length = 1; xn[1] = w.join(' '); }
+      if(xn && !BADN.test(xn[1])) o.client = xn[1].replace(/(^|\s)(\p{Ll})/gu, (m, a, c) => a + c.toUpperCase());
+      else if(!o.client || BADN.test(o.client)){ if(C.client && !/^\+?[\d\s\-()]{8,}$/.test(C.client)) o.client = C.client; else if(o.client && BADN.test(o.client)) delete o.client; }
+      if(!o.phone && C.client && /^\+?[\d\s\-()]{8,}$/.test(C.client)){ let ph = C.client.replace(/[^\d+]/g, ''); if(/^243\d{9}$/.test(ph)) ph = '+' + ph; o.phone = ph; }
+      // Adresse sans « Adresse : » : les lignes avec une commune, un quartier, « avenue », « réf », « arrêt »…
+      if(!o.addr){ const cand = lines.filter(l => l.length <= 220 && !/^(\+?\d[\d\s.\-]{7,})$/.test(l) && (ADDR_KW.test(l) || communeOf(l)) && !/^(nom|t[ée]l|produit|quantit|prix|total)\b/i.test(l));
+        if(cand.length){ o.addr = cand.slice(0, 2).map(l => l.replace(/^(?:je suis|j[’' ]?habite|j[’' ]?reste|on est|nous sommes|chez moi c[’' ]?est|livrez(?:-moi)?|livrer|vous me livrez|venez|ma maison est|l[’' ]?adresse c[’' ]?est|mon adresse(?: c[’' ]?est| est)?)\s*(?:[àa]u?x?|dans|sur|vers)?\s*/i, '').replace(/[,;.\s]+$/, '')).join(', '); } }
+      const cm = communeOf((o.addr || '') + ' ' + t); if(cm){ o.commune = cm.q; o.communeCity = cm.c; }
+      // Quantité écrite en lettres : « deux pommades »
+      if(!o.qty && o.pid){ const ws = nz(prod(o.pid).name).split(/[^a-z0-9]+/).filter(w => w.length >= 3).map(w => w.length > 4 ? w.replace(/(es|s|x)$/, '') : w);
+        const re = new RegExp('\\b(' + Object.keys(NUMW).join('|') + ')\\s+(?:\\w+\\s+){0,2}?(?:' + (ws.join('|') || 'zzz') + ')', 'i'); const x = nz(t).match(re); if(x && NUMW[x[1]] > 1) o.qty = NUMW[x[1]]; }
+      // Position (lien Google Maps / WhatsApp)
+      if(window.__voc){ const g = window.__voc.parseGeo((t.match(/https?:\/\/(?:maps\.|www\.google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl)\S+/i) || [''])[0]); if(g && (g.lat != null || g.url)) o.geo = g; }
+      // Livreur : la ville de la commune si aucune ville n'est écrite
+      if(!o.liv && o.communeCity){ const Lv = S.livreurs.filter(l => l.city && nz(l.city) === nz(o.communeCity) && !l.off); if(Lv.length === 1){ o.liv = Lv[0].id; o.city = Lv[0].city; } }
+    }catch(e){ console.error(e); }
+    return o;
+  };
+  window.__paste = {clean, communeOf, COMM};
+  // ---------- Prix par quartier
+  const zonesOf = city => { const Z = (S.settings.feeZones || {}); const k = Object.keys(Z).find(k => nz(k) === nz(city || '')); return k ? (Z[k] || []).filter(z => z && z.z) : []; };
+  const canSet = () => typeof ONLINE === 'undefined' || ONLINE.role === 'proprietaire' || ONLINE.role === 'gerant' || !!ONLINE.admin;
+  function zoneFor(city, text){ const Z = zonesOf(city).slice().sort((a, b) => b.z.length - a.z.length); return Z.find(z => hasWord(text, z.z)) || null; }
+  window.__zones = {zonesOf, zoneFor};
+  document.head.insertAdjacentHTML('beforeend', `<style id="zonecss">
+#zoneW select{width:100%}
+#zEd{margin-top:8px;border:1px dashed var(--line);border-radius:14px;padding:8px 10px}
+#zEd summary{font-weight:700;font-size:13.5px;cursor:pointer;color:var(--brand-tx,var(--brand))}
+.zrow{display:grid;grid-template-columns:1fr 110px 34px;gap:6px;margin-top:6px;align-items:center}
+.zrow input{min-width:0}
+.zrow .zx{border:0;background:none;font-size:20px;color:var(--muted)}
+.pasteBtns{display:flex;gap:8px;flex-wrap:wrap}
+</style>`);
+  if(typeof moveForm === 'function'){ const mf0 = moveForm;
+    moveForm = function(type, opt){ const out = mf0.apply(this, arguments);
+      try{ const f = document.getElementById('mf'), E = f && f.elements, id = opt && opt.id, m0 = id ? S.moves.find(x => x.id === id) : null;
+        if(!f || !E || (m0 ? m0.type : type) !== 'vente') return out;
+        // « Coller et remplir » en un toucher
+        const go = document.getElementById('pasteGo'), tx = document.getElementById('pasteTx');
+        if(go && tx && navigator.clipboard && navigator.clipboard.readText){
+          go.insertAdjacentHTML('beforebegin', `<button type="button" class="btn primary sm" id="pasteClip">Coller et remplir</button>`); go.classList.remove('primary');
+          document.getElementById('pasteClip').onclick = async () => { try{ const t = await navigator.clipboard.readText(); if(!t || !t.trim()) return toast('Copiez d\'abord les messages du client dans WhatsApp'); tx.value = t; go.click(); }catch(_){ tx.focus(); toast('Appui long dans la case puis « Coller », puis « Remplir automatiquement »'); } }; }
+        if(go) go.addEventListener('click', () => setTimeout(() => { try{
+          const o = parseOrder((tx || {}).value || '');
+          if(E.loc && E.loc.value) E.loc.dispatchEvent(new Event('change'));
+          if(o.geo && document.getElementById('vGeo') && !document.getElementById('vGeo').value){ const g = o.geo; document.getElementById('vGeo').value = g.lat != null ? g.lat + ', ' + g.lng : g.url; }
+          detect(true);
+          const pm = document.getElementById('pasteMsg'); if(pm && (o.commune || o.geo)) pm.insertAdjacentHTML('beforeend', `<br>${o.commune ? 'Quartier reconnu : <b>' + esc(o.commune) + '</b>' : ''}${o.geo ? (o.commune ? ' · ' : '') + 'Position reçue' : ''}`);
+        }catch(e){ console.error(e); } }, 0));
+        // Quartier pour le prix de livraison
+        const fw = document.getElementById('feeW'); if(!fw || !E.f_fee || !E.loc) return out;
+        const cur = () => (E.f_feecur && E.f_feecur.value) || S.settings.feeCur || '$';
+        const cityNow = () => ((liv(E.loc.value) || {}).city || '');
+        fw.insertAdjacentHTML('beforeend', `<div class="f" id="zoneW"><span>Quartier de livraison</span><select id="fZone"></select><small id="zHint"></small>${canSet() ? `<details id="zEd"><summary>Prix par quartier (plus loin = plus cher)</summary><div id="zRows"></div><datalist id="zList"></datalist><div class="btns" style="margin-top:8px"><button type="button" class="btn sm" id="zAdd">+ Ajouter un quartier</button><button type="button" class="btn primary sm" id="zSave">Enregistrer les prix</button></div><small class="note">Le prix de la ville reste le prix normal. Ajoutez seulement les quartiers plus chers.</small></details>` : ''}</div>`);
+        const Zs = document.getElementById('fZone'), ZH = document.getElementById('zHint');
+        let zone = (m0 && (window.__fee ? window.__fee.mainOf(m0) : m0).feeZone) || '', manual = !!zone;
+        const fill = () => { const c = cityNow(), Z = zonesOf(c);
+          const cf = (() => { try{ const FC = S.settings.feeCity || {}, k = Object.keys(FC).find(k => nz(k) === nz(c)); return k != null && FC[k] !== '' && FC[k] != null ? num(FC[k]) : num(S.settings.fee); }catch(_){ return 0; } })();
+          Zs.innerHTML = `<option value="">Prix normal${c ? ' (' + esc(c) + ')' : ''} — ${amt(cf, S.settings.feeCur || '$')}</option>` + Z.map(z => `<option value="${esc(z.z)}">${esc(z.z)} — ${amt(num(z.v), S.settings.feeCur || '$')}</option>`).join('');
+          if(zone && !Z.some(z => z.z === zone)) zone = ''; Zs.value = zone; document.getElementById('zoneW').hidden = !E.loc.value;
+          ZH.textContent = Z.length ? '' : (canSet() ? 'Pas encore de quartier plus cher pour cette ville.' : '');
+          const dl = document.getElementById('zList'); if(dl) dl.innerHTML = (COMM[Object.keys(COMM).find(k => nz(k) === nz(c))] || []).map(q => `<option value="${esc(q)}">`).join(''); drawEd(); };
+        const apply = () => { const Z = zonesOf(cityNow()), z = Z.find(x => x.z === zone); if(z){ E.f_fee.value = num(z.v); if(E.f_feecur) E.f_feecur.value = S.settings.feeCur || E.f_feecur.value; E.f_fee.dispatchEvent(new Event('input')); } };
+        function detect(force){ if(manual && !force) return; const z = zoneFor(cityNow(), (E.addr ? E.addr.value : '') + ' ' + ((document.getElementById('vGeo') || {}).value || '')); const nzv = z ? z.z : '';
+          if(nzv !== zone || force){ zone = nzv; Zs.value = zone; if(z){ apply(); ZH.innerHTML = `Quartier reconnu dans l'adresse : <b>${esc(z.z)}</b>`; } else if(force && !manual) ZH.textContent = ''; } }
+        Zs.onchange = () => { zone = Zs.value; manual = true; if(zone) apply(); else { const c = cityNow(); try{ const FC = S.settings.feeCity || {}, k = Object.keys(FC).find(k => nz(k) === nz(c)); E.f_fee.value = (k != null && FC[k] !== '' && FC[k] != null ? num(FC[k]) : num(S.settings.fee)) || ''; E.f_fee.dispatchEvent(new Event('input')); }catch(_){ } } };
+        E.loc.addEventListener('change', () => { manual = false; zone = ''; fill(); detect(true); });
+        if(E.addr) E.addr.addEventListener('input', () => detect(false));
+        // Éditeur des prix par quartier
+        let rows = null;
+        function drawEd(){ const box = document.getElementById('zRows'); if(!box) return; const c = cityNow(); rows = zonesOf(c).map(z => ({...z}));
+          const sm = document.querySelector('#zEd summary'); if(sm) sm.textContent = 'Prix par quartier' + (c ? ' — ' + c : '') + ' (plus loin = plus cher)';
+          paintRows(); }
+        function paintRows(){ const box = document.getElementById('zRows'); if(!box) return;
+          box.innerHTML = rows.map((z, i) => `<div class="zrow"><input data-zi="${i}" data-zk="z" list="zList" value="${esc(z.z)}" placeholder="Quartier ou commune"><input data-zi="${i}" data-zk="v" type="number" min="0" step="any" inputmode="decimal" value="${z.v ?? ''}" placeholder="Prix ${esc(LC())}"><button type="button" class="zx" data-zdel="${i}" aria-label="Retirer">×</button></div>`).join('') || '<p class="note" style="margin:6px 0 0">Aucun quartier pour le moment.</p>'; }
+        const ed = document.getElementById('zEd');
+        if(ed){ ed.addEventListener('input', e => { const i = e.target.dataset.zi; if(i == null) return; rows[+i][e.target.dataset.zk] = e.target.dataset.zk === 'v' ? e.target.value : e.target.value; });
+          ed.addEventListener('click', e => { const d = e.target.closest('[data-zdel]'); if(d){ e.preventDefault(); rows.splice(+d.dataset.zdel, 1); paintRows(); } });
+          document.getElementById('zAdd').onclick = () => { if(!cityNow()) return toast('Choisissez d\'abord le livreur (la ville)'); rows.push({z:'', v:''}); paintRows(); const ins = document.querySelectorAll('#zRows input[data-zk="z"]'); if(ins.length) ins[ins.length - 1].focus(); };
+          document.getElementById('zSave').onclick = () => { const c = cityNow(); if(!c) return toast('Choisissez d\'abord le livreur (la ville)');
+            const clean2 = []; const seen = new Set(); for(const z of rows){ const n = String(z.z || '').trim(); if(!n || !(num(z.v) > 0) || seen.has(nz(n))) continue; seen.add(nz(n)); clean2.push({z:n, v:num(z.v)}); }
+            const Z = S.settings.feeZones = Object.assign({}, S.settings.feeZones || {}); const k = Object.keys(Z).find(k => nz(k) === nz(c)) || c; Z[k] = clean2; save();
+            toast(clean2.length ? clean2.length + ' quartier(s) enregistré(s) pour ' + c : 'Quartiers retirés pour ' + c); fill(); detect(true); ed.open = false; }; }
+        fill(); if(!zone && !m0) detect(true);
+        f.addEventListener('submit', () => { const z = zone, loc = E.loc.value, before = new Set(S.moves.map(x => x.id));
+          queueMicrotask(() => queueMicrotask(() => { const rec = (m0 && S.moves.find(x => x.id === m0.id)) || S.moves.filter(x => x.type === 'vente' && !before.has(x.id)).sort((a, b) => (a.ts || 0) - (b.ts || 0))[0]; if(!rec) return;
+            const M = window.__fee ? window.__fee.mainOf(rec) : rec, was = M.feeZone || '';
+            if(loc && z) M.feeZone = z; else delete M.feeZone; if((M.feeZone || '') !== was) save(); })); }, true);
+      }catch(e){ console.error(e); }
+      return out; }; }
+  // Bon du livreur : le quartier à côté des frais
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    try{ if(view === 'moi') document.querySelectorAll('#main .card[id^="mv-"] .feeRow:first-child, #main .card[id^="mv-"] .dl.feeRow').forEach(d => { if(d.dataset.zq) return; d.dataset.zq = 1; const c = d.closest('.card'), m = S.moves.find(x => x.id === c.id.slice(3)); if(!m) return; const M = window.__fee ? window.__fee.mainOf(m) : m;
+      if(M.feeZone && /Frais de livraison/.test(d.textContent)){ const n = d.querySelector('.note'); if(n) n.insertAdjacentText('beforeend', ' · ' + M.feeZone); } }); }catch(_){ }
+    return out; };
 })();
 
 </script>

@@ -1,5 +1,5 @@
 /* Stock & Livreurs — service worker : ouverture instantanée et hors connexion */
-const VERSION = '5bed9d2534';
+const VERSION = '9160fe9e17';
 const CACHE = 'stock-livreurs-' + VERSION;
 const CORE = ['./', 'index.html', 'supabase.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'guide.html', 'conditions.html'];
 self.addEventListener('install', e => {
@@ -9,6 +9,21 @@ self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('stock-livreurs-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 const timeout = (p, ms) => new Promise((res, rej) => { const t = setTimeout(() => rej(new Error('timeout')), ms); p.then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); }); });
+/* Partage depuis WhatsApp (vocal ou position) : le fichier est gardé puis l'app s'ouvre */
+self.addEventListener('fetch', e => {
+  const req = e.request, url = new URL(req.url);
+  if(url.origin !== location.origin || !/\/partage\/?$/.test(url.pathname)) return;
+  if(req.method !== 'POST'){ e.respondWith(Response.redirect(new URL('./', self.registration.scope).href, 303)); return; }
+  e.respondWith((async () => {
+    try{
+      const fd = await req.formData(), c = await caches.open('partage');
+      const files = fd.getAll('audio').filter(f => f && typeof f === 'object' && f.size);
+      for(let i = 0; i < files.length && i < 3; i++) await c.put('https://rv.local/__partage/f' + i, new Response(files[i], {headers:{'Content-Type':files[i].type || 'audio/ogg', 'X-Name':encodeURIComponent(files[i].name || '')}}));
+      await c.put('https://rv.local/__partage/meta', new Response(JSON.stringify({n:Math.min(files.length, 3), title:fd.get('title') || '', text:fd.get('text') || '', url:fd.get('url') || ''}), {headers:{'Content-Type':'application/json'}}));
+    }catch(_){ }
+    return Response.redirect(new URL('./?partage=1', self.registration.scope).href, 303);
+  })());
+});
 self.addEventListener('fetch', e => {
   const req = e.request, url = new URL(req.url);
   if(req.method !== 'GET' || url.origin !== location.origin) return;           // Supabase et WhatsApp : jamais en cache
