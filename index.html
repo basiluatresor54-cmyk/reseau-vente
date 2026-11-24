@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '326e887926';
+const APP_BUILD = '93fa252ad5';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -8795,6 +8795,75 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
         if(r.includes('id="cmdActs">')) return r.replace('id="cmdActs">', 'id="cmdActs">' + b);
         return `<div class="sec"><h2>Actions</h2></div><div class="list" id="cmdActs">${b}</div>` + (/class="empty"/.test(r) && !/class="sec"/.test(r) ? '' : r); }
       return r; }; }
+})();
+
+/* ---------- Frais de livraison par client : le patron les note à la vente, le livreur les voit sur chaque commande ---------- */
+(() => {
+  if(typeof feeFor !== 'function' || typeof orderLines !== 'function') return;
+  const fee0 = feeFor;
+  const mainOf = m => { const L = orderLines(m); return L.find(x => x.fee != null) || L[0] || m; };
+  // Un frais noté sur la commande passe avant le prix de la ville
+  feeFor = function(x){ if(x && typeof x === 'object' && x.type === 'vente'){ const M = mainOf(x); if(M && M.fee != null && M.fee !== '') return num(M.fee); } return fee0.apply(this, arguments); };
+  const feeCurOf = m => { const M = mainOf(m); return (M && M.feeCur) || S.settings.feeCur || '$'; };
+  const isMain = m => { const L = orderLines(m); return !L.length || L[0].id === m.id; };
+  window.__fee = {mainOf, isMain, feeCurOf};
+  // Formulaire de vente : champ « Frais de livraison pour ce client »
+  if(typeof moveForm === 'function'){ const mf0 = moveForm;
+    moveForm = function(type, opt){ const out = mf0.apply(this, arguments);
+      try{ const f = document.getElementById('mf'), E = f && f.elements; const id = opt && opt.id, m = id ? S.moves.find(x => x.id === id) : null;
+        if(!f || !E.loc || ((m ? m.type : type) !== 'vente')) return out;
+        const cur = (m && m.feeCur) || S.settings.feeCur || '$', lab = cur === 'FC' ? LC() : cur;
+        const at = E.loc.closest('.f') || E.loc.parentElement;
+        at.insertAdjacentHTML('afterend', `<div id="feeW"><div class="row2">${field('Frais de livraison pour ce client', `<input name="f_fee" type="number" min="0" step="any" inputmode="decimal">`)}${field('Monnaie', `<select name="f_feecur"><option value="FC" ${cur === 'FC' ? 'selected' : ''}>${esc(LC())}</option><option value="$" ${cur === '$' ? 'selected' : ''}>$</option></select>`)}</div><small class="note" style="display:block;margin:-4px 0 10px">Le client les donne au livreur. Le prix de la ville est déjà rempli (Réglages) : changez-le si ce client paie un autre montant.</small></div>`);
+        const w = document.getElementById('feeW'), inp = E.f_fee; let touched = !!(m && m.fee != null);
+        const cityFee = () => fee0(E.loc.value);
+        const sync = () => { const on = !!E.loc.value; w.hidden = !on; if(on && !touched) inp.value = cityFee() || ''; };
+        if(m && m.fee != null) inp.value = m.fee; sync();
+        inp.addEventListener('input', () => { touched = true; });
+        E.loc.addEventListener('change', () => { if(!(m && m.fee != null)) touched = false; sync(); });
+        f.addEventListener('submit', () => { const v = inp.value, loc = E.loc.value, fcur = (E.f_feecur && E.f_feecur.value) || cur, before = new Set(S.moves.map(x => x.id));
+          queueMicrotask(() => { const rec = (m && S.moves.find(x => x.id === m.id)) || S.moves.filter(x => x.type === 'vente' && !before.has(x.id)).sort((a, b) => (a.ts || 0) - (b.ts || 0))[0]; if(!rec) return;
+            const M = mainOf(rec), was = JSON.stringify([M.fee, M.feeCur]);
+            if(loc && v !== '' && !shipOf(rec)){ M.fee = num(v); M.feeCur = fcur; } else if(!loc){ delete M.fee; delete M.feeCur; }
+            if(JSON.stringify([M.fee, M.feeCur]) !== was) save(); }); }, true);
+      }catch(_){ }
+      return out; }; }
+  // Les nouvelles ventes avec livreur gardent le prix de la ville (le livreur le voit même si le prix change ensuite)
+  if(ONLINE.role !== 'livreur'){ const sv0 = save;
+    save = function(){ try{ if(ONLINE.role !== 'livreur') S.moves.forEach(m => { if(m.type !== 'vente' || !m.liv || m.fee != null || !(m.status === 'attente' || m.status === 'encours') || (m.date || '') < addDays(today(), -2)) return;
+        if(!isMain(m) || shipOf(m)) return; const v = fee0(m.liv); if(v > 0){ m.fee = v; m.feeCur = S.settings.feeCur || '$'; } }); }catch(_){ }
+      return sv0.apply(this, arguments); }; }
+  // Écran du livreur : frais de livraison et total à demander au client
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    try{ if(view !== 'moi') return out;
+      document.querySelectorAll('#main .card[id^="mv-"]').forEach(c => { if(c.querySelector('.feeRow')) return; const m = S.moves.find(x => x.id === c.id.slice(3)); if(!m || m.type !== 'vente' || shipOf(m)) return;
+        if(!isMain(m)) return; const v = feeFor(m); if(!(v > 0)) return; const fc = feeCurOf(m), L = orderLines(m);
+        const due = L.reduce((t, x) => t + (x.pre ? 0 : x.credit ? (x.creditMain ? num(x.acompte) : 0) : x.qty * x.price), 0), dc = m.cur || '$';
+        const rt = num(m.rate) || rate(), totFC = (dc === 'FC' ? due : due * rt) + (fc === 'FC' ? v : v * rt);
+        const tot = fc === dc ? amt(due + v, dc) + (dc === '$' ? ` <span class="note">(≈ ${amt(Math.round(totFC), 'FC')})</span>` : '') : (due ? `${amt(due, dc)} + ${amt(v, fc)}<br><span class="note">soit ≈ ${amt(Math.round(totFC), 'FC')} en tout</span>` : amt(v, fc));
+        const enc = [...c.querySelectorAll('.dl.strong')].find(d => /encaisser/.test(d.textContent));
+        const h = `<div class="dl strong feeRow"><span>Frais de livraison <span class="note">(pour vous)</span></span><span class="num">${amt(v, fc)}</span></div>
+          <div class="dl strong feeRow" style="font-size:1.05em"><span>Total à demander au client</span><span class="num" style="color:var(--brand-tx,var(--brand))">${tot}</span></div>${L.length > 1 ? `<p class="note feeRow" style="margin:0 0 4px">Pour toute la commande (${L.length} produits).</p>` : ''}`;
+        if(enc) enc.insertAdjacentHTML('afterend', h); else c.insertAdjacentHTML('beforeend', h); });
+    }catch(_){ }
+    return out; };
+  // « Monnaie à rendre » : compter aussi les frais de livraison
+  if(A.livchange){ const lc0 = A.livchange;
+    A.livchange = function(_, el){ const out = lc0.apply(this, arguments);
+      try{ const m = S.moves.find(x => x.id === el.dataset.id); if(!m || shipOf(m) || !isMain(m)) return out; const v = feeFor(m); if(!(v > 0)) return out;
+        const fc = feeCurOf(m), rt = num(m.rate) || rate(), feeFC = fc === 'FC' ? v : v * rt;
+        const due = m.credit ? (m.creditMain ? num(m.acompte) : 0) : m.qty * m.price, dueFC = (m.cur === 'FC' ? due : due * rt) + feeFC;
+        const card = document.querySelector('#shb .card'); if(card) card.insertAdjacentHTML('beforeend', `<div class="dl"><span>+ Frais de livraison</span><span class="num">${amt(v, fc)}</span></div><div class="dl strong"><span>Total avec les frais</span><span class="num">${amt(Math.round(dueFC), 'FC')} <span class="note">(≈ ${money(dueFC / rt)})</span></span></div>`);
+        const G = $('#chG'), C = $('#chC'), o = $('#chOut'); if(!G || !o) return out;
+        const upd = () => { const g = num(G.value), gFC = C.value === 'FC' ? g : g * rt, d = gFC - dueFC;
+          if(!g){ o.innerHTML = 'Tapez le montant donné par le client'; o.style.color = ''; return; }
+          if(Math.abs(d) < 1){ o.innerHTML = 'Compte juste, rien à rendre'; o.style.color = 'var(--ok)'; return; }
+          o.innerHTML = d > 0 ? `À rendre au client :<br><span class="num">${amt(Math.round(d), 'FC')}</span><br><span class="note">(≈ ${money(d / rt)})</span>` : `Il manque :<br><span class="num">${amt(Math.round(-d), 'FC')}</span><br><span class="note">(≈ ${money(-d / rt)})</span>`;
+          o.style.color = d > 0 ? 'var(--ok)' : 'var(--bad,#dc2626)'; };
+        G.oninput = upd; if(C) C.onchange = upd;
+      }catch(_){ }
+      return out; }; }
 })();
 
 </script>
