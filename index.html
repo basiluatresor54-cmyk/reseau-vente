@@ -5733,7 +5733,7 @@ function subBanner(compact){
   return `<div class="subban ${si.cls}">${txt}${ONLINE.offline ? '<br><b>Hors ligne</b>' : ''}${btn ? '<br>' + btn : ''}</div>`;
 }
 // Avertissement une fois par jour : fin d'essai proche, abonnement bientôt fini ou expiré
-/* Sauvegarde automatique sur Google Drive chaque dimanche à 20 h (Kinshasa) : plus besoin du rappel hebdomadaire */
+/* Sauvegarde automatique sur Google Drive chaque jour à 20 h (Kinshasa) : plus besoin du rappel hebdomadaire */
 const DRIVE_AUTO = true;
 function backupWarnOnce(){
   if(!ONLINE.admin) return; if(DRIVE_AUTO) return; let last = ''; try{ last = localStorage.getItem('stock_last_backup') || ''; }catch(_){}
@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '5655d245f0';
+const APP_BUILD = '9bee84ff3b';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -6959,7 +6959,7 @@ CUSTOM.admin = () => {
   <div class="card" style="margin-top:12px"><b>📱 Numéros pour payer l'abonnement</b> <span class="note">(affichés aux clients dans « Activer mon abonnement »)</span>
     <form id="payf" style="margin-top:10px">${[0,1,2].map(i => { const p = PAYINFO[i] || {}; return `<div class="row2" style="grid-template-columns:1fr 1fr 1fr;gap:6px"><label class="f" style="margin:0 0 8px"><select name="op${i}"><option value="">—</option>${OPS.map(o => `<option ${p.op === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label><label class="f" style="margin:0 0 8px"><input name="num${i}" value="${esc(p.num || '')}" placeholder="Numéro"></label><label class="f" style="margin:0 0 8px"><input name="name${i}" value="${esc(p.name || '')}" placeholder="Nom du compte"></label></div>`; }).join('')}<button class="btn block">Enregistrer les numéros</button></form></div>
   ${(() => { const last = (() => { try{ return localStorage.getItem('stock_last_backup') || ''; }catch(_){ return ''; } })(); const old = !last || daysSince(last) >= 7;
-    return `<div class="card" style="margin-top:12px"><b>☁️ Sauvegarde sur Google Drive</b><p class="note" style="margin:4px 0 10px">✅ <b>Automatique chaque dimanche à 20 h</b> dans votre dossier Drive « Sauvegardes Réseau & Vente ».${last ? ' Dernière sauvegarde faite depuis cet appareil : ' + dAbs(last, 1) + '.' : ''} En cas de doute, sauvegardez tout de suite :</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">💾 Télécharger une copie sur cet appareil</button></div>`; })()}
+    return `<div class="card" style="margin-top:12px"><b>☁️ Sauvegarde sur Google Drive</b><p class="note" style="margin:4px 0 10px">✅ <b>Automatique chaque jour à 20 h</b> dans votre dossier Drive « Sauvegardes Réseau & Vente ».${last ? ' Dernière sauvegarde faite depuis cet appareil : ' + dAbs(last, 1) + '.' : ''} En cas de doute, sauvegardez tout de suite :</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">💾 Télécharger une copie sur cet appareil</button></div>`; })()}
   <div class="card" style="margin-top:12px"><form id="trialf" style="display:flex;gap:8px;align-items:flex-end"><label class="f" style="flex:1;margin:0"><span>Essai gratuit des nouvelles boutiques (jours)</span><input name="days" type="number" min="0" max="365" value="${esc(ADM.trial ?? 7)}"></label><button class="btn">Enregistrer</button></form></div>
   ${orphRows()}
   <div class="sec"><h2>🎯 Clients en essai à relancer</h2></div>
@@ -6969,7 +6969,7 @@ CUSTOM.admin = () => {
   <input class="search" type="search" placeholder="Rechercher un client, un numéro, un pays…" value="${esc(ADM.q)}" oninput="ADM.q=this.value;document.getElementById('admlist').innerHTML=admRows()">
   <div class="list" id="admlist">${admRows(list)}</div>
   <div class="sec"><h2>Sauvegarde</h2></div>
-  <div class="card"><p class="note" style="margin-bottom:10px">Les données de <b>toutes</b> les boutiques partent automatiquement sur votre Google Drive chaque dimanche à 20 h. Vous pouvez aussi le faire maintenant, ou garder une copie sur cet appareil.</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">Exporter toutes les données</button></div>`;
+  <div class="card"><p class="note" style="margin-bottom:10px">Les données de <b>toutes</b> les boutiques partent automatiquement sur votre Google Drive chaque jour à 20 h. Vous pouvez aussi le faire maintenant, ou garder une copie sur cet appareil.</p><button class="btn primary block" data-a="admdrive">☁️ Sauvegarder maintenant sur Google Drive</button><button class="btn block" style="margin-top:8px" data-a="admexport">Exporter toutes les données</button></div>`;
 };
 /* ---------- Comptes créés sans boutique : la personne s'est inscrite mais n'a pas fini (nom de la boutique) ---------- */
 function orphMsg(o){ const who = o.name ? ' ' + o.name : '';
@@ -8684,7 +8684,8 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
     [['reglage','parametre','logo','taux','dollar'], 'Réglages', 'Logo, taux du dollar, factures', {a:'nav:reglages'}],
     [['boutique','en ligne','commandes en ligne','site'], 'Commandes en ligne', 'Commandes reçues de votre boutique', {a:'weborders'}],
     [['magasin','magasins','succursale'], 'Tous mes magasins', 'Chiffres de chaque magasin', {a:'multi'}, () => typeof multiOn !== 'function' || multiOn()],
-    [['sauvegarde','backup','securite'], 'Sauvegarde', 'Copie de toutes vos données', {a:'backup'}],
+    [['sauvegarde','backup','securite','exporter','export'], 'Exporter une sauvegarde', 'Fichier complet, Google Drive', {a:'backup'}],
+    [['importer','import sauvegarde','restaurer','remettre'], 'Importer une sauvegarde', 'Depuis un fichier ou Drive', {a:'restore'}],
     [['stock','inventaire','restant'], 'Stock', 'Ce qui reste en stock', {a:'nav:stock'}],
     [['ventes','livraisons'], 'Ventes', 'Toutes les ventes', {a:'nav:ventes'}],
     [['livreurs'], 'Livreurs', 'Vos livreurs et leur stock', {a:'nav:livreurs'}, () => can('liv')],
@@ -8999,7 +9000,7 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
     ['equipe', 'Équipe', 'user', 'Inviter, tâches, journal, message',
       ['nav:equipe','nav:annonce','nav:journal','invite']],
     ['reglages', 'Réglages et sécurité', 'set', 'Réglages, apparence, sauvegardes, application',
-      ['nav:reglages','nav:perso','backup','srvbackups','install','amb','themetoggle','style:simple','style:verre','switchshop','newshop','paysub','nav:ambassadeur']],
+      ['nav:reglages','nav:perso','backup','restore','srvbackups','install','amb','themetoggle','style:simple','style:verre','switchshop','newshop','paysub','nav:ambassadeur']],
   ];
   let CAT = null;
   const catOf = a => { for(const c of CATS) if(c[4].includes(a) || c[4].includes(a.split(':').slice(0, 2).join(':'))) return c[0]; return 'autres'; };
@@ -9032,6 +9033,8 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
         ['fourns', 'user', 'Fournisseurs', 'Vos fournisseurs (privé)', H('imp') && own],
         ['cloture', 'cash', 'Clôture de caisse', 'Compter l\'argent du jour en $ et en FC', true],
         ['goals', 'coin', 'Objectifs de ventes', 'Ventes et bénéfice à atteindre', own],
+        ['backup', 'book', 'Exporter une sauvegarde', 'Fichier complet : Google Drive, WhatsApp, téléphone', ONLINE.admin || ONLINE.role === 'proprietaire'],
+        ['restore', 'in', 'Importer une sauvegarde', 'Remettre des données depuis un fichier ou Drive', ONLINE.admin || ONLINE.role === 'proprietaire'],
       ];
       EXTRA.forEach(([a, ic, t, d, ok]) => { if(!ok || seen.has(a)) return; seen.add(a); rows.push([a, `<button class="it" data-a="${a}"><div class="ic c-in">${ico(ic)}</div><div class="m"><div class="t">${esc(t)}</div><div class="d" style="white-space:normal">${esc(d)}</div></div>${ico('chev')}</button>`]); });
       if(!seen.has('srvbackups') && ONLINE.role === 'proprietaire') rows.push(['srvbackups', `<button class="it" data-a="srvbackups"><div class="ic c-in">${ico('book')}</div><div class="m"><div class="t">Sauvegardes automatiques</div><div class="d" style="white-space:normal">Une copie de la boutique chaque nuit sur le serveur (30 jours)</div></div>${ico('chev')}</button>`]);
@@ -9075,6 +9078,149 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
   const once = (name) => { if(typeof window[name] !== 'function') return; const f0 = window[name];
     window[name] = function(){ if(arguments.length) return f0.apply(this, arguments); const k = name + '#' + keyNow(); if(memo.has(k)) return memo.get(k); const r = f0.apply(this, arguments); memo.set(k, r); clearSoon(); return r; }; };
   ['forecast', 'rachatList'].forEach(once);
+})();
+
+/* =================================================================
+   Sauvegarde et données : le PROPRIÉTAIRE peut exporter (fichier, Google Drive, WhatsApp)
+   et importer une sauvegarde (ajouter ce qui manque ou tout remplacer), en sécurité.
+   ================================================================= */
+(() => {
+  const canBk = () => !!(ONLINE.admin || ONLINE.role === 'proprietaire');
+  const stamp = () => { const d = new Date(); return today() + '_' + String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0'); };
+  const pack = () => ({app:'BASILUA TECH · Réseau & Vente', shop:(S.settings && S.settings.shop) || (ONLINE.shop && ONLINE.shop.name) || '', exported:new Date().toISOString(),
+    settings:S.settings, products:S.products, livreurs:S.livreurs, moves:S.moves});
+  function exportSheet(){
+    if(!canBk()) return toast('Réservé au propriétaire de la boutique');
+    const data = JSON.stringify(pack()), name = `sauvegarde-${slug()}-${stamp()}.json`;
+    let file = null; try{ file = new File([data], name, {type:'application/json'}); if(!(navigator.canShare && navigator.canShare({files:[file]}))) file = null; }catch(_){ file = null; }
+    sheet('Exporter une sauvegarde', `<p class="note" style="margin-bottom:12px">Le fichier contient <b>tout</b> : ${S.products.length} produit(s), ${S.livreurs.length} livreur(s), ${S.moves.length} opération(s) (ventes, stock, argent) et vos réglages. Gardez-le sur Google Drive : vous pourrez l'importer plus tard, sur n'importe quel téléphone.</p>
+      <div class="stack">${file ? `<button class="btn primary block" id="exShare">Envoyer sur Google Drive ou WhatsApp</button>` : ''}
+      <button class="btn ${file ? '' : 'primary'} block" id="exDl">Télécharger le fichier</button>
+      <p class="note">${file ? 'Sur le téléphone : touchez « Envoyer », choisissez <b>Drive</b>, puis « Enregistrer ».' : 'Le fichier va dans « Téléchargements ». Vous pouvez ensuite l\'envoyer sur Google Drive.'}</p>
+      <p class="note" style="color:var(--bad)"><b>Fichier privé :</b> il contient vos clients, vos prix et votre argent. Gardez-le pour vous (votre Drive, votre WhatsApp), ne l'envoyez pas dans un groupe.</p></div>`);
+    if(file) $('#exShare').onclick = async () => { try{ await navigator.share({files:[file], title:name}); toast('Sauvegarde envoyée'); }catch(e){ if(e && e.name !== 'AbortError'){ download(name, data, 'application/json'); toast('Téléchargement lancé'); } } };
+    $('#exDl').onclick = () => { download(name, data, 'application/json'); toast('Téléchargement lancé'); };
+  }
+  function parseBk(txt){ let d; try{ d = JSON.parse(txt); }catch(_){ return {err:'Ce fichier n\'est pas une sauvegarde (format illisible).'}; }
+    if(d && Array.isArray(d.shops) && Array.isArray(d.items)) return {err:'C\'est une sauvegarde de TOUTES les boutiques (BASILUA TECH). Pour remettre une boutique depuis ce fichier, contactez BASILUA TECH.'};
+    if(!d || !Array.isArray(d.products) || !Array.isArray(d.moves)) return {err:'Ce fichier n\'est pas une sauvegarde de boutique valide.'};
+    d.livreurs = Array.isArray(d.livreurs) ? d.livreurs : []; return {d}; }
+  function importSheet(){
+    if(!canBk()) return toast('Réservé au propriétaire de la boutique');
+    sheet('Importer une sauvegarde', `<p class="note" style="margin-bottom:12px">Choisissez un fichier de sauvegarde (exporté depuis l'application, téléchargé depuis « Sauvegardes automatiques », ou gardé sur Google Drive). Sur le téléphone, le choix du fichier permet d'ouvrir <b>Drive</b>.</p>
+      <div class="stack"><label class="btn primary block" style="cursor:pointer">Choisir le fichier<input type="file" accept=".json,application/json,text/plain" id="imFile" hidden></label>
+      <details><summary class="note">Ou coller le texte de la sauvegarde</summary><textarea class="code" id="imTx" placeholder='{"products":…}' style="margin-top:8px"></textarea><button class="btn block" id="imGo" style="margin-top:8px">Lire le texte</button></details>
+      <div id="imOut"></div></div>`);
+    const show = txt => { window.__lastImport = txt; const r = parseBk(txt), o = $('#imOut'); if(!o) return; if(r.err){ o.innerHTML = `<div class="card" style="border:1.5px solid var(--bad)"><p class="note" style="color:var(--bad);font-weight:700">${esc(r.err)}</p></div>`; return; }
+      const d = r.d, ids = k => new Set((S[k] || []).map(x => String(x.id)));
+      const nw = k => d[k].filter(x => x && x.id != null && !ids(k).has(String(x.id))).length;
+      const cur = String((S.settings && S.settings.shop) || (ONLINE.shop && ONLINE.shop.name) || '').trim().toLowerCase(), other = d.shop && cur && String(d.shop).trim().toLowerCase() !== cur;
+      o.innerHTML = `${other ? `<div class="card" style="border:1.5px solid var(--bad);margin-bottom:10px"><p class="note" style="color:var(--bad);font-weight:700">Attention : ce fichier vient d'une AUTRE boutique (« ${esc(d.shop)} »). Vérifiez que c'est bien le bon fichier avant d'importer.</p></div>` : ''}<div class="card"><b>Dans ce fichier${d.shop ? ' (' + esc(d.shop) + ')' : ''}${d.exported ? ' · ' + esc(dAbs(String(d.exported).slice(0, 10), 1)) : ''}</b>
+        <div class="dl"><span>Produits</span><span class="num">${d.products.length} <span class="note">(${nw('products')} nouveaux)</span></span></div>
+        <div class="dl"><span>Livreurs</span><span class="num">${d.livreurs.length} <span class="note">(${nw('livreurs')} nouveaux)</span></span></div>
+        <div class="dl"><span>Opérations</span><span class="num">${d.moves.length} <span class="note">(${nw('moves')} nouvelles)</span></span></div>
+        <p class="note" style="margin:8px 0">Dans l'application maintenant : ${S.products.length} produit(s), ${S.livreurs.length} livreur(s), ${S.moves.length} opération(s).</p>
+        <button class="btn primary block" id="imAdd">Ajouter seulement ce qui manque</button><p class="note" style="margin:4px 0 10px">Recommandé : rien de ce qui est déjà dans l'application n'est effacé.</p>
+        <button class="btn block ghost-bad" id="imRep">Tout remplacer par ce fichier</button><p class="note" style="margin-top:4px">Ce qui n'est pas dans le fichier sera retiré (une copie est gardée avant sur le serveur).</p></div>`;
+      $('#imAdd').onclick = () => run(d, 'add'); $('#imRep').onclick = () => run(d, 'rep'); };
+    $('#imFile').onchange = e => { const f = e.target.files[0]; if(!f) return; const rd = new FileReader(); rd.onload = () => show(String(rd.result || '')); rd.readAsText(f); };
+    $('#imGo').onclick = () => show($('#imTx').value.trim());
+  }
+  async function run(d, mode){
+    const keepPick = document.getElementById('imKeep') ? document.getElementById('imKeep').checked : null;
+    if(navigator.onLine === false) return toast('Connexion internet nécessaire pour importer');
+    if(mode === 'rep' && !await ask(`Tout remplacer ? L'application aura exactement le contenu du fichier : ${d.products.length} produit(s), ${d.moves.length} opération(s).`, 'Remplacer', true)) return;
+    const pwOk = window.__checkPw ? await window.__checkPw('Importer : sécurité', 'Pour protéger vos données, tapez votre mot de passe avant d\'importer.') : true; if(!pwOk) return;
+    // Copie de sécurité sur le serveur juste avant
+    try{ await syncNow(); }catch(_){ }
+    try{ const {error} = await sb.rpc('backup_now', {p_shop:ONLINE.shop.id}); if(error && mode === 'rep'){ toast('Copie de sécurité impossible : rien n\'a été remplacé. ' + rpcErr(error)); return; } }catch(_){ if(mode === 'rep'){ toast('Copie de sécurité impossible : rien n\'a été remplacé'); return; } }
+    let N = d; try{ N = normalize(JSON.parse(JSON.stringify(d))); }catch(_){ }
+    const keys = ['products', 'livreurs', 'moves']; let added = 0;
+    if(mode === 'add' && window.__bk.plan){ const P = window.__bk.plan(N);
+      S.products.push(...P.add.products); S.livreurs.push(...P.add.livreurs); S.moves.push(...P.add.moves); added = P.add.products.length + P.add.livreurs.length + P.add.moves.length;
+      const keepSt = keepPick == null ? P.keepDefault : keepPick;
+      const ts = Date.now(); (keepSt ? P.comp : []).forEach((x, i) => S.moves.push({id:uid(), ts:ts + i, type:'ajust', pid:x.pid, qty:x.qty, loc:x.loc || '', date:today(), note:'Import de sauvegarde : stock gardé comme avant', imp:true})); }
+    else if(mode === 'add'){ keys.forEach(k => { const have = new Set((S[k] || []).map(x => String(x.id))); (N[k] || []).forEach(x => { if(x && x.id != null && !have.has(String(x.id))){ S[k].push(x); have.add(String(x.id)); added++; } }); }); }
+    else keys.forEach(k => { S[k] = Array.isArray(N[k]) ? N[k] : []; });
+    save(); closeSheet(); render();
+    try{ await syncNow(); }catch(_){ }
+    toast(mode === 'add' ? (added ? added + ' élément(s) ajouté(s)' : 'Rien à ajouter : tout était déjà là') : 'Sauvegarde importée : données remplacées');
+  }
+  window.__bk = {parseBk, pack};
+  A.backup = () => exportSheet();
+  A.restore = () => importSheet();
+  // Réglages : la carte « Sauvegarde et données » avec Exporter / Importer
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    try{ if(view !== 'reglages' || !canBk()) return out; const M = document.getElementById('main'); if(!M || M.querySelector('#bkCard')) return out;
+      const h = [...M.querySelectorAll('.sec h2')].find(x => x.textContent.trim() === 'Sauvegarde et données'); if(!h) return out;
+      const sec = h.closest('.sec'); const card = `<div class="card" id="bkCard" style="margin-bottom:12px"><b>Vos sauvegardes</b>
+        <p class="note" style="margin:4px 0 10px">Automatique : une copie <b>chaque nuit</b> sur le serveur (30 jours) et une copie <b>chaque jour</b> sur le Google Drive de BASILUA TECH. Vous pouvez aussi exporter et importer vous-même.</p>
+        <div class="stack"><button class="btn primary block" data-a="backup">Exporter (fichier, Google Drive, WhatsApp)</button>
+        <button class="btn block" data-a="restore">Importer une sauvegarde</button>
+        <button class="btn block" data-a="srvbackups">Sauvegardes automatiques du serveur</button></div></div>`;
+      if(sec) sec.insertAdjacentHTML('afterend', card);
+      const n = [...M.querySelectorAll('p.note')].find(x => /sauvegarde vos données chaque semaine/.test(x.textContent)); if(n) n.remove();
+    }catch(_){ }
+    return out; };
+})();
+
+/* ---------- Import intelligent : reconnaît ce qui est déjà là (même produit, même livreur, même vente)
+   et garde le stock EXACTEMENT comme maintenant ---------- */
+(() => {
+  if(!window.__bk || typeof stockAt !== 'function') return;
+  const Nm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const ph = t => String(t || '').replace(/\D/g, '').slice(-9);
+  const cp = o => JSON.parse(JSON.stringify(o));
+  function plan(d){
+    const P = {pmap:{}, lmap:{}, add:{products:[], livreurs:[], moves:[]}, c:{pNew:0, pSame:0, pHave:0, lNew:0, lSame:0, lHave:0, mNew:0, mHave:0, mDup:0}};
+    const havePid = new Set(S.products.map(p => String(p.id))), byName = new Map(S.products.map(p => [Nm(p.name), p.id]));
+    for(const p of d.products){ if(!p || p.id == null) continue; const id = String(p.id);
+      if(havePid.has(id)){ P.c.pHave++; continue; } const same = byName.get(Nm(p.name)); if(same){ P.pmap[id] = same; P.c.pSame++; continue; }
+      P.add.products.push(cp(p)); havePid.add(id); byName.set(Nm(p.name), p.id); P.c.pNew++; }
+    const haveLid = new Set(S.livreurs.map(l => String(l.id)));
+    for(const l of d.livreurs){ if(!l || l.id == null) continue; const id = String(l.id);
+      if(haveLid.has(id)){ P.c.lHave++; continue; } const same = S.livreurs.find(x => (ph(l.phone) && ph(x.phone) === ph(l.phone)) || Nm(x.name) === Nm(l.name));
+      if(same){ P.lmap[id] = same.id; P.c.lSame++; continue; } P.add.livreurs.push(cp(l)); haveLid.add(id); P.c.lNew++; }
+    const mp = v => (v != null && P.pmap[String(v)]) || v, ml = v => (v && P.lmap[String(v)]) || v;
+    P.add.products.forEach(p => { if(Array.isArray(p.kit)) p.kit.forEach(c => { c.pid = mp(c.pid); }); });
+    const haveMid = new Set(S.moves.map(m => String(m.id)));
+    const sig = m => [m.type, m.pid || '', r3(num(m.qty)), num(m.price), m.date || '', m.liv || '', m.loc || '', Nm(m.client), ph(m.phone), num(m.amount), m.cur || ''].join('|');
+    const haveSig = new Set(S.moves.map(sig));
+    for(const m0 of d.moves){ if(!m0 || m0.id == null) continue; if(haveMid.has(String(m0.id))){ P.c.mHave++; continue; }
+      const m = cp(m0); if(m.pid != null) m.pid = mp(m.pid); if(m.liv) m.liv = ml(m.liv); if(m.loc) m.loc = ml(m.loc);
+      if(Array.isArray(m.lines)) m.lines.forEach(x => { if(x && x.pid != null) x.pid = mp(x.pid); });
+      const g = sig(m); if(haveSig.has(g)){ P.c.mDup++; continue; } haveSig.add(g); haveMid.add(String(m.id)); P.add.moves.push(m); P.c.mNew++; }
+    // Effet sur le stock et sur l'argent à verser (simulation, rien n'est enregistré)
+    const st0 = stockAt(), rem0 = {}; S.livreurs.forEach(l => { try{ rem0[l.id] = livStats(l.id).toRemit; }catch(_){ } });
+    const keep = {p:S.products, l:S.livreurs, m:S.moves};
+    try{ S.products = keep.p.concat(P.add.products); S.livreurs = keep.l.concat(P.add.livreurs); S.moves = keep.m.concat(P.add.moves);
+      const st1 = stockAt(); P.comp = [];
+      const locs = new Set([...Object.keys(st0), ...Object.keys(st1)]);
+      locs.forEach(loc => { const a = st0[loc] || {}, b = st1[loc] || {}; new Set([...Object.keys(a), ...Object.keys(b)]).forEach(pid => { const diff = r3((a[pid] || 0) - (b[pid] || 0)); if(Math.abs(diff) > 1e-9) P.comp.push({pid, loc, qty:diff}); }); });
+      // Conseillé quand le stock actuel a été recompté (inventaire, « Nouveau départ ») après ces anciennes opérations
+      const addD = P.add.moves.map(m => m.date).filter(Boolean).sort(), lastAdd = addD[addD.length - 1] || '';
+      P.keepDefault = !!(P.comp.length && lastAdd && keep.m.some(m => (m.type === 'inventaire' || m.type === 'ajust') && (m.date || '') >= lastAdd));
+      P.remit = []; S.livreurs.forEach(l => { let after = 0; try{ after = livStats(l.id).toRemit; }catch(_){ } const before = rem0[l.id] || 0; if(Math.abs(after - before) > .01) P.remit.push({name:l.name, before, after}); });
+    } finally { S.products = keep.p; S.livreurs = keep.l; S.moves = keep.m; }
+    return P; }
+  window.__bk.plan = plan;
+  // Aperçu plus clair dans « Importer une sauvegarde »
+  const imp0 = A.restore;
+  A.restore = function(){ const out = imp0.apply(this, arguments);
+    try{ const o = document.getElementById('imOut'); if(!o) return out;
+      new MutationObserver(() => { const add = document.getElementById('imAdd'); if(!add || add.dataset.smart) return; add.dataset.smart = '1';
+        const txt = window.__lastImport; const d = txt && window.__bk.parseBk(txt).d; if(!d){ delete add.dataset.smart; return; } let N = d; try{ N = normalize(JSON.parse(JSON.stringify(d))); }catch(_){ } const P = plan(N), c = P.c;
+        const box = document.createElement('div'); box.className = 'card'; box.style.margin = '10px 0'; box.id = 'imSmart';
+        box.innerHTML = `<b>Ce que « Ajouter seulement ce qui manque » va faire</b>
+          <div class="dl"><span>Produits</span><span>${c.pNew} nouveau(x) · ${c.pSame} reconnu(s) par le nom · ${c.pHave} déjà là</span></div>
+          <div class="dl"><span>Livreurs</span><span>${c.lNew} nouveau(x) · ${c.lSame} reconnu(s) · ${c.lHave} déjà là</span></div>
+          <div class="dl"><span>Opérations</span><span>${c.mNew} à ajouter · ${c.mHave + c.mDup} déjà là (ignorées)</span></div>
+          ${P.comp.length ? `<label class="chk" style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" id="imKeep" ${P.keepDefault ? 'checked' : ''}><span><b>Garder mon stock exactement comme maintenant</b><br><span class="note">${P.keepDefault ? 'Conseillé ici : ces opérations sont d\'avant votre stock actuel (par exemple avant un « Nouveau départ »).' : 'Laissez décoché si vous remettez des opérations effacées par erreur : le stock sera recalculé avec elles.'}</span></span></label>` : '<div class="dl strong"><span>Votre stock</span><span style="color:var(--ok)">ne change pas</span></div>'}
+          ${P.remit.length ? `<p class="note" style="color:var(--bad);margin-top:6px"><b>Argent à verser qui change :</b> ${P.remit.map(r => `${esc(r.name)} ${money(r.before)} → ${money(r.after)}`).join(' · ')}</p>` : '<p class="note" style="margin-top:6px">L\'argent à verser de vos livreurs ne change pas.</p>'}`;
+        add.parentElement.insertBefore(box, add); }).observe(o, {childList:true, subtree:true});
+    }catch(_){ }
+    return out; };
 })();
 
 </script>
