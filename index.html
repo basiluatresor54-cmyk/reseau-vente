@@ -462,7 +462,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = v => { const n = parseFloat(String(v ?? '').replace(/\s/g,'').replace(',', '.')); return isFinite(n) ? n : 0; };
 const r2 = n => { const v = Math.round((n||0)*100)/100; return v === 0 ? 0 : v; };
-const fmt = n => r2(n).toLocaleString('fr-FR', {maximumFractionDigits:2});
+const NF2 = new Intl.NumberFormat('fr-FR', {maximumFractionDigits:2}); const fmt = n => NF2.format(r2(n));
 const money = usd => fmt(usd) + ' $';
 const LC = () => S.settings.lc || 'FC'; // monnaie locale (code interne « FC »)
 const amt = (a, cur) => fmt(a) + (cur === 'FC' ? ' ' + LC() : ' $');
@@ -482,9 +482,9 @@ function fmtDate(iso, long){
   if(d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
   return d.toLocaleDateString('fr-FR', o);
 }
-const prod = id => S.products.find(p => p.id === id);
+const mkIdx = key => { const I = {a:null, n:-1, m:null}; return id => { const a = S[key]; let i = I.a === a && I.n === a.length && I.m ? I.m.get(id) : undefined; if(i === undefined || !a[i] || a[i].id !== id){ if(I.a !== a || I.n !== a.length || !I.m || (i !== undefined)){ I.m = new Map(); a.forEach((x, k) => { if(x && !I.m.has(x.id)) I.m.set(x.id, k); }); I.a = a; I.n = a.length; } i = I.m.get(id); if(i === undefined || !a[i] || a[i].id !== id) return a.find(x => x.id === id); } return a[i]; }; }; const prod = mkIdx('products');
 const pname = id => prod(id)?.name || 'Produit supprimé';
-const liv = id => S.livreurs.find(l => l.id === id);
+const liv = mkIdx('livreurs');
 const lname = id => id ? (liv(id)?.name || 'Livreur supprimé') : 'Dépôt';
 const locName = loc => loc ? 'chez ' + lname(loc) : 'au dépôt';
 const byName = (a,b) => a.name.localeCompare(b.name, 'fr');
@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '0f7b4f6dde';
+const APP_BUILD = '5655d245f0';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -8940,6 +8940,141 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
         const c = m.qty * num(m.commU); r.week += c; r.weekN++; const W = r.weekByProd[m.pid] = r.weekByProd[m.pid] || {q:0, c:0, a:0}; W.q += m.qty; W.c += c; W.a += saleUSD(m); }
     }catch(_){ }
     return r; };
+})();
+
+/* =================================================================
+   Sécurité : sauvegardes automatiques du serveur (chaque nuit, 30 jours)
+   et mot de passe demandé avant d'effacer beaucoup de données.
+   ================================================================= */
+(() => {
+  const isOwner = () => ONLINE.role === 'proprietaire';
+  // Vérifie le mot de passe du compte (même identifiant que la connexion)
+  async function checkPw(title, msg){
+    return new Promise(res => {
+      sheet(title, `<form id="pwchk"><p class="note" style="margin-bottom:10px">${msg}</p>${field('Votre mot de passe', `<input name="pw" type="password" autocomplete="current-password" required>`)}<p class="auth-msg" id="pwMsg"></p><button class="btn primary block">Continuer</button></form>`);
+      const f = $('#pwchk'); let done = false;
+      f.onsubmit = async e => { e.preventDefault(); const b = f.querySelector('button'); b.disabled = true; $('#pwMsg').textContent = '';
+        try{ const email = ONLINE.user && ONLINE.user.email; const {error} = await sb.auth.signInWithPassword({email, password:f.elements.pw.value});
+          if(error){ b.disabled = false; $('#pwMsg').textContent = 'Mot de passe incorrect.'; return; } done = true; res(true); }
+        catch(_){ b.disabled = false; $('#pwMsg').textContent = 'Vérification impossible : vérifiez votre connexion internet.'; } };
+      const ov = document.getElementById('ov'); const watch = setInterval(() => { if(!document.getElementById('pwchk')){ clearInterval(watch); if(!done) res(false); } }, 300);
+    });
+  }
+  window.__checkPw = checkPw;
+  const guard = (k, title, msg) => { const f0 = A[k]; if(!f0) return; A[k] = async function(){ const a = arguments, self = this;
+    if(ONLINE.offline || navigator.onLine === false){ toast('Connexion internet nécessaire pour cette action'); return; }
+    if(!await checkPw(title, msg)) return; closeSheet(); return f0.apply(self, a); }; };
+  guard('freshstart', 'Nouveau départ : sécurité', 'Cette action efface tout l\'historique (ventes, stock, versements). Pour protéger vos données, tapez votre mot de passe.');
+  guard('reset', 'Tout effacer : sécurité', 'Cette action efface toutes les données de la boutique. Pour protéger vos données, tapez votre mot de passe.');
+
+  // Sauvegardes du serveur : liste et téléchargement (propriétaire)
+  async function srvBackups(){
+    if(!isOwner()){ toast('Réservé au propriétaire'); return; }
+    sheet('Sauvegardes automatiques', `<p class="note" style="margin-bottom:10px">Chaque nuit, le serveur garde une copie complète de votre boutique (produits, livreurs, ventes, stock, argent). Les 30 dernières copies sont gardées. Vous pouvez en télécharger une à tout moment : en cas de problème, BASILUA TECH peut tout remettre.</p><div id="sbList"><div class="skel"><i></i><i></i><i></i></div></div>`);
+    const {data, error} = await sb.rpc('my_backups', {p_shop:ONLINE.shop.id}); const box = $('#sbList'); if(!box) return;
+    if(error){ box.innerHTML = `<div class="card empty">${esc(rpcErr(error))}</div>`; return; }
+    box.innerHTML = (data || []).length ? `<div class="list">${data.map(r => `<div class="it" style="cursor:default"><div class="ic c-in">${ico('book')}</div><div class="m"><div class="t">${esc(dAbs(r.day, 1))}</div><div class="d">${r.n} élément(s) sauvegardé(s)</div></div><div class="r"><button class="btn sm" data-a="srvbkdl:${r.day}">Télécharger</button></div></div>`).join('')}</div>` : '<div class="card empty"><b>Première sauvegarde cette nuit</b>Revenez demain : la copie de votre boutique sera ici.</div>';
+  }
+  A.srvbackups = () => srvBackups();
+  A.srvbkdl = async day => { const {data, error} = await sb.rpc('backup_get', {p_shop:ONLINE.shop.id, p_day:day}); if(error || !data) return toast(error ? rpcErr(error) : 'Sauvegarde introuvable');
+    try{ download(`sauvegarde-serveur-${slug()}-${day}.json`, JSON.stringify(data), 'application/json'); toast('Sauvegarde téléchargée'); }catch(_){ toast('Téléchargement impossible sur ce téléphone'); } };
+})();
+
+/* =================================================================
+   Menu « Plus » rangé par catégories : de grandes cases, chacune ouvre sa page.
+   Les éléments sont ceux de l'application (droits et formule respectés), seulement regroupés.
+   ================================================================= */
+(() => {
+  const CATS = [
+    ['ventes', 'Ventes et commandes', 'cart', 'Ventes, crédits, commandes en ligne, import, retraits',
+      ['nav:ventes','quick','new:vente','nav:credits','weborders','nav:boutique','boutique','shopweb','nav:import','retraits','cmdnew','nav:promesses','promesses','tpl','calendar','nav:promos','promos','promform']],
+    ['livreurs', 'Livreurs', 'truck', 'Versements, point du soir, relevés',
+      ['nav:livreurs','money:versement','decllist','soir','money:paiecomm','newliv','nav:releve','releve']],
+    ['stock', 'Stock et produits', 'box', 'Entrées, pertes, contrôle, étiquettes, fournisseurs',
+      ['nav:stock','new:entree','new:perte','new:envoi','new:retour','new:produit','stockupd','nav:stockhist','scanstock','lbl','labels','fourns','transs','imei','rachat','planform','perim','transfer']],
+    ['argent', 'Argent et rapports', 'cash', 'Dépenses, caisse, bilan, rapports, objectifs',
+      ['nav:depenses','money:depense','cloture','nav:jour','nav:bilan','nav:rapport','nav:livre','goals','multi','xlsx','vclass']],
+    ['clients', 'Clients', 'user', 'Historique, relance, fidélité',
+      ['nav:clients','relgroup','fidset']],
+    ['equipe', 'Équipe', 'user', 'Inviter, tâches, journal, message',
+      ['nav:equipe','nav:annonce','nav:journal','invite']],
+    ['reglages', 'Réglages et sécurité', 'set', 'Réglages, apparence, sauvegardes, application',
+      ['nav:reglages','nav:perso','backup','srvbackups','install','amb','themetoggle','style:simple','style:verre','switchshop','newshop','paysub','nav:ambassadeur']],
+  ];
+  let CAT = null;
+  const catOf = a => { for(const c of CATS) if(c[4].includes(a) || c[4].includes(a.split(':').slice(0, 2).join(':'))) return c[0]; return 'autres'; };
+  A.pcat = k => { CAT = k || null; render(); window.scrollTo(0, 0); };
+  // Toucher l'onglet « Plus » en bas : on revient aux catégories
+  document.addEventListener('click', e => { const b = e.target.closest('#nav [data-a="nav:plus"]'); if(b) CAT = null; }, true);
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    try{ if(view !== 'plus' || ONLINE.role === 'livreur' || window.__TEST_FLAT_PLUS) return out; const M = document.getElementById('main'); if(!M || M.querySelector('#pcats')) return out;
+      const rows = [], btns = [], seen = new Set();
+      M.querySelectorAll('.list.menu > [data-a]').forEach(e => { const a = e.dataset.a; if(seen.has(a)) return; seen.add(a); rows.push([a, e.outerHTML]); });
+      M.querySelectorAll('.btns [data-a], #main > div > .btn.block[data-a]').forEach(e => { const a = e.dataset.a; if(seen.has(a)) return; seen.add(a); btns.push([a, e.outerHTML]); });
+      const H = k => { try{ return typeof has !== 'function' || has(k); }catch(_){ return true; } }, own = ['proprietaire', 'gerant'].includes(ONLINE.role);
+      const EXTRA = [
+        ['nav:ventes', 'cart', 'Toutes les ventes', 'À livrer, en cours, livrées, annulées', true],
+        ['new:vente', 'cart', 'Nouvelle vente', 'Enregistrer une commande ou une vente', true],
+        ['quick', 'cash', 'Vente rapide', 'Vendre au comptoir en 2 touches', H('shop')],
+        ['weborders', 'receipt', 'Commandes en ligne', 'Commandes reçues de votre boutique en ligne', own],
+        ['nav:livreurs', 'truck', 'Mes livreurs', 'Stock, livraisons, argent à verser de chacun', H('liv')],
+        ['decllist', 'cash', 'Versements à confirmer', 'L\'argent envoyé par vos livreurs', H('liv') && own],
+        ['newliv', 'user', 'Nouveau livreur', 'Ajouter un livreur et sa commission', H('liv') && own],
+        ['new:envoi', 'send', 'Envoyer du stock à un livreur', 'La marchandise passe au livreur', H('liv')],
+        ['new:retour', 'in', 'Retour de stock', 'Le livreur rend des produits', H('liv')],
+        ['nav:stock', 'box', 'Mon stock', 'Ce qui reste, par produit et par endroit', true],
+        ['new:entree', 'in', 'Entrée de stock', 'Marchandise achetée ou reçue', true],
+        ['new:produit', 'tag', 'Nouveau produit', 'Ajouter un produit avec ses prix', own],
+        ['stockupd', 'box', 'Mettre mon stock à jour', 'Compter le stock réel, sans rien effacer', own],
+        ['nav:stockhist', 'book', 'Historique du stock', 'Entrées, envois, retours et pertes', true],
+        ['new:perte', 'out', 'Sortie / perte', 'Produit cassé, périmé, perdu…', true],
+        ['fourns', 'user', 'Fournisseurs', 'Vos fournisseurs (privé)', H('imp') && own],
+        ['cloture', 'cash', 'Clôture de caisse', 'Compter l\'argent du jour en $ et en FC', true],
+        ['goals', 'coin', 'Objectifs de ventes', 'Ventes et bénéfice à atteindre', own],
+      ];
+      EXTRA.forEach(([a, ic, t, d, ok]) => { if(!ok || seen.has(a)) return; seen.add(a); rows.push([a, `<button class="it" data-a="${a}"><div class="ic c-in">${ico(ic)}</div><div class="m"><div class="t">${esc(t)}</div><div class="d" style="white-space:normal">${esc(d)}</div></div>${ico('chev')}</button>`]); });
+      if(!seen.has('srvbackups') && ONLINE.role === 'proprietaire') rows.push(['srvbackups', `<button class="it" data-a="srvbackups"><div class="ic c-in">${ico('book')}</div><div class="m"><div class="t">Sauvegardes automatiques</div><div class="d" style="white-space:normal">Une copie de la boutique chaque nuit sur le serveur (30 jours)</div></div>${ico('chev')}</button>`]);
+      const by = {}; rows.forEach(([a, h]) => (by[catOf(a)] = by[catOf(a)] || {r:[], b:[]}).r.push(h)); btns.forEach(([a, h]) => (by[catOf(a)] = by[catOf(a)] || {r:[], b:[]}).b.push(h));
+      const cats = CATS.filter(c => by[c[0]]).concat(by.autres ? [['autres', 'Autres', 'more', 'Le reste des outils', []]] : []);
+      const search = M.querySelector('[data-a="gsearch"]'), sBar = search ? search.parentElement.outerHTML : '';
+      if(CAT && !by[CAT]) CAT = null;
+      if(!CAT){
+        M.innerHTML = `${sBar}<div id="pcats" class="pcats">${cats.map(c => { const n = by[c[0]].r.length + by[c[0]].b.length;
+          return `<button class="card pcat" data-a="pcat:${c[0]}"><div class="ic c-brand">${ico(c[2])}</div><b>${esc(c[1])}</b><span class="note">${esc(c[3])}</span><span class="pcn">${n}</span></button>`; }).join('')}</div>`;
+      } else { const c = cats.find(x => x[0] === CAT), g = by[CAT];
+        M.innerHTML = `<button class="back" data-a="pcat:">‹ Toutes les catégories</button><div id="pcats"><div class="sec" style="margin-top:4px"><h2>${esc(c[1])}</h2></div>
+          ${g.r.length ? `<div class="list menu">${g.r.join('')}</div>` : ''}${g.b.length ? `<div class="sec"><h2>Raccourcis</h2></div><div class="btns" style="flex-wrap:wrap">${g.b.map(h => h.replace(/ block/, '')).join('')}</div>` : ''}</div>`; }
+    }catch(_){ }
+    return out; };
+  document.head.insertAdjacentHTML('beforeend', `<style>
+.pcats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:4px 0 14px}
+.pcat{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;padding:16px 14px;position:relative;cursor:pointer;min-height:140px;border:1px solid var(--line);width:100%;font:inherit;color:inherit}
+.pcat b{font-size:16px;line-height:1.2}.pcat .note{font-size:12.5px;line-height:1.35}
+.pcat .pcn{position:absolute;top:12px;right:12px;min-width:24px;height:24px;padding:0 7px;border-radius:12px;background:var(--soft,#eef2f1);color:var(--muted);font-size:12px;font-weight:800;display:grid;place-items:center}
+.pcat:active{transform:scale(.97)}
+@media (min-width:700px){.pcats{grid-template-columns:repeat(3,1fr)}}
+</style>`);
+})();
+
+/* ---------- Rapidité : les gros calculs (stock réservé, prévisions, achats à prévoir) faits une seule fois par affichage ---------- */
+(() => {
+  let V = 0; const bump = () => { V++; };
+  // Toute modification passe par save() / rawSave() : on oublie alors les calculs gardés
+  if(typeof save === 'function'){ const s0 = save; save = function(){ bump(); return s0.apply(this, arguments); }; }
+  const keyNow = () => V + ':' + (S.moves ? S.moves.length : 0) + ':' + (S.products ? S.products.length : 0) + ':' + (S.livreurs ? S.livreurs.length : 0);
+  let pendK = null, pendM = null, pendL = null;
+  const clearSoon = (() => { let q = false; return () => { if(q) return; q = true; setTimeout(() => { q = false; pendK = null; memo.clear(); V++; }, 0); }; })();
+  const memo = new Map();
+  function pendMaps(){ const k = keyNow(); if(pendK === k && pendM) return; pendM = new Map(); pendL = new Map();
+    for(const m of S.moves) if(m.type === 'vente' && (m.status === 'attente' || m.status === 'encours')) for(const [x, n] of lines(m.pid, m.qty)){
+      pendM.set(x, (pendM.get(x) || 0) + n); const lk = (m.liv || '') + '|' + x; pendL.set(lk, (pendL.get(lk) || 0) + n); }
+    pendK = k; clearSoon(); }
+  if(typeof pendAll === 'function' && typeof lines === 'function'){ pendAll = function(pid){ pendMaps(); return pendM.get(pid) || 0; }; }
+  if(typeof pendingAt === 'function' && typeof lines === 'function'){ pendingAt = function(loc, pid){ pendMaps(); return pendL.get((loc || '') + '|' + pid) || 0; }; }
+  const once = (name) => { if(typeof window[name] !== 'function') return; const f0 = window[name];
+    window[name] = function(){ if(arguments.length) return f0.apply(this, arguments); const k = name + '#' + keyNow(); if(memo.has(k)) return memo.get(k); const r = f0.apply(this, arguments); memo.set(k, r); clearSoon(); return r; }; };
+  ['forecast', 'rachatList'].forEach(once);
 })();
 
 </script>
