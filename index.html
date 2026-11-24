@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '1b5b7a7da3';
+const APP_BUILD = 'd546277175';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -8872,7 +8872,7 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
   if(typeof declsOf !== 'function') return;
   const hm = ts => { if(!ts) return ''; const d = new Date(ts); return String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0'); };
   const same = (a, b) => { const x = declUSD(a), y = declUSD(b); return x > 0 && Math.abs(x - y) <= Math.max(0.5, x * 0.01); };
-  function dupOf(d){ return declsOf(d.liv).find(o => o.id !== d.id && o.date === d.date && (o.status === 'attente' || o.status === 'confirme') && same(o, d) && (o.ts || 0) < (d.ts || Infinity)) || null; }
+  function dupOf(d){ return declsOf(d.liv).find(o => o.id !== d.id && (o.date === d.date || (o.ts && d.ts && Math.abs(o.ts - d.ts) < 6 * 3600e3)) && (o.status === 'attente' || o.status === 'confirme') && same(o, d) && (o.ts || 0) < (d.ts || Infinity)) || null; }
   function oweUSD(lid){ try{ return Math.max(0, livStats(lid).toRemit); }catch(_){ return 0; } }
   // Un montant en $ beaucoup trop grand : sûrement des francs congolais tapés en dollars
   function looksFC(d, owe){ if(d.cur !== '$' || num(d.amount) < 1000) return false; const o = owe != null ? owe : oweUSD(d.liv); return num(d.amount) > Math.max(o * 5, o + 300); }
