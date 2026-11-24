@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '0d483f25b5';
+const APP_BUILD = '326e887926';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -8731,6 +8731,70 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
   // Fermer la fenêtre quand on choisit une action
   document.addEventListener('click', e => { const b = e.target.closest('#cmdActs [data-a]'); if(!b) return; const k = b.dataset.a;
     if(/^nav:/.test(k) || ['themetoggle'].includes(k)) setTimeout(() => { try{ closeSheet(); }catch(_){ } }, 0); }, true);
+})();
+
+/* ---------- Retrait du client : visible partout (page Import, menu Plus, accueil, recherche) ---------- */
+(() => {
+  if(typeof cmds !== 'function' || !A.cmdretrait) return;
+  const impOk = () => { try{ return typeof impOn === 'function' ? impOn() : true; }catch(_){ return false; } };
+  const ready = () => cmds().filter(c => c.step === 'arrive' && !c.retrait);
+  const others = () => cmds().filter(c => c.step !== 'arrive' && c.step !== 'livre' && c.step !== 'annule' && !c.retrait);
+  const done = () => cmds().filter(c => c.retrait).sort((a, b) => (b.retrait.ts || 0) - (a.retrait.ts || 0));
+  const row = (c, act) => { const k = cmdCalc(c), mm = [c.marque, c.modele].filter(Boolean).join(' ');
+    return `<button class="it" data-a="${act}:${c.id}"><div class="ic c-send">${ico('box')}</div><div class="m"><div class="t">${esc(c.client || 'Client')} · ${esc(mm || c.title || 'Commande')}</div>
+      <div class="d">${cmdNo(c)} · ${esc(stepOf(c.step)[1])}${c.phone ? ' · ' + esc(c.phone) : ''}</div></div>
+      <div class="r"><div class="num" style="font-weight:800;color:${k.reste > 0 ? 'var(--bad)' : 'var(--ok)'}">${k.reste > 0 ? 'reste ' + amtX(k.reste, k.cur) : 'payé'}</div></div></button>`; };
+  function retraitList(){
+    const R = ready(), O = others(), D = done().slice(0, 15);
+    sheet('Retrait du client', `<p class="note" style="margin-bottom:10px">Le client vient chercher sa commande ? Choisissez-la : vous notez qui la récupère, le reste payé, les frais de transport et le téléphone (marque, modèle, IMEI). Puis vous validez et envoyez le reçu.</p>
+      <input class="search" id="rtq" type="search" placeholder="Nom du client, téléphone, N° de commande…" autocomplete="off">
+      <div id="rtl">${body(R, O, D, '')}</div>`);
+    const i = document.getElementById('rtq'); if(i) i.oninput = () => { const q = i.value.trim().toLowerCase(), f = L => !q ? L : L.filter(c => [c.client, c.phone, c.title, c.marque, c.modele, c.sn, cmdNo(c)].join(' ').toLowerCase().includes(q));
+      document.getElementById('rtl').innerHTML = body(f(R), f(O), f(D), q); };
+  }
+  function body(R, O, D, q){
+    return `<div class="sec"><h2>Arrivées, prêtes pour le retrait (${R.length})</h2></div>
+      ${R.length ? `<div class="list">${R.map(c => row(c, 'cmdretrait')).join('')}</div>` : `<div class="card empty" style="padding:14px">${q ? 'Aucune commande arrivée pour cette recherche.' : 'Aucune commande arrivée pour le moment. Quand un colis arrive, ouvrez la commande et touchez « Passer à : Arrivé », ou choisissez-la plus bas.'}</div>`}
+      ${O.length ? `<div class="sec"><h2>Autres commandes en cours (${O.length})</h2></div><p class="note" style="margin:-4px 0 8px">Le client récupère avant que vous ayez noté « Arrivé » ? Vous pouvez aussi valider le retrait ici.</p><div class="list">${O.slice(0, 30).map(c => row(c, 'cmdretrait')).join('')}</div>` : ''}
+      ${D.length ? `<div class="sec"><h2>Retraits déjà validés</h2></div><div class="list">${D.map(c => { const r = c.retrait;
+        return `<button class="it" data-a="cmd:${c.id}"><div class="ic c-in">${ico('in')}</div><div class="m"><div class="t">${esc(c.client || 'Client')} · ${esc([c.marque, c.modele].filter(Boolean).join(' ') || c.title || '')}</div>
+          <div class="d">${dAbs(r.date || today())} · récupéré par ${esc(r.self ? (c.client || 'le client') : (r.by || '-'))}${num(r.fraisAmt) > 0 ? ' · transport ' + amtX(num(r.fraisAmt), r.fraisCur || '$') : ''}</div></div>${ico('chev')}</button>`; }).join('')}</div>` : ''}`;
+  }
+  A.retraits = () => { if(!impOk()){ toast('Activez « J\'importe sur commande » dans Réglages'); return; } retraitList(); };
+  // Le bouton « Retrait » dans la fiche : aussi pour une commande pas encore marquée « Arrivé »
+  const cs0 = cmdSheet;
+  cmdSheet = function(id){ const out = cs0.apply(this, arguments);
+    try{ const c = cmds().find(x => x.id === id), box = document.getElementById('shb');
+      if(c && box && !c.retrait && c.step !== 'arrive' && c.step !== 'livre' && c.step !== 'annule' && !box.querySelector('[data-a^="cmdretrait:"]')){
+        const ref = box.querySelector('[data-a="cmdpay:' + c.id + '"]'); const b = `<button class="btn block" style="margin-top:8px" data-a="cmdretrait:${c.id}">Retrait du client (il récupère maintenant)</button>`;
+        if(ref && ref.parentElement) ref.parentElement.insertAdjacentHTML('beforebegin', b); } }catch(_){ }
+    return out; };
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || !impOk() || ONLINE.role === 'livreur') return out; const n = ready().length;
+      const lbl = `Retrait du client${n ? ' · ' + n + ' prête(s)' : ''}`;
+      // Page Import : gros bouton en haut
+      if(view === 'import' && !M.querySelector('#rtBtn')){ const k = M.querySelector('.kpis');
+        const h = `<button class="btn primary block" id="rtBtn" data-a="retraits" style="margin:0 0 12px">${lbl}</button>`;
+        if(k) k.insertAdjacentHTML('beforebegin', h); else M.insertAdjacentHTML('afterbegin', h); }
+      // Menu Plus : juste sous « Commandes import »
+      if(view === 'plus' && !M.querySelector('#rtMenu')){ const imp = M.querySelector('[data-a="nav:import"]');
+        const h = `<button class="it" id="rtMenu" data-a="retraits"><div class="ic c-send">${ico('in')}</div><div class="m"><div class="t">${lbl}</div><div class="d" style="white-space:normal">Le client récupère sa commande : reste payé, frais de transport, IMEI, reçu</div></div>${ico('chev')}</button>`;
+        if(imp) imp.insertAdjacentHTML('afterend', h); }
+      // Accueil : rappel quand des commandes attendent leur retrait
+      if(view === 'home' && n && !M.querySelector('#rtHome')){ const card = M.querySelector('[data-a="nav:import"].daycard');
+        const h = `<button class="card daycard" id="rtHome" data-a="retraits" style="margin-bottom:12px"><span><b>${n}</b> commande(s) import arrivée(s) : <b>retrait du client</b></span><span class="note">Ouvrir ›</span></button>`;
+        if(card) card.insertAdjacentHTML('afterend', h); }
+    }catch(_){ }
+    return out; };
+  // « Un mot, une action » : « retrait »
+  if(window.__cmdActions && typeof gsResults === 'function'){ const g0 = gsResults;
+    gsResults = function(qq){ const r = g0.apply(this, arguments), q = String(qq || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      if(q.length >= 3 && impOk() && ['retrait', 'retirer', 'recuperer', 'recupere'].some(w => w.startsWith(q) || q.startsWith(w.slice(0, 5)))){
+        const b = `<button class="it cmdact" data-a="retraits"><div class="ic c-brand">${ico('chev')}</div><div class="m"><div class="t">Retrait du client</div><div class="d">Le client récupère sa commande import</div></div></button>`;
+        if(r.includes('id="cmdActs">')) return r.replace('id="cmdActs">', 'id="cmdActs">' + b);
+        return `<div class="sec"><h2>Actions</h2></div><div class="list" id="cmdActs">${b}</div>` + (/class="empty"/.test(r) && !/class="sec"/.test(r) ? '' : r); }
+      return r; }; }
 })();
 
 </script>

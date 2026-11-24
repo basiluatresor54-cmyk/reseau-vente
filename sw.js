@@ -1,5 +1,5 @@
 /* Stock & Livreurs — service worker : ouverture instantanée et hors connexion */
-const VERSION = '08d8814f49';
+const VERSION = '287b5cb1bb';
 const CACHE = 'stock-livreurs-' + VERSION;
 const CORE = ['./', 'index.html', 'supabase.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'guide.html', 'conditions.html'];
 self.addEventListener('install', e => {
