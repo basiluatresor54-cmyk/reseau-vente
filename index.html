@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'ac56b36763';
+const APP_BUILD = '0d483f25b5';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -8553,6 +8553,184 @@ try{ new MutationObserver(ms => { for(const m of ms) for(const n of m.addedNodes
         q.addEventListener('input', run); run(); }catch(_){ }
       return out; }; }
   window.__retrait = {retraitMsg: c => retraitMsg(c)};
+})();
+
+/* =================================================================
+   Interface animée (idées de la vidéo « verre ») :
+   1) le verre se pose à l'ouverture + cartes qui arrivent une par une ;
+   2) graphiques qui se dessinent, barres qui montent ;
+   3) barre « Un mot, une action » dans la recherche ;
+   4) couleur qui change en douceur, verre plus clair, animations oui / non.
+   Tout est réglé dans Personnaliser, pour ce téléphone seulement.
+   ================================================================= */
+(() => {
+  const H = document.documentElement;
+  const reduced = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_){ return false; } };
+  const fxOn = () => persoGet().anim !== 'off' && !reduced();
+  function fxApply(){ const P = persoGet(); H.classList.toggle('noanim', P.anim === 'off'); H.classList.toggle('fx', fxOn()); H.classList.toggle('clair', P.clair === '1'); }
+  window.fxApply = fxApply; fxApply();
+  document.head.insertAdjacentHTML('beforeend', `<style id="fxcss">
+/* 1. Le verre se pose */
+@keyframes fxLand{0%{opacity:0;transform:perspective(1200px) rotateX(12deg) scale(.93) translateY(26px);filter:blur(14px)}60%{filter:blur(0)}100%{opacity:1;transform:none;filter:none}}
+@keyframes fxLandS{0%{opacity:0;transform:scale(.96) translateY(18px)}100%{opacity:1;transform:none}}
+html.fx body.land #main,html.fx body.land .top{animation:fxLandS .7s cubic-bezier(.2,.8,.2,1) both;transform-origin:50% 0}
+html.fx.glass body.land #main,html.fx.glass body.land .top{animation:fxLand 1.05s cubic-bezier(.2,.8,.2,1) both}
+html.fx body.land .top{animation-duration:.6s!important}
+html.fx body.land nav.nav{animation:fxNav .8s .25s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes fxNav{0%{opacity:0;transform:translateY(40px)}100%{opacity:1;transform:none}}
+/* Onglets : les cartes arrivent une par une */
+@keyframes fxCard{0%{opacity:0;transform:perspective(900px) rotateX(14deg) translateY(16px);filter:blur(7px)}100%{opacity:1;transform:none;filter:none}}
+@keyframes fxCardS{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:none}}
+html.fx #main.enter > *{animation:fxCardS .45s cubic-bezier(.2,.8,.2,1) both;transform-origin:50% 0}
+html.fx.glass #main.enter > *{animation-name:fxCard;animation-duration:.6s}
+html.fx.glass #main.enter > *:nth-child(n+9){animation-name:fxCardS}
+${Array.from({length:12}, (_, i) => `html.fx #main.enter > *:nth-child(${i + 1}){animation-delay:${(i * .055).toFixed(3)}s}`).join('\n')}
+html.fx #main.enter > *:nth-child(n+13){animation-delay:.66s}
+/* 2. Graphiques : ils se dessinent quand on les voit à l'écran */
+@keyframes fxDraw{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+html.fx .chart svg.fxw{clip-path:inset(0 100% 0 0)}
+html.fx .chart svg.fxw.fxgo{animation:fxDraw 1.3s .15s cubic-bezier(.45,.05,.2,1) both}
+@keyframes fxBar{0%{transform:scaleY(0)}100%{transform:scaleY(1)}}
+html.fx .bars.fxw i{transform-origin:50% 100%;transform:scaleY(0)}
+html.fx .bars.fxw.fxgo i{animation:fxBar .7s cubic-bezier(.2,.8,.2,1.15) both}
+${Array.from({length:16}, (_, i) => `html.fx .bars.fxgo > div:nth-child(${i + 1}) i{animation-delay:${(.1 + i * .045).toFixed(3)}s}`).join('\n')}
+@keyframes fxHb{0%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+html.fx .hb.fxw .tr i{display:block;transform-origin:0 50%;transform:scaleX(0)}
+html.fx .hb.fxw.fxgo .tr i{animation:fxHb .9s .15s cubic-bezier(.2,.8,.2,1) both}
+${Array.from({length:10}, (_, i) => `html.fx .hb.fxgo:nth-of-type(${i + 1}) .tr i{animation-delay:${(.15 + i * .06).toFixed(2)}s}`).join('\n')}
+@keyframes fxDonut{0%{opacity:0;transform:rotate(-120deg) scale(.6)}100%{opacity:1;transform:none}}
+html.fx .donut.fxw{opacity:0}
+html.fx .donut.fxw.fxgo{animation:fxDonut 1s .1s cubic-bezier(.2,.8,.2,1) both}
+/* 3. Un mot, une action */
+.cmdact .ic{font-weight:800}
+.cmdhint{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.cmdhint button{font-size:13px;padding:6px 11px}
+/* 4. Verre plus clair */
+html.glass.clair{--gl:rgba(255,255,255,.80);--gl2:rgba(255,255,255,.90);--glb:rgba(255,255,255,.95);--gls:0 10px 30px rgba(16,24,40,.08),0 1px 0 rgba(255,255,255,.9) inset}
+html.glass.clair:not([data-theme=dark]) .card,html.glass.clair:not([data-theme=dark]) .kpi:not(.hero),html.glass.clair:not([data-theme=dark]) .list{background:linear-gradient(155deg,rgba(255,255,255,.92),rgba(255,255,255,.66))}
+html.glass.clair[data-theme=dark]{--gl:rgba(48,52,62,.72);--gl2:rgba(54,58,68,.88);--glb:rgba(255,255,255,.14)}
+/* Animations coupées */
+html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!important;transition:none!important}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.6s}
+</style>`);
+  // Compteurs : seulement si les animations sont permises
+  if(typeof countUp === 'function'){ const c0 = countUp; countUp = function(root){ if(!fxOn()) return; return c0.apply(this, arguments); }; }
+  // Le verre se pose : une fois à l'ouverture de l'application
+  let landed = false, fxLast = null;
+  // On observe le parent (le graphique caché par son propre masque ne serait jamais « vu »)
+  const IO = typeof IntersectionObserver === 'function' ? new IntersectionObserver(es => es.forEach(x => { if(x.isIntersecting && x.intersectionRatio > 0){ (x.target.__fx || []).forEach(t => t.classList.add('fxgo')); x.target.__fx = []; IO.unobserve(x.target); } }), {threshold:[0, .2, .4]}) : null;
+  function fxMark(){ const M = document.getElementById('main'); if(!M) return;
+    M.querySelectorAll('.chart svg, .bars, .hb, .donut').forEach(e => { e.classList.add('fxw'); const w = e.parentElement || e;
+      if(IO){ (w.__fx = w.__fx || []).push(e); IO.observe(w); } else e.classList.add('fxgo'); }); }
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    try{ if(!landed && ONLINE.shop && document.getElementById('main')){ landed = true;
+        if(fxOn()){ document.body.classList.add('land'); setTimeout(() => document.body.classList.remove('land'), 1500); } }
+      if(typeof view !== 'undefined' && view !== fxLast){ fxLast = view; if(fxOn()) fxMark(); } }catch(_){ }
+    return out; };
+  // Changement de couleur / thème / style en douceur (fondu de tout l'écran)
+  const smooth = fn => function(){ const a = arguments, self = this;
+    if(fxOn() && document.startViewTransition){ try{ const t = document.startViewTransition(() => fn.apply(self, a)); ['ready', 'finished', 'updateCallbackDone'].forEach(k => t[k] && t[k].catch(() => {})); return; }catch(_){ } }
+    return fn.apply(self, a); };
+  ['pcolor', 'theme', 'themetoggle', 'style'].forEach(k => { if(typeof A[k] === 'function') A[k] = smooth(A[k]); });
+  A.panim = v => { const P = persoGet(); if(v === 'off') P.anim = 'off'; else delete P.anim; persoSet(P); fxApply(); render(); toast(v === 'off' ? 'Animations coupées sur ce téléphone' : 'Animations activées'); };
+  A.pclair = smooth(v => { const P = persoGet(); if(v === '1') P.clair = '1'; else delete P.clair; persoSet(P); fxApply(); render(); toast(v === '1' ? 'Verre plus clair' : 'Verre normal'); });
+  const rp0 = A.preset_perso; if(rp0) A.preset_perso = async function(){ await rp0.apply(this, arguments); fxApply(); };
+  // Personnaliser : verre plus clair + animations oui / non
+  if(CUSTOM.perso){ const p0 = CUSTOM.perso;
+    CUSTOM.perso = function(){ let h = p0.apply(this, arguments); const P = persoGet();
+      const seg = (items, on, act) => `<div class="seg">${items.map(([k, l]) => `<button type="button" class="${on === k ? 'on' : ''}" data-a="${act}:${k}">${l}</button>`).join('')}</div>`;
+      const add = `<div class="f" style="margin-top:10px" id="fxVerre"><span>Verre</span>${seg([['0','Normal'],['1','Plus clair']], P.clair === '1' ? '1' : '0', 'pclair')}<small class="note">Pour le style « Verre » : cartes plus blanches et lumineuses.</small></div>
+        <div class="f" style="margin-top:10px" id="fxAnim"><span>Animations</span>${seg([['on','Oui'],['off','Non']], P.anim === 'off' ? 'off' : 'on', 'panim')}<small class="note">${reduced() ? 'Votre téléphone demande moins d\'animations : elles restent coupées.' : 'Ouverture en verre, cartes qui arrivent, graphiques qui se dessinent. Choisissez « Non » sur un petit téléphone lent.'}</small></div>`;
+      const k = '<div class="f" style="margin-top:10px"><span>Taille du texte</span>';
+      return h.includes(k) ? h.replace(k, add + k) : h + add; }; }
+
+  /* ---------- 3. Un mot, une action ---------- */
+  const N = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const can = (k) => { try{ return typeof has !== 'function' || has(k); }catch(_){ return true; } };
+  const owner = () => ['proprietaire', 'gerant'].includes(ONLINE.role) || !ONLINE.role;
+  // [mots, titre, explication, attributs data-*, condition]
+  const ACTS = [
+    [['vente','vendre','vendu','commande client'], 'Nouvelle vente', 'Enregistrer une vente', {a:'new:vente'}],
+    [['rapide','caisse','comptoir'], 'Vente rapide', 'Vendre au comptoir en 2 touches', {a:'quick'}, () => can('shop')],
+    [['entree','stock','achat','arrivage','recu','marchandise'], 'Entrée de stock', 'Marchandise achetée ou reçue', {a:'new:entree'}],
+    [['envoi','envoyer','livreur'], 'Envoyer du stock à un livreur', 'La marchandise passe au livreur', {a:'new:envoi'}, () => can('liv')],
+    [['retour','rendre'], 'Retour de stock', 'Le livreur rend des produits', {a:'new:retour'}, () => can('liv')],
+    [['perte','casse','abime','perime','vole','sortie'], 'Sortie / perte', 'Produit cassé, périmé, perdu…', {a:'new:perte'}],
+    [['produit','article','nouveau produit','prix'], 'Nouveau produit', 'Ajouter un produit avec ses prix', {a:'new:produit'}],
+    [['depense','transport','facebook','loyer','pub','frais'], 'Dépense', 'Transport, publicité, loyer…', {a:'money:depense'}],
+    [['versement','argent','mobile money','cash'], 'Versement d\'un livreur', 'Argent reçu d\'un livreur', {a:'money:versement'}, () => can('liv')],
+    [['commission','paie','payer'], 'Payer une commission', 'Commission d\'un livreur', {a:'money:paiecomm'}, () => can('liv')],
+    [['nouveau livreur','livreur','ajouter livreur'], 'Nouveau livreur', 'Ajouter un livreur', {a:'newliv'}, () => can('liv')],
+    [['commande','import','chine','dubai','transitaire'], 'Nouvelle commande import', 'Commande sur demande pour un client', {a:'cmdnew'}, () => can('imp')],
+    [['import','commandes import','chine'], 'Commandes import', 'Suivi des commandes et retraits', {a:'nav:import'}, () => can('imp')],
+    [['cloture','fermer','caisse'], 'Clôture de caisse', 'Compter la caisse du soir', {a:'cloture'}],
+    [['soir','point du soir'], 'Point du soir', 'Message du soir pour chaque livreur', {a:'soir'}, () => can('liv')],
+    [['objectif','but','cible'], 'Objectifs de ventes', 'Ventes et bénéfice à atteindre', {a:'goals'}],
+    [['imei','serie','telephone'], 'Vérifier un IMEI', 'Retrouver un téléphone vendu', {a:'imei'}, () => typeof snOn !== 'function' || snOn()],
+    [['bilan','benefice','mois','gain'], 'Bilan du mois', 'Ventes, bénéfice, meilleurs produits', {a:'nav:bilan'}],
+    [['rapport','semaine'], 'Rapport de la semaine', 'Résumé à envoyer ou imprimer', {a:'nav:rapport'}],
+    [['jour','aujourd','rapport du jour'], 'Rapport du jour', 'Les ventes d\'un jour au choix', {a:'nav:jour'}],
+    [['credit','dette','doit','reste a payer'], 'Ventes à crédit', 'Clients qui paient plus tard', {a:'nav:credits'}],
+    [['client','relance','fidelite'], 'Clients', 'Historique et relance WhatsApp', {a:'nav:clients'}],
+    [['depenses'], 'Liste des dépenses', 'Toutes les dépenses', {a:'nav:depenses'}],
+    [['livre','historique','tout'], 'Le Livre', 'Toutes les opérations', {a:'nav:livre'}],
+    [['calendrier','date','agenda'], 'Calendrier', 'Chaque jour avec ses livraisons', {a:'calendar'}],
+    [['equipe','gerant','vendeur','inviter','tache'], 'Équipe', 'Inviter et donner les tâches', {a:'nav:equipe'}, owner],
+    [['journal','qui','activite'], 'Journal d\'activité', 'Qui a fait quoi, et quand', {a:'nav:journal'}, owner],
+    [['message','annonce','equipe'], 'Message à l\'équipe', 'Une annonce pour tous', {a:'nav:annonce'}, owner],
+    [['couleur','personnaliser','onglet','animation','verre','theme'], 'Personnaliser', 'Couleur, onglets, verre, animations', {a:'nav:perso'}],
+    [['sombre','nuit','clair'], 'Mode sombre / clair', 'Changer l\'apparence', {a:'themetoggle'}],
+    [['reglage','parametre','logo','taux','dollar'], 'Réglages', 'Logo, taux du dollar, factures', {a:'nav:reglages'}],
+    [['boutique','en ligne','commandes en ligne','site'], 'Commandes en ligne', 'Commandes reçues de votre boutique', {a:'weborders'}],
+    [['magasin','magasins','succursale'], 'Tous mes magasins', 'Chiffres de chaque magasin', {a:'multi'}, () => typeof multiOn !== 'function' || multiOn()],
+    [['sauvegarde','backup','securite'], 'Sauvegarde', 'Copie de toutes vos données', {a:'backup'}],
+    [['stock','inventaire','restant'], 'Stock', 'Ce qui reste en stock', {a:'nav:stock'}],
+    [['ventes','livraisons'], 'Ventes', 'Toutes les ventes', {a:'nav:ventes'}],
+    [['livreurs'], 'Livreurs', 'Vos livreurs et leur stock', {a:'nav:livreurs'}, () => can('liv')],
+  ];
+  const VERB = [['vente', 'new:vente', 'Vendre'], ['vendre', 'new:vente', 'Vendre'], ['entree', 'new:entree', 'Entrée'], ['achat', 'new:entree', 'Entrée'], ['envoi', 'new:envoi', 'Envoyer'], ['envoyer', 'new:envoi', 'Envoyer'], ['perte', 'new:perte', 'Perte'], ['casse', 'new:perte', 'Perte']];
+  const btn = (attrs, t, d) => `<button class="it cmdact" ${Object.entries(attrs).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')}><div class="ic c-brand">${ico('chev')}</div><div class="m"><div class="t">${esc(t)}</div><div class="d">${esc(d)}</div></div></button>`;
+  function cmdActions(qq){
+    const q = N(qq).trim(); if(q.length < 2) return '';
+    const words = q.split(/\s+/).filter(Boolean), out = [], seen = new Set();
+    const push = (attrs, t, d) => { const k = JSON.stringify(attrs); if(seen.has(k) || out.length >= 7) return; seen.add(k); out.push(btn(attrs, t, d)); };
+    // Verbe + produit / livreur : « vente huile », « envoi Marla »
+    const vb = VERB.find(([w]) => words[0] && w.startsWith(words[0]) && words[0].length >= 3);
+    if(vb && words.length > 1){ const rest = words.slice(1).join(' ');
+      (S.products || []).filter(p => N(p.name).includes(rest)).slice(0, 3).forEach(p => push({a:vb[1], pid:p.id}, `${vb[2]} : ${p.name}`, 'Le produit est déjà choisi'));
+      if(['new:envoi', 'new:vente'].includes(vb[1])) (S.livreurs || []).filter(l => N(l.name).includes(rest)).slice(0, 2).forEach(l => push({a:vb[1], liv:l.id}, `${vb[2]} : ${l.name}`, 'Le livreur est déjà choisi'));
+    }
+    // Nom d'un livreur seul : raccourcis
+    (S.livreurs || []).filter(l => q.length >= 3 && N(l.name).includes(q)).slice(0, 1).forEach(l => {
+      push({a:'new:envoi', liv:l.id}, `Envoyer du stock à ${l.name}`, 'Raccourci livreur'); push({a:'money:versement', liv:l.id}, `Versement de ${l.name}`, 'Argent reçu'); });
+    ACTS.forEach(([keys, t, d, attrs, ok]) => { if(ok && !ok()) return;
+      const hit = keys.some(k => k.startsWith(q) || (q.length >= 3 && k.includes(q)) || words.every(w => w.length >= 2 && N(t).split(/[\s'/]+/).some(x => x.startsWith(w))));
+      if(hit) push(attrs, t, d); });
+    return out.length ? `<div class="sec"><h2>Actions</h2></div><div class="list" id="cmdActs">${out.join('')}</div>` : '';
+  }
+  window.__cmdActions = cmdActions;
+  if(typeof gsResults === 'function'){ const g0 = gsResults;
+    gsResults = function(qq){ const a = cmdActions(qq), r = g0.apply(this, arguments);
+      if(a && /class="empty"/.test(r) && !/class="sec"/.test(r)) return a; return a + r; }; }
+  const HINTS = ['vente', 'entrée', 'dépense', 'perte', 'bilan', 'objectif'];
+  if(typeof gsSheet === 'function'){ const s0 = gsSheet;
+    gsSheet = function(){ const out = s0.apply(this, arguments);
+      try{ const h = document.querySelector('#shb h2, #shb .shh, #shb header'); const i = $('#gsIn'), o = $('#gsOut'); if(!i) return out;
+        i.placeholder = 'Un mot : vente, Marla, huile, bilan, IMEI…';
+        if(!i.value && o) o.innerHTML = `<p class="note" style="margin-bottom:6px">Tapez un mot : l'application vous propose l'action ou la fiche. Exemples :</p><div class="cmdhint">${HINTS.map(w => `<button type="button" class="chip" data-cmdw="${w}">${w}</button>`).join('')}</div><p class="note">Ou cherchez un produit, un client, un numéro, un livreur, une commande.</p>`;
+        o && o.addEventListener('click', e => { const b = e.target.closest('[data-cmdw]'); if(!b) return; e.stopPropagation(); i.value = b.dataset.cmdw; i.dispatchEvent(new Event('input', {bubbles:true})); i.focus(); });
+        i.addEventListener('keydown', e => { if(e.key !== 'Enter') return; e.preventDefault(); const f = document.querySelector('#gsOut [data-a]'); if(f) f.click(); });
+      }catch(_){ }
+      return out; }; }
+  // Le bouton de recherche dit « Un mot, une action »
+  const r1 = render;
+  render = function(){ const out = r1.apply(this, arguments);
+    try{ document.querySelectorAll('#main [data-a="gsearch"]').forEach(b => { if(!b.dataset.cmd){ b.dataset.cmd = '1'; b.textContent = 'Un mot : vente, Marla, bilan…'; } }); }catch(_){ }
+    return out; };
+  // Fermer la fenêtre quand on choisit une action
+  document.addEventListener('click', e => { const b = e.target.closest('#cmdActs [data-a]'); if(!b) return; const k = b.dataset.a;
+    if(/^nav:/.test(k) || ['themetoggle'].includes(k)) setTimeout(() => { try{ closeSheet(); }catch(_){ } }, 0); }, true);
 })();
 
 </script>
