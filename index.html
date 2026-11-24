@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '9bee84ff3b';
+const APP_BUILD = '16a03d603d';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -9221,6 +9221,418 @@ html.noanim *,html.noanim *::before,html.noanim *::after{animation:none!importan
         add.parentElement.insertBefore(box, add); }).observe(o, {childList:true, subtree:true});
     }catch(_){ }
     return out; };
+})();
+
+/* =================================================================
+   Style « Verre liquide » (inspiré d'iOS 26) — un 3e style en plus de « Verre » et « Simple ».
+   Fond vivant, reflets de lumière sur les bords, barre du bas flottante avec pastille qui glisse,
+   en-tête qui se fait discret au défilement, boutons qui s'enfoncent, fenêtres qui poussent l'écran,
+   petites vibrations (Android). Tout s'arrête si « Animations : Non ».
+   ================================================================= */
+(() => {
+  const H = document.documentElement;
+  const pref = () => { try{ return localStorage.getItem('stock_style') || 'verre'; }catch(_){ return 'verre'; } };
+  const lgOn = () => pref() === 'liquide';
+  applyStyle = function(){ const v = pref(); H.classList.toggle('glass', v === 'verre' || v === 'liquide'); H.classList.toggle('lg', v === 'liquide'); setTimeout(paint, 30); };
+  applyStyle();
+  document.head.insertAdjacentHTML('beforeend', `<style id="lgcss">
+html.lg{--gl:rgba(255,255,255,.58);--gl2:rgba(255,255,255,.66);--glb:rgba(255,255,255,.75);--spec:inset 0 1px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(255,255,255,.28),inset 1px 0 0 rgba(255,255,255,.45),inset -1px 0 0 rgba(255,255,255,.2)}
+html.lg[data-theme=dark]{--gl:rgba(38,41,52,.55);--gl2:rgba(44,48,60,.7);--glb:rgba(255,255,255,.12);--spec:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(255,255,255,.05),inset 1px 0 0 rgba(255,255,255,.08)}
+/* Fond vivant */
+html.lg body{background:var(--bg)}
+html.lg body::before{content:'';position:fixed;inset:-20%;z-index:-1;pointer-events:none;
+  background:radial-gradient(38% 30% at 20% 18%, rgba(var(--brand-rgb),.34), transparent 70%),radial-gradient(34% 28% at 82% 30%, rgba(122,162,255,.30), transparent 70%),radial-gradient(40% 32% at 60% 88%, rgba(255,170,120,.26), transparent 70%),radial-gradient(30% 26% at 12% 80%, rgba(var(--brand-rgb),.18), transparent 70%)}
+html.lg.fx body::before{animation:lgAurora 26s ease-in-out infinite alternate}
+@keyframes lgAurora{0%{transform:translate3d(0,0,0) rotate(0deg) scale(1)}50%{transform:translate3d(4%,-3%,0) rotate(8deg) scale(1.08)}100%{transform:translate3d(-4%,3%,0) rotate(-6deg) scale(1.02)}}
+/* Cartes en verre avec reflets sur les bords */
+html.lg .card,html.lg .kpi:not(.hero),html.lg .list,html.lg .daycard{background:linear-gradient(150deg,rgba(255,255,255,.74),rgba(255,255,255,.42));border:1px solid var(--glb);box-shadow:var(--spec),0 10px 30px rgba(16,24,40,.09)}
+html.lg[data-theme=dark] .card,html.lg[data-theme=dark] .kpi:not(.hero),html.lg[data-theme=dark] .list,html.lg[data-theme=dark] .daycard{background:linear-gradient(150deg,rgba(58,62,76,.62),rgba(30,33,42,.5))}
+html.lg .kpi.hero{box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 14px 34px rgba(var(--brand-rgb),.35)}
+html.lg .btn{box-shadow:var(--spec)}
+html.lg .btn.primary{background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 55%),var(--brand);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 8px 22px rgba(var(--brand-rgb),.35)}
+html.lg .search,html.lg input,html.lg select,html.lg textarea{background:rgba(255,255,255,.6)}
+html.lg[data-theme=dark] .search,html.lg[data-theme=dark] input,html.lg[data-theme=dark] select,html.lg[data-theme=dark] textarea{background:rgba(255,255,255,.06)}
+/* Boutons qui s'enfoncent (ressort) */
+html.lg.fx .btn,html.lg.fx .it,html.lg.fx .card[data-a],html.lg.fx button.card,html.lg.fx .chip,html.lg.fx .seg button,html.lg.fx nav.nav button,html.lg.fx .fab,html.lg.fx .pcat{transition:transform .35s cubic-bezier(.3,1.6,.5,1),filter .2s,background-color .25s}
+html.lg.fx .btn:active,html.lg.fx .it:active,html.lg.fx .card[data-a]:active,html.lg.fx button.card:active,html.lg.fx .chip:active,html.lg.fx .seg button:active,html.lg.fx .fab:active,html.lg.fx .pcat:active{transform:scale(.955);filter:brightness(1.06);transition-duration:.08s}
+html.lg.fx nav.nav button:active{transform:scale(.88);transition-duration:.08s}
+/* En-tête : se fait discret quand on descend */
+html.lg .top{transition:padding .35s cubic-bezier(.2,.8,.2,1),background-color .35s,box-shadow .35s;background:rgba(var(--brand-rgb),.72);box-shadow:inset 0 -1px 0 rgba(255,255,255,.18),0 8px 30px rgba(var(--brand-rgb),.2)}
+html.lg body.lgscroll .top{padding-top:calc(8px + env(safe-area-inset-top));padding-bottom:9px;background:rgba(var(--brand-rgb),.6)}
+html.lg .top h1{transition:font-size .35s}
+html.lg body.lgscroll .top h1{font-size:16.5px}
+html.lg .top .logo{transition:width .35s,height .35s}
+html.lg body.lgscroll .top .logo{width:32px;height:32px}
+/* Barre du bas flottante + pastille qui glisse */
+@media (max-width:899px){
+  html.lg nav.nav{background:var(--gl);backdrop-filter:blur(28px) saturate(200%);-webkit-backdrop-filter:blur(28px) saturate(200%);box-shadow:var(--spec),0 16px 40px rgba(16,24,40,.2);border-radius:32px;transition:transform .45s cubic-bezier(.3,1.3,.5,1),opacity .3s;overflow:visible}
+  html.lg nav.nav button.on{background:transparent!important}
+  html.lg #lgPill{position:absolute;top:6px;bottom:6px;left:0;width:0;border-radius:26px;pointer-events:none;z-index:0;background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(255,255,255,.35));box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 4px 14px rgba(var(--brand-rgb),.22),inset 0 0 0 1px rgba(var(--brand-rgb),.16);transition:left .5s cubic-bezier(.3,1.35,.45,1),width .5s cubic-bezier(.3,1.35,.45,1)}
+  html.lg[data-theme=dark] #lgPill{background:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,.07))}
+  html.lg nav.nav button{position:relative;z-index:1}
+  html.lg body.lgmini nav.nav{transform:translateY(6px) scale(.9);opacity:.96}
+}
+/* Fenêtres : l'écran recule derrière, comme sur iPhone */
+html.lg .sh{box-shadow:var(--spec),0 -10px 40px rgba(0,0,0,.18)}
+html.lg .sh::before{content:'';display:block;width:40px;height:5px;border-radius:3px;background:rgba(120,120,130,.45);margin:8px auto 0}
+html.lg.fx .sh{transition:transform .5s cubic-bezier(.25,1.25,.45,1)!important}
+html.lg.fx .ov:not(.on) .sh{transform:translateY(60%)!important}
+html.lg.fx #main,html.lg.fx .top{transition:transform .45s cubic-bezier(.2,.8,.2,1),filter .45s,border-radius .45s}
+@media (max-width:899px){ html.lg.fx body.lgsheet #main{transform:scale(.94) translateY(8px);filter:brightness(.92);border-radius:18px}
+  html.lg.fx body.lgsheet .top{transform:scale(.94);filter:brightness(.92)} }
+/* Contrôles à onglets : la pastille glisse */
+html.lg .seg{position:relative}
+html.lg .seg > .lgseg{position:absolute;z-index:0;border-radius:10px;background:var(--brand);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 4px 12px rgba(var(--brand-rgb),.3);transition:left .45s cubic-bezier(.3,1.35,.45,1),top .3s,width .45s cubic-bezier(.3,1.35,.45,1),height .3s;pointer-events:none}
+html.lg .seg.lgready button.on{background:transparent}
+html.lg .seg button{position:relative;z-index:1}
+/* Le choix du style dans Personnaliser */
+.stylelg{background:linear-gradient(120deg,rgba(var(--brand-rgb),.16),rgba(122,162,255,.16))!important}
+</style>`);
+  // Pastille de la barre du bas
+  function navPill(){ const nav = document.getElementById('nav'); if(!nav) return; let p = document.getElementById('lgPill');
+    if(!lgOn() || innerWidth >= 900){ if(p) p.remove(); return; }
+    const on = nav.querySelector('button.on'); if(!p){ p = document.createElement('span'); p.id = 'lgPill'; nav.prepend(p); }
+    if(!on){ p.style.opacity = '0'; return; } p.style.opacity = '1';
+    const r = on.getBoundingClientRect(), n = nav.getBoundingClientRect(); p.style.left = (r.left - n.left + 2) + 'px'; p.style.width = (r.width - 4) + 'px'; }
+  // Pastille des contrôles à onglets (.seg)
+  function segPills(){ document.querySelectorAll('.seg').forEach(seg => { let pl = seg.querySelector(':scope > .lgseg');
+    if(!lgOn()){ if(pl) pl.remove(); seg.classList.remove('lgready'); return; }
+    const on = seg.querySelector(':scope > button.on'); if(!on){ if(pl) pl.remove(); seg.classList.remove('lgready'); return; }
+    if(!pl){ pl = document.createElement('span'); pl.className = 'lgseg'; seg.prepend(pl); pl.style.transition = 'none'; requestAnimationFrame(() => { pl.style.transition = ''; }); }
+    pl.style.left = on.offsetLeft + 'px'; pl.style.top = on.offsetTop + 'px'; pl.style.width = on.offsetWidth + 'px'; pl.style.height = on.offsetHeight + 'px'; seg.classList.add('lgready'); }); }
+  function paint(){ try{ navPill(); segPills(); }catch(_){ } }
+  window.__lgPaint = paint;
+  // Après chaque affichage
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments); requestAnimationFrame(paint);
+    try{ // Ajouter « Verre liquide » au choix du style (Personnaliser, Réglages)
+      document.querySelectorAll('[data-a="style:verre"]').forEach(b => { const seg = b.parentElement; if(!seg || seg.querySelector('[data-a="style:liquide"]')) return;
+        b.insertAdjacentHTML('beforebegin', `<button type="button" class="stylelg ${lgOn() ? 'on' : ''}" data-a="style:liquide">Verre liquide (iOS)</button>`);
+        if(lgOn()) seg.querySelectorAll('[data-a="style:verre"],[data-a="style:simple"]').forEach(x => x.classList.remove('on'));
+        if(seg.classList.contains('seg')){ seg.style.gridTemplateColumns = 'repeat(3,1fr)'; } });
+    }catch(_){ }
+    return out; };
+  const st0 = A.style; A.style = function(v, el){ const out = st0 ? st0.apply(this, arguments) : setStyle(v);
+    try{ document.querySelectorAll('[data-a^="style:"]').forEach(b => b.classList.toggle('on', b.dataset.a === 'style:' + v)); }catch(_){ }
+    if(v === 'liquide') toast('Verre liquide activé'); requestAnimationFrame(paint); return out; };
+  // Défilement : en-tête discret, barre du bas plus petite quand on descend
+  let lastY = scrollY, tick = false;
+  addEventListener('scroll', () => { if(tick) return; tick = true; requestAnimationFrame(() => { tick = false; if(!lgOn()) return; const y = scrollY;
+    document.body.classList.toggle('lgscroll', y > 24); if(y > lastY + 6 && y > 120) document.body.classList.add('lgmini'); else if(y < lastY - 6 || y < 60) document.body.classList.remove('lgmini'); lastY = y; }); }, {passive:true});
+  addEventListener('resize', () => requestAnimationFrame(paint));
+  // Clics : pastilles qui suivent + petite vibration (Android)
+  document.addEventListener('click', e => { if(!lgOn()) return; const b = e.target.closest('nav.nav button, .seg button, .btn.primary, .fab');
+    if(b){ requestAnimationFrame(paint); setTimeout(paint, 60); try{ if(H.classList.contains('fx') && navigator.vibrate) navigator.vibrate(8); }catch(_){ } } }, true);
+  // Fenêtre ouverte : l'écran recule
+  const ov = document.getElementById('ov');
+  if(ov) new MutationObserver(() => { document.body.classList.toggle('lgsheet', lgOn() && ov.classList.contains('on') && !ov.hidden); requestAnimationFrame(segPills); }).observe(ov, {attributes:true, attributeFilter:['class', 'hidden'], subtree:false});
+  const shb = document.getElementById('shb'); if(shb) new MutationObserver(() => requestAnimationFrame(segPills)).observe(shb, {childList:true});
+})();
+
+/* =================================================================
+   1) Bulle « île » en haut (comme l'iPhone) : les messages arrivent en haut dans une bulle noire
+      qui s'agrandit. Ventes, dépenses, argent reçu, stock ajouté : la bulle montre le montant.
+      Hors ligne / de retour en ligne aussi. (Le message du bas reste caché derrière, rien n'est enlevé.)
+   ================================================================= */
+(() => {
+  const H = document.documentElement;
+  const on = () => H.classList.contains('glass');
+  document.head.insertAdjacentHTML('beforeend', `<style id="islcss">
+#isl{position:fixed;left:0;right:0;margin:0 auto;width:max-content;top:calc(8px + env(safe-area-inset-top));z-index:300;transform:scale(.35,.55);opacity:0;pointer-events:none;
+  background:#0b0b0f;color:#fff;border-radius:26px;min-height:38px;max-width:min(92vw,440px);padding:8px 16px 8px 10px;display:flex;align-items:center;gap:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08);font-size:14px;line-height:1.3}
+#isl.on{opacity:1;transform:none;pointer-events:auto}
+html.fx #isl{transition:transform .55s cubic-bezier(.25,1.45,.45,1),opacity .25s}
+html.fx #isl.off{transition:transform .35s cubic-bezier(.5,0,.75,.2),opacity .3s}
+#isl .ii{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px;background:rgba(255,255,255,.12)}
+#isl .ii.ok{background:#22c55e;color:#04200f}#isl .ii.ko{background:#ef4444}#isl .ii.mo{background:var(--brand)}#isl .ii.wa{background:#f59e0b;color:#2a1600}
+#isl .it2{min-width:0;flex:1}#isl .t1{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#isl .t2{font-size:12.5px;color:rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#isl .am{flex:none;font-weight:800;font-size:16px;color:#4ade80;font-variant-numeric:tabular-nums}#isl .am.neg{color:#fca5a5}
+html.fx #isl.on .it2,html.fx #isl.on .am,html.fx #isl.on .ii{animation:islIn .45s .12s both}
+@keyframes islIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
+html.isl #toast{opacity:0!important;pointer-events:none!important}
+@media print{#isl{display:none!important}}
+</style>`);
+  const box = document.createElement('div'); box.id = 'isl'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite'); document.body.appendChild(box);
+  const E = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let tH = 0, tOff = 0, richAt = 0;
+  function show(o, ms){ // o = {ic, cls, t1, t2, am, neg}
+    if(!on()) return false;
+    H.classList.add('isl'); clearTimeout(tH); clearTimeout(tOff);
+    box.className = ''; void box.offsetWidth;
+    box.innerHTML = `<div class="ii ${o.cls || ''}">${E(o.ic || 'i')}</div><div class="it2"><div class="t1">${E(o.t1)}</div>${o.t2 ? `<div class="t2">${E(o.t2)}</div>` : ''}</div>${o.am ? `<div class="am ${o.neg ? 'neg' : ''}">${E(o.am)}</div>` : ''}`;
+    box.className = 'on';
+    tH = setTimeout(hide, ms || 2900); return true;
+  }
+  function hide(){ box.className = 'on off'; requestAnimationFrame(() => { box.className = 'off'; }); tOff = setTimeout(() => { box.className = ''; }, 400); }
+  box.addEventListener('click', hide);
+  window.__isl = {show, hide};
+  // Tous les messages passent par la bulle
+  const t0 = toast;
+  toast = function(msg){
+    const r = t0.apply(this, arguments);
+    try{
+      if(!on()){ H.classList.remove('isl'); return r; }
+      const m = String(msg || '').replace(/[✅✔️⚠️❌]/gu, '').trim();
+      const bad = /(refus|erreur|impossible|pas donné|réservé|échec|introuvable|invalide|manque|hors ligne|lecture seule|bloqu|attention|pas assez|interdit)/i.test(m);
+      const good = !bad && /(enregistr|ajouté|confirmé|créée?|envoyé|mis(e)? à jour|remis|activé|acceptée?|reçu|payé|validé|changée?s?|copié|importé|chargé|actualisé|livré|sauvegard)/i.test(m);
+      if(good && Date.now() - richAt < 1500) return r; // la bulle montre déjà la vente
+      const parts = m.split(/ — | : (?=[A-ZÀ-Ü])/);
+      show({ic: bad ? '!' : good ? '✓' : 'i', cls: bad ? 'ko' : good ? 'ok' : '', t1: parts[0], t2: parts.slice(1).join(' — ')}, bad ? 4200 : 2900);
+    }catch(_){ }
+    return r;
+  };
+  // Nouvelles opérations : la bulle montre le montant
+  let lastTs = Date.now();
+  const fmtA = (a, cur) => { try{ return amt(a, cur); }catch(_){ return a + ' ' + (cur || '$'); } };
+  const s0 = save;
+  save = function(){
+    const out = s0.apply(this, arguments);
+    try{
+      if(!on()) return out;
+      const now = Date.now(), fresh = []; let mx = lastTs;
+      for(let i = S.moves.length - 1, k = 0; i >= 0 && k < 60; i--, k++){ const m = S.moves[i]; const ts = +m.ts || 0; if(ts > lastTs && ts > now - 8000){ fresh.push(m); if(ts > mx) mx = ts; } }
+      lastTs = Math.max(lastTs, mx);
+      if(!fresh.length) return out;
+      const V = fresh.filter(m => m.type === 'vente'), m = fresh[0];
+      let o = null;
+      if(V.length){ const tot = {}; V.forEach(x => { const c = x.cur || '$'; tot[c] = (tot[c] || 0) + num(x.qty) * num(x.price); });
+        const lab = V.length > 1 ? V.length + ' produits' : pname(V[0].pid) + (V[0].qty > 1 ? ' × ' + V[0].qty : '');
+        o = {ic:'$', cls:'mo', t1:'Vente enregistrée', t2:lab + (V[0].client ? ' · ' + V[0].client : ''), am:'+' + Object.entries(tot).map(([c, v]) => fmtA(v, c)).join(' + ')}; }
+      else if(m.type === 'versement') o = {ic:'$', cls:'ok', t1:'Argent reçu', t2:(liv(m.liv) || {}).name || '', am:'+' + fmtA(num(m.amount), m.cur)};
+      else if(m.type === 'depense') o = {ic:'−', cls:'wa', t1:'Dépense notée', t2:m.cat || m.note || '', am:'−' + fmtA(num(m.amount), m.cur), neg:true};
+      else if(m.type === 'entree') o = {ic:'+', cls:'ok', t1:'Stock ajouté', t2:pname(m.pid), am:'+' + m.qty};
+      if(o){ richAt = now; show(o, 3200); }
+    }catch(_){ }
+    return out;
+  };
+  addEventListener('offline', () => show({ic:'!', cls:'wa', t1:'Hors ligne', t2:'Vos ventes restent gardées sur le téléphone'}, 4500));
+  addEventListener('online', () => show({ic:'✓', cls:'ok', t1:'De retour en ligne', t2:'Envoi de vos données…'}, 3000));
+})();
+
+/* =================================================================
+   2) Gestes iPhone
+      - Glisser une vente vers la GAUCHE : boutons Appeler, WhatsApp (et Annuler si pas encore livrée).
+        Glisser loin à gauche = Annuler (comme avant, avec confirmation).
+      - Glisser vers la DROITE : Livrée (comme avant).
+      - Tirer une fenêtre vers le bas : elle se ferme.
+      - « Tirer pour actualiser » garde son fonctionnement, avec un rond en verre.
+   ================================================================= */
+(() => {
+  document.head.insertAdjacentHTML('beforeend', `<style id="gescss">
+button.it[data-lsw]{touch-action:pan-y;position:relative;z-index:1}
+button.it.swx{background:var(--card)!important;box-shadow:0 0 0 1px var(--line)}
+html.glass button.it.swx{background:var(--bg)!important}
+.swt{position:absolute;right:0;display:flex;align-items:stretch;z-index:0}
+.swt button{border:0;color:#fff;font:inherit;font-size:12.5px;font-weight:700;min-width:74px;padding:0 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer}
+.swt button b{font-size:22px;line-height:1}.swt button svg{width:20px;height:20px;fill:none;stroke:currentColor}
+.swt .c1{background:#2563eb}.swt .c2{background:#16a34a}.swt .c3{background:var(--bad,#dc2626)}
+.swl{position:absolute;left:0;display:flex;align-items:center;padding:0 22px;background:var(--ok,#16a34a);color:#fff;font-weight:800;z-index:0}
+html.fx .sh.drag{transition:none!important}
+.sh-h{touch-action:none}
+html.glass #ptr{background:var(--gl2);backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);border:1px solid var(--glb);color:var(--brand)}
+</style>`);
+  const SEL = 'button.it[data-a^="sale:"]';
+  const mark = root => { try{ (root || document).querySelectorAll(SEL + ':not([data-lsw])').forEach(b => { b.dataset.lsw = b.dataset.a.slice(5); b.removeAttribute('data-sw'); }); }catch(_){ } };
+  const r0 = render; render = function(){ const out = r0.apply(this, arguments); mark(); return out; };
+  const shb = document.getElementById('shb'); if(shb) new MutationObserver(() => mark(shb)).observe(shb, {childList:true});
+  mark();
+  let open = null; // ligne ouverte {el, tray}
+  function closeOpen(anim = true){ if(!open) return; const {el, tray} = open; open = null;
+    el.style.transition = anim ? 'transform .3s cubic-bezier(.25,1.2,.45,1)' : 'none'; el.style.transform = '';
+    setTimeout(() => { el.classList.remove('swx'); if(tray) tray.remove(); }, anim ? 300 : 0); }
+  window.__swClose = closeOpen;
+  const pend = m => m && (m.status === 'attente' || m.status === 'encours');
+  function trayFor(el, m){
+    const p = el.parentNode; if(getComputedStyle(p).position === 'static') p.style.position = 'relative';
+    const t = document.createElement('div'); t.className = 'swt';
+    const ph = String(m.phone || '').trim();
+    t.innerHTML = (ph ? `<button type="button" class="c1" data-sw2="call"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" stroke-width="2" stroke-linejoin="round"/></svg>Appeler</button><button type="button" class="c2" data-sw2="wa">${ico('wa')}WhatsApp</button>` : '')
+      + (pend(m) ? `<button type="button" class="c3" data-sw2="ko"><b>×</b>Annuler</button>` : '')
+      + (!ph && !pend(m) ? `<button type="button" class="c1" data-sw2="open"><b>›</b>Ouvrir</button>` : '');
+    t.style.top = el.offsetTop + 'px'; t.style.height = el.offsetHeight + 'px';
+    p.insertBefore(t, el); t.dataset.id = m.id; return t;
+  }
+  let sx = 0, sy = 0, el = null, m = null, mode = '', dx = 0, base = 0, tray = null, lft = null, sup = false;
+  addEventListener('touchstart', e => {
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY; mode = ''; dx = 0; tray = null; lft = null;
+    if(open && !e.target.closest('.swt') && !open.el.contains(e.target)){ closeOpen(); }
+    el = e.target.closest(SEL);
+    if(el && !el.dataset.lsw){ el.dataset.lsw = el.dataset.a.slice(5); el.removeAttribute('data-sw'); }
+    m = el ? S.moves.find(x => x.id === el.dataset.lsw) : null; if(!m) el = null;
+    base = open && el && open.el === el ? (parseFloat((el.style.transform.match(/-?[\d.]+/) || [0])[0]) || 0) : 0;
+  }, {capture:true, passive:true});
+  addEventListener('touchmove', e => {
+    if(!el) return; const t = e.touches[0], ddx = t.clientX - sx, ddy = t.clientY - sy;
+    if(!mode){ if(Math.abs(ddx) > 12 && Math.abs(ddx) > Math.abs(ddy) * 1.3){ mode = 'sw'; el.classList.add('swx'); if(open && open.el !== el) closeOpen(false); } else if(Math.abs(ddy) > 12){ el = null; return; } else return; }
+    dx = base + ddx;
+    if(dx < 0){ if(lft){ lft.remove(); lft = null; } if(!tray) tray = (open && open.el === el && open.tray) || trayFor(el, m); }
+    if(dx > 0){ if(!pend(m)){ dx = Math.min(dx, 30); } else if(!lft){ const p = el.parentNode; if(getComputedStyle(p).position === 'static') p.style.position = 'relative'; lft = document.createElement('div'); lft.className = 'swl'; lft.textContent = 'Livrée ✓'; lft.style.top = el.offsetTop + 'px'; lft.style.height = el.offsetHeight + 'px'; p.insertBefore(lft, el); }
+      if(lft) lft.style.width = Math.max(0, dx) + 'px'; }
+    const W = tray ? tray.offsetWidth : 0;
+    const shown = dx < -W ? -W + (dx + W) * (dx < -W - 80 ? 1 : .55) : dx; // résistance puis glisse complète
+    el.style.transition = 'none'; el.style.transform = `translateX(${shown}px)`;
+  }, {capture:true, passive:true});
+  addEventListener('touchend', () => {
+    if(mode !== 'sw' || !el){ el = null; mode = ''; return; }
+    sup = true; setTimeout(() => sup = false, 380);
+    const W = tray ? tray.offsetWidth : 0, row = el, mm = m, L = lft;
+    if(dx > 90 && pend(mm)){ row.style.transition = 'transform .25s'; row.style.transform = ''; setTimeout(() => { if(L) L.remove(); row.classList.remove('swx'); }, 260); if(tray){ tray.remove(); } open = null; setStatus(mm.id, 'livre', true); try{ navigator.vibrate && navigator.vibrate(12); }catch(_){} }
+    else if(dx < -W - 80 && pend(mm)){ if(L) L.remove(); open = {el:row, tray}; closeOpen(); ask('Annuler cette vente ? Le stock sera remis.', 'Oui, annuler').then(ok => { if(ok) setStatus(mm.id, 'annule', true); }); }
+    else if(dx < -40 && W){ if(L) L.remove(); row.style.transition = 'transform .45s cubic-bezier(.25,1.35,.45,1)'; row.style.transform = `translateX(${-W}px)`; open = {el:row, tray}; try{ navigator.vibrate && navigator.vibrate(6); }catch(_){} }
+    else { if(L) setTimeout(() => L.remove(), 250); open = {el:row, tray}; closeOpen(); }
+    el = null; mode = ''; dx = 0;
+  }, {capture:true, passive:true});
+  // Pas d'ouverture de la fiche juste après un glissement ; touche ailleurs = refermer
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-sw2]');
+    if(b){ e.preventDefault(); e.stopPropagation(); const id = b.parentNode.dataset.id, mm = S.moves.find(x => x.id === id); closeOpen(); if(!mm) return;
+      const k = b.dataset.sw2;
+      if(k === 'call') location.href = 'tel:' + String(mm.phone).replace(/[^\d+]/g, '');
+      else if(k === 'wa') window.open(waLink(mm.phone, 'Bonjour ' + (mm.client || '') + ','), '_blank');
+      else if(k === 'ko') ask('Annuler cette vente ? Le stock sera remis.', 'Oui, annuler').then(ok => { if(ok) setStatus(mm.id, 'annule', true); });
+      else if(k === 'open') saleSheet(mm.id);
+      return; }
+    if(sup && e.target.closest(SEL)){ e.preventDefault(); e.stopPropagation(); return; }
+    if(open){ const inRow = open.el.contains(e.target); closeOpen(); if(inRow){ e.preventDefault(); e.stopPropagation(); } }
+  }, true);
+  let oy = 0; addEventListener('scroll', () => { if(open){ if(open.y == null) open.y = scrollY; else if(Math.abs(scrollY - open.y) > 12) closeOpen(); } }, {passive:true});
+
+  // Tirer une fenêtre vers le bas pour la fermer
+  const ov = document.getElementById('ov'), sh = ov && ov.querySelector('.sh'), body = document.getElementById('shb');
+  if(sh){ let y0 = 0, x0 = 0, dy = 0, drag = false, ok = false, t0 = 0;
+    sh.addEventListener('touchstart', e => { const t = e.touches[0]; y0 = t.clientY; x0 = t.clientX; dy = 0; drag = false; t0 = Date.now();
+      ok = !!e.target.closest('.sh-h') || (body && body.scrollTop <= 0 && !e.target.closest('input,textarea,select,.seg,[data-lsw],.swt,canvas,video'));
+    }, {passive:true});
+    sh.addEventListener('touchmove', e => { if(!ok) return; const t = e.touches[0], d = t.clientY - y0;
+      if(!drag){ if(d > 10 && Math.abs(d) > Math.abs(t.clientX - x0) * 1.4 && (!body || body.scrollTop <= 0 || e.target.closest('.sh-h'))) drag = true; else if(Math.abs(d) > 10 || Math.abs(t.clientX - x0) > 10){ ok = false; return; } else return; }
+      dy = Math.max(0, d); sh.classList.add('drag'); sh.style.transform = `translateY(${dy}px)`; ov.style.background = `rgba(10,12,18,${Math.max(.05, .32 - dy / 1200)})`;
+      if(e.cancelable) e.preventDefault(); }, {passive:false});
+    sh.addEventListener('touchend', () => { if(!drag){ ok = false; return; } drag = false; ok = false; sh.classList.remove('drag');
+      const fast = dy > 60 && (Date.now() - t0) < 260;
+      if(dy > 120 || fast){ sh.style.transition = 'transform .25s ease-in'; sh.style.transform = 'translateY(100%)'; setTimeout(() => { sh.style.transition = ''; sh.style.transform = ''; ov.style.background = ''; }, 300); closeSheet(); }
+      else { sh.style.transition = 'transform .4s cubic-bezier(.25,1.35,.45,1)'; sh.style.transform = ''; ov.style.background = ''; setTimeout(() => { sh.style.transition = ''; }, 420); } }, {passive:true});
+  }
+})();
+
+/* =================================================================
+   3) Résumé du matin (comme les Statuts WhatsApp) : le matin, à la 1re ouverture,
+      le propriétaire voit sa journée d'hier en quelques pages animées.
+      Toucher à droite = suivant, à gauche = retour, glisser vers le bas = fermer.
+      Réglage : Personnaliser → « Résumé du matin » (Oui / Non) et « Voir maintenant ».
+   ================================================================= */
+(() => {
+  const KEY = 'stock_recap', DAYK = 'stock_recap_day';
+  const off = () => { try{ return localStorage.getItem(KEY) === 'off'; }catch(_){ return false; } };
+  const owner = () => typeof ONLINE === 'undefined' || ONLINE.role === 'proprietaire' || ONLINE.role === 'gerant' || !!ONLINE.admin;
+  const showMoney = () => typeof ONLINE === 'undefined' || ONLINE.role === 'proprietaire' || !!ONLINE.admin;
+  document.head.insertAdjacentHTML('beforeend', `<style id="rcpcss">
+#rcp{position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none;
+  background:radial-gradient(70% 50% at 20% 15%,rgba(255,255,255,.22),transparent 70%),radial-gradient(60% 45% at 85% 80%,rgba(0,0,0,.28),transparent 70%),linear-gradient(160deg,var(--brand),#0b1220 140%)}
+html.fx #rcp{animation:rcpIn .45s cubic-bezier(.2,1.2,.4,1) both}
+@keyframes rcpIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+#rcp.bye{transition:transform .3s ease-in,opacity .3s;transform:translateY(40%) scale(.9);opacity:0}
+#rcp .bars{display:flex;gap:4px;padding:calc(12px + env(safe-area-inset-top)) 14px 0}
+#rcp .bars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.3);overflow:hidden}
+#rcp .bars i b{display:block;height:100%;width:0;background:#fff}
+#rcp .bars i.done b{width:100%}
+#rcp .hd{display:flex;align-items:center;gap:10px;padding:12px 16px 0;font-weight:700}
+#rcp .hd .lg{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;font-size:13px;overflow:hidden}
+#rcp .hd .lg img{width:100%;height:100%;object-fit:cover}
+#rcp .hd small{display:block;font-weight:500;opacity:.75;font-size:12px}
+#rcp .hd .x{margin-left:auto;background:rgba(255,255,255,.18);border:0;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px}
+#rcp .pg{flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 26px 30px;text-align:left}
+#rcp .k{font-size:15px;opacity:.85;font-weight:600;letter-spacing:.02em}
+#rcp .big{font-size:clamp(46px,15vw,76px);font-weight:800;line-height:1.05;margin:8px 0 6px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#rcp .mid{font-size:clamp(26px,8vw,38px);font-weight:800;line-height:1.15;margin:8px 0}
+#rcp .sub{font-size:16px;opacity:.9;line-height:1.45}
+#rcp .glc{margin-top:18px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);border-radius:22px;padding:14px 16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+#rcp .row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:15.5px}
+#rcp .row b{font-variant-numeric:tabular-nums}
+#rcp .up{color:#86efac}#rcp .dn{color:#fecaca}
+#rcp .cta{display:flex;gap:10px;margin-top:22px}
+#rcp .cta button{flex:1;border:0;border-radius:16px;padding:15px;font:inherit;font-weight:800;font-size:16px}
+#rcp .cta .w{background:#fff;color:#0b1220}#rcp .cta .g{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.3)}
+html.fx #rcp .pg > *{animation:rcpUp .5s cubic-bezier(.2,1,.3,1) both}
+html.fx #rcp .pg > *:nth-child(2){animation-delay:.08s}html.fx #rcp .pg > *:nth-child(3){animation-delay:.16s}html.fx #rcp .pg > *:nth-child(4){animation-delay:.24s}html.fx #rcp .pg > *:nth-child(5){animation-delay:.32s}
+@keyframes rcpUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+#rcp .tap{position:absolute;top:90px;bottom:0;width:34%;z-index:0}#rcp .tap.l{left:0}#rcp .tap.r{right:0;width:66%}
+#rcp .pg{position:relative;z-index:1;pointer-events:none}#rcp .pg .cta,#rcp .pg button{pointer-events:auto}
+#rcp .hd{position:relative;z-index:2}
+</style>`);
+  const longD = d => { try{ return new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'}); }catch(_){ return d; } };
+  const pct = (x, y) => !y ? '' : (v => `<span class="${v >= 0 ? 'up' : 'dn'}">${v >= 0 ? '▲ +' : '▼ '}${v} %</span>`)(Math.round((x - y) / Math.abs(y) * 100));
+  function data(){
+    const y = addDays(today(), -1), y2 = addDays(today(), -2), r = weekReport(y, y), p = weekReport(y2, y2);
+    const bp = Object.entries(r.byProd).sort((a, b) => b[1].q - a[1].q)[0];
+    const bl = Object.entries(r.byLiv).filter(([, L]) => L.n).sort((a, b) => b[1].n - a[1].n)[0];
+    const t = today(), todo = S.moves.filter(m => m.type === 'vente' && (m.status === 'attente' || m.status === 'encours') && (m.ddate || m.date) <= t);
+    const late = todo.filter(m => (m.ddate || m.date) < t).length;
+    let goal = 0; try{ goal = num(S.settings.goalDay); }catch(_){ }
+    return {y, r, p, bp, bl, todo, late, goal};
+  }
+  const has = D => D.r.nv > 0 || D.todo.length > 0;
+  function pages(D){
+    const P = [], mo = showMoney(), shop = (typeof ONLINE !== 'undefined' && ONLINE.shop && ONLINE.shop.name) || (S.settings && S.settings.shop) || '';
+    const h = new Date().getHours(), hi = h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
+    P.push(`<div class="k">${hi}</div><div class="mid">Voici votre journée d'hier</div><div class="sub">${esc(longD(D.y))}${shop ? ' · ' + esc(shop) : ''}</div><div class="sub" style="margin-top:26px;opacity:.7">Touchez à droite pour continuer</div>`);
+    P.push(`<div class="k">VENTES LIVRÉES HIER</div><div class="big" data-cu="${D.r.nv}">${D.r.nv}</div><div class="sub">${D.r.nv ? (D.r.nv > 1 ? 'ventes livrées' : 'vente livrée') + ' ' + pct(D.r.nv, D.p.nv) : 'Aucune vente livrée hier. Aujourd\'hui est un nouveau jour !'}</div>${mo && D.r.ca ? `<div class="glc"><div class="row"><span>Encaissé</span><b>${money(D.r.ca)}</b></div>${D.r.dep ? `<div class="row"><span>Dépenses</span><b>${money(D.r.dep)}</b></div>` : ''}${D.goal ? `<div class="row"><span>Objectif du jour</span><b>${Math.round(D.r.ca / D.goal * 100)} %</b></div>` : ''}</div>` : ''}`);
+    if(mo && D.r.nv) P.push(`<div class="k">BÉNÉFICE NET D'HIER</div><div class="big" data-cu="${Math.round(D.r.net)}" data-suf=" $">${money(D.r.net)}</div><div class="sub">après achats, commissions et dépenses ${pct(D.r.net, D.p.net)}</div>`);
+    if(D.bp || D.bl) P.push(`<div class="k">LES CHAMPIONS D'HIER</div>${D.bp ? `<div class="glc"><div class="sub" style="opacity:.75">Produit le plus vendu</div><div class="mid" style="font-size:24px">${esc(pname(D.bp[0]))}</div><div class="sub">${D.bp[1].q} pièce(s)${mo ? ' · ' + money(D.bp[1].a) : ''}</div></div>` : ''}${D.bl ? `<div class="glc"><div class="sub" style="opacity:.75">Meilleur livreur</div><div class="mid" style="font-size:24px">${esc((liv(D.bl[0]) || {}).name || 'Livreur')}</div><div class="sub">${D.bl[1].n} livraison(s)</div></div>` : ''}`);
+    P.push(`<div class="k">AUJOURD'HUI</div><div class="big" data-cu="${D.todo.length}">${D.todo.length}</div><div class="sub">${D.todo.length ? 'livraison(s) à faire' + (D.late ? ` · <b>${D.late} en retard</b>` : '') : 'Aucune livraison prévue pour le moment.'}</div><div class="cta"><button class="w" data-rc="go">C'est parti</button>${mo && D.r.nv ? '<button class="g" data-rc="wa">Partager</button>' : ''}</div>`);
+    return P;
+  }
+  let st = null;
+  function cu(root){ if(!document.documentElement.classList.contains('fx')) return;
+    root.querySelectorAll('[data-cu]').forEach(el => { const T = +el.dataset.cu; if(!isFinite(T) || Math.abs(T) < 2) return; const suf = el.dataset.suf || '', fin = el.innerHTML, t0 = performance.now(), D = 900;
+      const step = now => { const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3); if(k < 1){ el.textContent = Math.round(T * e).toLocaleString('fr-FR') + suf; requestAnimationFrame(step); } else el.innerHTML = fin; }; requestAnimationFrame(step); }); }
+  function go(i){ if(!st) return; if(i < 0) i = 0; if(i >= st.P.length){ close(); return; } st.i = i; st.t = 0;
+    st.el.querySelector('.pg').innerHTML = st.P[i]; cu(st.el);
+    st.el.querySelectorAll('.bars i').forEach((b, k) => { b.classList.toggle('done', k < i); b.firstChild.style.width = k < i ? '100%' : '0'; }); }
+  const DUR = 5200;
+  function loop(now){ if(!st) return; const dt = st.last ? now - st.last : 0; st.last = now;
+    if(!st.pause && st.i < st.P.length - 1){ st.t += dt; const b = st.el.querySelectorAll('.bars i')[st.i]; if(b) b.firstChild.style.width = Math.min(100, st.t / DUR * 100) + '%'; if(st.t >= DUR) go(st.i + 1); }
+    else if(st.i === st.P.length - 1){ const b = st.el.querySelectorAll('.bars i')[st.i]; if(b) b.firstChild.style.width = '100%'; }
+    st.raf = requestAnimationFrame(loop); }
+  function close(){ if(!st) return; const s = st; st = null; cancelAnimationFrame(s.raf); s.el.classList.add('bye'); setTimeout(() => s.el.remove(), 320); }
+  function open(force){
+    if(st) return; const D = data(); if(!force && !has(D)) return false;
+    const P = pages(D), el = document.createElement('div'); el.id = 'rcp';
+    const logo = S.settings && S.settings.logo ? `<img src="${S.settings.logo}" alt="">` : esc((typeof initials === 'function' ? initials((S.settings && S.settings.shop) || 'R V') : 'RV'));
+    el.innerHTML = `<div class="bars">${P.map(() => '<i><b></b></i>').join('')}</div><div class="hd"><div class="lg">${logo}</div><div>Résumé du matin<small>${esc(longD(today()))}</small></div><button class="x" data-rc="x" aria-label="Fermer">×</button></div><div class="tap l"></div><div class="tap r"></div><div class="pg"></div>`;
+    document.body.appendChild(el); st = {el, P, i:0, t:0, last:0, pause:false, D};
+    el.addEventListener('click', e => { const b = e.target.closest('[data-rc]');
+      if(b){ const k = b.dataset.rc; if(k === 'x' || k === 'go') close(); else if(k === 'wa'){ const r = D.r; const txt = `Résumé d'hier (${longD(D.y)})\nVentes livrées : ${r.nv}\nEncaissé : ${money(r.ca)}\nBénéfice net : ${money(r.net)}${D.bp ? '\nProduit le plus vendu : ' + pname(D.bp[0]) : ''}${D.bl ? '\nMeilleur livreur : ' + ((liv(D.bl[0]) || {}).name || '') : ''}`; window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank'); } return; }
+      if(e.target.closest('.tap.l')) go(st.i - 1); else if(e.target.closest('.tap.r')) go(st.i + 1); });
+    let y0 = 0, x0 = 0, dy = 0;
+    el.addEventListener('pointerdown', e => { if(st) st.pause = true; y0 = e.clientY; x0 = e.clientX; dy = 0; });
+    el.addEventListener('pointermove', e => { if(e.buttons || e.pointerType === 'touch'){ dy = e.clientY - y0; if(dy > 0 && Math.abs(dy) > Math.abs(e.clientX - x0)){ el.style.transition = 'none'; el.style.transform = `translateY(${dy * .6}px) scale(${1 - Math.min(dy, 400) / 2500})`; } } });
+    const up = () => { if(st) st.pause = false; if(dy > 110){ el.style.transition = ''; el.style.transform = ''; close(); } else if(dy > 0){ el.style.transition = 'transform .35s cubic-bezier(.25,1.3,.45,1)'; el.style.transform = ''; } dy = 0; };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    go(0); st.raf = requestAnimationFrame(loop);
+    try{ localStorage.setItem(DAYK, today()); }catch(_){ }
+    return true;
+  }
+  window.__recap = {open, close, data, state:() => st};
+  A.recap = () => { closeSheet(); setTimeout(() => { if(!open(true)) toast('Pas encore de données'); }, 220); };
+  A.precap = v => { try{ if(v === 'off') localStorage.setItem(KEY, 'off'); else localStorage.removeItem(KEY); }catch(_){ } render(); toast(v === 'off' ? 'Résumé du matin coupé' : 'Résumé du matin activé'); };
+  // Ouverture automatique : 1re ouverture de la journée, à partir de 5 h
+  let tried = false;
+  const r0 = render; render = function(){ const out = r0.apply(this, arguments);
+    if(!tried && S && S.moves && document.getElementById('main') && document.getElementById('main').children.length && (typeof ONLINE === 'undefined' || ONLINE.shop)){
+      tried = true;
+      setTimeout(() => { try{
+        if((navigator.webdriver && !window.__TEST_RECAP) || off() || !owner() || new Date().getHours() < 5) return;
+        if(localStorage.getItem(DAYK) === today()) return;
+        if(document.body.classList.contains('lock') || document.getElementById('dlg').innerHTML) return;
+        open(false); }catch(_){ } }, 1600); }
+    return out; };
+  // Personnaliser : Résumé du matin Oui / Non + Voir maintenant
+  if(typeof CUSTOM !== 'undefined' && CUSTOM.perso){ const p0 = CUSTOM.perso;
+    CUSTOM.perso = function(){ const h = p0.apply(this, arguments); if(!owner()) return h;
+      const o = off(), add = `<div class="f" style="margin-top:10px" id="rcpSet"><span>Résumé du matin</span><div class="seg"><button type="button" class="${o ? '' : 'on'}" data-a="precap:on">Oui</button><button type="button" class="${o ? 'on' : ''}" data-a="precap:off">Non</button></div><small class="note">Le matin, votre journée d'hier en quelques pages (ventes, bénéfice, meilleur produit).</small><button type="button" class="btn block" style="margin-top:8px" data-a="recap">Voir le résumé maintenant</button></div>`;
+      const k = '<div class="f" style="margin-top:10px"><span>Taille du texte</span>';
+      return h.includes(k) ? h.replace(k, add + k) : h + add; }; }
 })();
 
 </script>
