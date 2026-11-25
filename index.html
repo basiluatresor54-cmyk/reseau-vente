@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'be7f9a9e50';
+const APP_BUILD = 'e9bcc85e48';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -10496,10 +10496,7 @@ window.__qrcode = qrcode; })();
         <label class="f"><span>Instagram</span><input name="ig" maxlength="200" inputmode="url" value="${esc(L.ig || '')}" placeholder="Lien du compte"></label>
         <button class="btn primary block">Enregistrer l'apparence</button></form></div>
 
-    <div class="sec"><h2>Produits dans la boutique</h2></div>
-    <div class="card" style="margin-bottom:12px"><p class="note" style="margin-bottom:6px">« Visible » : le client le voit. « Vedette » : il est montré tout en haut. Prix barré : l'ancien prix, pour une promo.</p>
-      <div id="bqList">${P.length ? P.map(p => `<div class="bqP"><div class="ph" style="${p.photo ? `background-image:url('${p.photo}')` : ''}">${p.photo ? '' : esc(initials(p.name))}</div><div class="m"><b>${esc(p.name)}</b><small>${amt(num(p.sell), p.cur)}${num(p.old) > num(p.sell) ? ' · promo -' + Math.round((1 - num(p.sell) / num(p.old)) * 100) + ' %' : ''}</small>
-        <div class="tg"><button type="button" class="bqT ${p.hide ? '' : 'on'}" data-a="bqvis:${p.id}">${p.hide ? 'Caché' : 'Visible'}</button><button type="button" class="bqT star ${p.top ? 'on' : ''}" data-a="bqtop:${p.id}">Vedette</button><input class="bqOld" type="number" min="0" step="any" inputmode="decimal" data-bqold="${p.id}" value="${num(p.old) > 0 ? num(p.old) : ''}" placeholder="Prix barré"></div></div></div>`).join('') : '<p class="note">Aucun produit. Ajoutez vos produits dans Stock.</p>'}</div></div>
+    <div class="card" style="margin-bottom:12px" id="bqProdNote"><b>Produits, prix et promotions</b><p class="note" style="margin:6px 0 10px">Ils se gèrent dans <b>Stock</b> : ouvrez le produit → Modifier. Vous y trouvez « Prix normal avant promo », « Visible dans ma boutique en ligne » et « En vedette dans la boutique ».</p><button class="btn block" data-a="nav:stock">Aller au Stock</button></div></div>
 
     <div class="sec"><h2>Commandes et paiements</h2></div>
     <button class="btn block" style="margin-bottom:12px" data-a="weborders">Commandes de la boutique en ligne${wc ? ' (' + wc + ' à traiter)' : ''}</button>
@@ -10586,6 +10583,22 @@ window.__qrcode = qrcode; })();
       if(view === 'reglages'){ const hs = [...M.querySelectorAll('.sec h2')];
         const hb = hs.find(x => /Ma boutique en ligne/.test(x.textContent)); if(hb && !M.querySelector('#bqLink1')) hb.parentElement.insertAdjacentHTML('afterend', '<button class="btn block" id="bqLink1" style="margin-bottom:10px" data-a="nav:boutique">Tout régler dans « Ma boutique en ligne » ›</button>');
         const inv = [...M.querySelectorAll('details summary')].find(x => /Informations sur les factures/.test(x.textContent)); if(inv && !M.querySelector('#bqLink2')) inv.parentElement.insertAdjacentHTML('beforebegin', '<button type="button" class="btn block" id="bqLink2" style="margin-bottom:10px" data-a="nav:factures">Factures et reçus : aperçu et couleur ›</button>'); }
+    }catch(e){ console.error(e); }
+    return out; };
+})();
+
+/* « En vedette dans la boutique » : dans la fiche du produit (Stock → produit → Modifier), à côté de la promo */
+(() => {
+  if(typeof productForm !== 'function') return;
+  const pf0 = productForm;
+  productForm = function(id){ const out = pf0.apply(this, arguments);
+    try{ const f = document.getElementById('pf'), E = f && f.elements; if(!f || !E.show) return out;
+      const p = id ? prod(id) : null, lab = E.show.closest('label');
+      lab.insertAdjacentHTML('afterend', `<label class="f" style="display:flex;gap:10px;align-items:center"><input type="checkbox" name="top" ${p && p.top ? 'checked' : ''} style="width:22px;height:22px;min-height:0"><span style="margin:0">En vedette dans la boutique (montré tout en haut)</span></label>`);
+      E.top.addEventListener('change', () => { if(E.top.checked) E.show.checked = true; });
+      f.addEventListener('submit', () => { const top = E.top.checked, name = E.name.value.trim(), before = new Set(S.products.map(x => x.id));
+        queueMicrotask(() => { const q = (p && prod(p.id)) || S.products.find(x => !before.has(x.id) && x.name === name); if(!q) return;
+          const was = !!q.top; if(top && !q.hide) q.top = true; else delete q.top; if(was !== !!q.top){ q.ts = Date.now(); save(); } }); }, true);
     }catch(e){ console.error(e); }
     return out; };
 })();
