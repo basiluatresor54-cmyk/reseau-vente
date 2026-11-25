@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '1d373e73d3';
+const APP_BUILD = 'a8124e6037';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -10282,9 +10282,13 @@ html.fx.glass .daycard.halo-up,html.fx.glass .daycard.halo-dn{animation:haloP 3s
    ================================================================= */
 (() => {
   const H = document.documentElement, K = 'stock_glow';
-  const on = () => { try{ return localStorage.getItem(K) !== 'off'; }catch(_){ return true; } };
-  const apply = () => H.classList.toggle('glow', on());
-  apply();
+  // Téléphone léger : peu de mémoire, peu de processeurs, ou « économie de données » → effets lourds coupés tout seuls
+  const weak = (() => { try{ const n = navigator, c = n.connection || {}; return (n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 2 && (!n.deviceMemory || n.deviceMemory <= 4)) || !!c.saveData; }catch(_){ return false; } })();
+  const isLiv = () => typeof ONLINE !== 'undefined' && ONLINE.shop && ONLINE.role === 'livreur';
+  const pref = () => { try{ return localStorage.getItem(K) || ''; }catch(_){ return ''; } };
+  const on = () => { if(isLiv()) return false; const v = pref(); if(v === 'off') return false; if(v === 'on') return true; return !weak; };
+  const apply = () => { H.classList.toggle('glow', on()); H.classList.toggle('lite', isLiv() || (weak && pref() !== 'on')); };
+  apply(); window.__glow = {weak, on};
   document.head.insertAdjacentHTML('beforeend', `<style id="glowcss">
 /* Lumière qui tourne autour des boutons principaux et du + */
 html.glass.fx.glow .btn.primary:not(.fab):not(:disabled){position:relative;isolation:isolate}
@@ -10309,15 +10313,75 @@ html.glass.fx.glow .pcat:nth-child(odd)::before{animation-delay:2.4s}
 html.lg.fx.glow #lgPill::after{content:'';position:absolute;inset:-1.5px;border-radius:inherit;padding:1.5px;pointer-events:none;
   background:conic-gradient(from var(--qa),transparent 0 60%,rgba(var(--g2-rgb),.8) 75%,#fff 82%,transparent 95%);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);animation:qaSpin 4.5s linear infinite}
+/* Téléphone léger ou téléphone du livreur : pas de lumière qui tourne, pas de fond qui bouge */
+html.lite .quickbtn::after,html.lite #lgPill::after{animation:none!important;display:none!important}
+html.lite.lg body::before{animation:none!important}
+html.lite .daycard.halo-up,html.lite .daycard.halo-dn{animation:none!important}
 @media (prefers-reduced-motion: reduce){html.glow .btn::before,html.glow .btn::after,html.glow .fab::after,html.glow #lgPill::after,html.glow .pcat::before{animation:none!important}}
 @media print{html.glow .btn::before,html.glow .btn::after{display:none!important}}
 </style>`);
-  A.pglow = v => { try{ if(v === 'off') localStorage.setItem(K, 'off'); else localStorage.removeItem(K); }catch(_){ } apply(); render(); toast(v === 'off' ? 'Boutons lumineux coupés' : 'Boutons lumineux activés'); };
+  A.pglow = v => { try{ localStorage.setItem(K, v === 'off' ? 'off' : 'on'); }catch(_){ } apply(); render(); toast(v === 'off' ? 'Boutons lumineux coupés' : 'Boutons lumineux activés'); };
+  const r0 = render; render = function(){ apply(); return r0.apply(this, arguments); };
   if(typeof CUSTOM !== 'undefined' && CUSTOM.perso){ const p0 = CUSTOM.perso;
     CUSTOM.perso = function(){ const h = p0.apply(this, arguments), o = on();
-      const add = `<div class="f" style="margin-top:10px" id="glowSet"><span>Boutons lumineux</span><div class="seg"><button type="button" class="${o ? 'on' : ''}" data-a="pglow:on">Oui</button><button type="button" class="${o ? '' : 'on'}" data-a="pglow:off">Non</button></div><small class="note">La lumière tourne autour des boutons principaux et un reflet passe sur les autres.</small></div>`;
+      const add = `<div class="f" style="margin-top:10px" id="glowSet"><span>Boutons lumineux</span><div class="seg"><button type="button" class="${o ? 'on' : ''}" data-a="pglow:on">Oui</button><button type="button" class="${o ? '' : 'on'}" data-a="pglow:off">Non</button></div><small class="note">La lumière tourne autour des boutons principaux et un reflet passe sur les autres.${weak && !pref() ? ' <b>Coupé tout seul : ce téléphone est léger.</b> Touchez « Oui » pour les remettre quand même.' : ''}</small></div>`;
       const k = '<div class="f" style="margin-top:10px"><span>Taille du texte</span>';
       return h.includes(k) ? h.replace(k, add + k) : h + add; }; }
+})();
+
+/* =================================================================
+   L'application s'adapte au téléphone (tout seul, une seule fois au début)
+   - Elle regarde la mémoire, le processeur, « économie de données », et mesure la fluidité (images par seconde).
+   - Téléphone léger → style « Simple », animations coupées, boutons lumineux coupés
+     (seulement les réglages que la personne n'a pas déjà choisis).
+   - Tout reste dans Personnaliser : on peut tout remettre, ou refaire la vérification.
+   ================================================================= */
+(() => {
+  const PK = 'stock_perf', H = document.documentElement;
+  const get = () => { try{ return JSON.parse(localStorage.getItem(PK) || 'null'); }catch(_){ return null; } };
+  const put = v => { try{ localStorage.setItem(PK, JSON.stringify(v)); }catch(_){ } };
+  function hw(){ try{ const n = navigator, c = n.connection || {}; return {mem:n.deviceMemory || null, cpu:n.hardwareConcurrency || null, save:!!c.saveData}; }catch(_){ return {}; } }
+  // fluidité : on prend l'image « du milieu » (médiane), pour ne pas être trompé par un petit ralentissement au démarrage
+  function measure(ms = 1400){ return new Promise(res => { const d = []; let t0 = 0, last = 0;
+    const f = t => { if(!t0){ t0 = last = t; } else { d.push(t - last); last = t; } if(t - t0 < ms) requestAnimationFrame(f); else { d.sort((a, b) => a - b); const med = d.length ? d[Math.floor(d.length / 2)] : 16.7; res({fps:Math.round(1000 / Math.max(med, 1)), worst:Math.round(d[d.length - 1] || 0)}); } };
+    requestAnimationFrame(f); }); }
+  function decide(h, m){ return (h.mem && h.mem <= 2) || (h.cpu && h.cpu <= 2 && (!h.mem || h.mem <= 4)) || h.save || (m && m.fps && m.fps < 38); }
+  function lighten(){ // seulement ce que la personne n'a pas choisi elle-même
+    try{ if(!localStorage.getItem('stock_style')) localStorage.setItem('stock_style', 'simple'); }catch(_){ }
+    try{ const P = persoGet(); if(!P.anim){ P.anim = 'off'; persoSet(P); } }catch(_){ }
+    try{ if(!localStorage.getItem('stock_glow')) localStorage.setItem('stock_glow', 'off'); }catch(_){ }
+    try{ applyStyle(); window.fxApply && window.fxApply(); }catch(_){ } }
+  function restore(){
+    try{ localStorage.setItem('stock_style', 'verre'); }catch(_){ }
+    try{ const P = persoGet(); delete P.anim; persoSet(P); }catch(_){ }
+    try{ localStorage.setItem('stock_glow', 'on'); }catch(_){ }
+    try{ applyStyle(); window.fxApply && window.fxApply(); }catch(_){ } }
+  async function check(force){
+    const h = hw(); if(document.hidden) return null;
+    await new Promise(r => setTimeout(r, 900));
+    const m = await measure(), light = !!decide(h, m), r = {light, fps:m.fps, mem:h.mem, cpu:h.cpu, save:h.save, at:Date.now()};
+    put(r);
+    if(light){ lighten(); render();
+      const msg = {ic:'i', cls:'mo', t1:'Application adaptée à ce téléphone', t2:'Effets réduits pour aller plus vite · Personnaliser pour les remettre'};
+      if(window.__isl && window.__isl.show(msg, 5200)) {} else toast('Application adaptée à ce téléphone : effets réduits pour aller plus vite (Personnaliser pour les remettre)'); }
+    else if(force) toast('Ce téléphone est assez puissant : tous les effets peuvent rester');
+    return r; }
+  window.__perf = {check, get, decide, restore};
+  // 1re ouverture (ou 1re fois avec cette version) : vérification automatique
+  let started = false;
+  const r0 = render;
+  render = function(){ const out = r0.apply(this, arguments);
+    if(!started && !get() && (!navigator.webdriver || window.__TEST_PERF)){ started = true; setTimeout(() => { check(false).catch(() => {}); }, 2500); }
+    return out; };
+  A.perfcheck = () => { toast('Vérification du téléphone…'); setTimeout(() => check(true).then(r => { if(r && !r.light) render(); }), 300); };
+  A.perfall = () => { restore(); const r = get() || {}; r.user = 'all'; put(r); render(); toast('Tous les effets sont remis sur ce téléphone'); };
+  if(typeof CUSTOM !== 'undefined' && CUSTOM.perso){ const p0 = CUSTOM.perso;
+    CUSTOM.perso = function(){ let h = p0.apply(this, arguments); const r = get();
+      const txt = !r ? 'La vérification se fait à la première ouverture.' : r.light ? `<b>Téléphone léger</b> : l'application a coupé les effets lourds pour aller plus vite (style Simple, animations, lumières).` : `<b>Téléphone assez puissant</b> : tous les effets peuvent rester.`;
+      const card = `<div class="card" style="margin-bottom:12px" id="perfCard"><b>Adapté à ce téléphone</b><p class="note" style="margin:6px 0 10px">${txt}${r && r.fps ? ` <span style="opacity:.7">(${r.fps} images/s${r.mem ? ', ' + r.mem + ' Go' : ''})</span>` : ''}</p>
+        <div class="btns"><button type="button" class="btn sm" data-a="perfcheck">Vérifier à nouveau</button>${r && r.light ? '<button type="button" class="btn sm" data-a="perfall">Remettre tous les effets</button>' : ''}</div></div>`;
+      const k = '<div class="sec">'; const i = h.indexOf(k);
+      return i >= 0 ? h.slice(0, i) + card + h.slice(i) : card + h; }; }
 })();
 
 </script>
