@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '03048187df';
+const APP_BUILD = 'a5f4c0f499';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -9525,7 +9525,7 @@ html.glass #ptr{background:var(--gl2);backdrop-filter:blur(18px) saturate(180%);
   const KEY = 'stock_recap', DAYK = 'stock_recap_day';
   const off = () => { try{ return localStorage.getItem(KEY) === 'off'; }catch(_){ return false; } };
   const owner = () => typeof ONLINE === 'undefined' || ONLINE.role === 'proprietaire' || ONLINE.role === 'gerant' || !!ONLINE.admin;
-  const showMoney = () => typeof ONLINE === 'undefined' || ONLINE.role === 'proprietaire' || !!ONLINE.admin;
+  const showMoney = () => typeof ONLINE === 'undefined' || ONLINE.role === 'proprietaire' || !!ONLINE.admin || (ONLINE.role === 'gerant' && (typeof canDo !== 'function' || canDo('benefice')));
   document.head.insertAdjacentHTML('beforeend', `<style id="rcpcss">
 #rcp{position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none;
   background:radial-gradient(70% 50% at 20% 15%,rgba(255,255,255,.22),transparent 70%),radial-gradient(60% 45% at 85% 80%,rgba(0,0,0,.28),transparent 70%),linear-gradient(160deg,var(--brand),#0b1220 140%)}
@@ -10838,6 +10838,35 @@ window.__qrcode = qrcode; })();
       return out; }; }
   A.rplto = id => { const m = S.moves.find(x => x.id === id); if(!m) return; const R = replies();
     sheet('Réponse rapide · ' + (m.client || 'client'), `<div class="list">${R.map(r => `<a class="it" href="${waLink(m.phone, fillVars(r.x, m.client || ''))}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><div class="m"><div class="t">${esc(r.t)}</div><div class="d">${esc(fillVars(r.x, m.client || '').slice(0, 80))}…</div></div><div class="r">${ico('wa')}</div></a>`).join('')}</div>`); };
+})();
+
+/* =================================================================
+   Équipe : passer un membre de « Vendeur » à « Gérant » (et l'inverse), sans le réinviter.
+   Le gérant voit tout comme le patron : notifications (livré, entrées, dépenses, versements),
+   tableau de bord, ventes, relevés, livreurs par ville, clients, bénéfice du jour
+   (sauf ce que le patron décoche dans « Tâches »).
+   ================================================================= */
+(() => {
+  if(typeof ONLINE === 'undefined') return;
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ if(view === 'equipe' && ONLINE.role === 'proprietaire' && typeof TEAM !== 'undefined' && Array.isArray(TEAM.members)){
+      TEAM.members.forEach(m => { if(!['gerant', 'vendeur'].includes(m.role)) return; const b = document.querySelector(`#main [data-a="permsm:${m.user_id}"]`); if(!b || b.parentElement.querySelector('[data-a^="mrole:"]')) return;
+        const to = m.role === 'vendeur' ? 'gerant' : 'vendeur';
+        b.insertAdjacentHTML('afterend', `<button class="btn sm ${to === 'gerant' ? 'primary' : ''}" data-a="mrole:${m.user_id}:${to}" style="margin-left:6px">${to === 'gerant' ? 'Passer Gérant' : 'Passer Vendeur'}</button>`); }); } }catch(e){ console.error(e); }
+    return out; };
+  A.mrole = async arg => { if(ONLINE.role !== 'proprietaire') return; const [uid, to] = String(arg).split(':'); const m = (TEAM.members || []).find(x => x.user_id === uid); if(!m) return;
+    const txt = to === 'gerant' ? `<b>${esc(m.display_name || 'Ce membre')}</b> devient <b>Gérant</b> : il verra tout comme vous (notifications, tableau de bord, ventes, livreurs, clients, argent, bénéfice) et pourra tout enregistrer.<br><br>Vous pourrez ensuite décocher des tâches dans « Tâches ».`
+      : `<b>${esc(m.display_name || 'Ce membre')}</b> redevient <b>Vendeur</b> : il fera seulement les ventes et les envois aux livreurs, sans voir le bénéfice.`;
+    if(!await ask(txt, to === 'gerant' ? 'Oui, Gérant' : 'Oui, Vendeur')) return;
+    const {error} = await sb.rpc('set_member_role', {p_shop:ONLINE.shop.id, p_user:uid, p_role:to});
+    if(error){ toast(typeof rpcErr === 'function' ? rpcErr(error) : (error.message || 'Erreur')); return; }
+    toast((m.display_name || 'Le membre') + (to === 'gerant' ? ' est maintenant Gérant' : ' est maintenant Vendeur') + ' · il doit rouvrir l\'application');
+    TEAM.members = null; if(typeof loadTeam === 'function') loadTeam(); render(); };
+  // Sur le téléphone du membre : si le patron a changé son rôle, l'application se recharge
+  document.addEventListener('visibilitychange', async () => { if(document.visibilityState !== 'visible' || !ONLINE.shop || !ONLINE.user || !['gerant', 'vendeur'].includes(ONLINE.role) || ONLINE.offline) return;
+    try{ const {data} = await sb.from('members').select('role').eq('shop_id', ONLINE.shop.id).eq('user_id', ONLINE.user.id).maybeSingle();
+      if(data && data.role && data.role !== ONLINE.role){ toast('Le patron a changé votre rôle : ' + (data.role === 'gerant' ? 'Gérant' : data.role === 'vendeur' ? 'Vendeur' : data.role)); setTimeout(() => location.reload(), 1500); } }catch(_){ } });
 })();
 
 </script>
