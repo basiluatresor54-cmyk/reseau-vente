@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '289011fd80';
+const APP_BUILD = '1d373e73d3';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -9748,7 +9748,8 @@ html.fx.glass .daycard.halo-up,html.fx.glass .daycard.halo-dn{animation:haloP 3s
     for(let i = S.moves.length - 1, k = 0; i >= 0 && k < 4000; i--, k++){ const m = S.moves[i]; if(m.type !== 'vente' || m.status !== 'livre') continue; const d = mday(m);
       if(d === t) a += saleUSD(m); else if(d === y){ bAll += saleUSD(m); if(!(+m.ts > 1e12) || tod(m.ts) <= sec) b += saleUSD(m); } }
     if(!bAll && !a) return;
-    const up = a >= b; card.classList.add(up ? 'halo-up' : 'halo-dn');
+    if(Math.abs(a - b) < 0.005) return; // pareil qu'hier à la même heure (ex. 0 et 0 tôt le matin) : rien à dire
+    const up = a > b; card.classList.add(up ? 'halo-up' : 'halo-dn');
     const sp = card.querySelector('span'); if(sp && !sp.querySelector('.halotag')) sp.insertAdjacentHTML('beforeend', `<span class="halotag">${up ? '▲ mieux qu\'hier' : '▼ moins qu\'hier'}</span>`); }
   const r0 = render;
   render = function(){ const out = r0.apply(this, arguments);
@@ -10272,6 +10273,51 @@ html.fx.glass .daycard.halo-up,html.fx.glass .daycard.halo-dn{animation:haloP 3s
         pass = true; if(f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit', {cancelable:true})); }, true);
     }catch(e){ console.error(e); }
     return out; };
+})();
+
+/* =================================================================
+   Boutons lumineux : comme « Vente rapide », la lumière tourne autour des boutons principaux
+   (et du bouton +), et un reflet passe de temps en temps sur les autres boutons.
+   Réglage : Personnaliser → « Boutons lumineux » (Oui / Non). Coupé si « Animations : Non ».
+   ================================================================= */
+(() => {
+  const H = document.documentElement, K = 'stock_glow';
+  const on = () => { try{ return localStorage.getItem(K) !== 'off'; }catch(_){ return true; } };
+  const apply = () => H.classList.toggle('glow', on());
+  apply();
+  document.head.insertAdjacentHTML('beforeend', `<style id="glowcss">
+/* Lumière qui tourne autour des boutons principaux et du + */
+html.glass.fx.glow .btn.primary:not(.fab):not(:disabled){position:relative;isolation:isolate}
+html.glass.fx.glow .btn.primary:not(:disabled):not(.is-busy)::after,html.glass.fx.glow .fab::after{content:'';position:absolute;inset:-2px;border-radius:inherit;padding:2.5px;pointer-events:none;
+  background:conic-gradient(from var(--qa),transparent 0 55%,rgba(var(--g2-rgb),.9) 70%,#fff 78%,rgba(var(--g1-rgb),.9) 86%,transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);animation:qaSpin 3.4s linear infinite}
+html.glass.fx.glow .btn.primary:nth-of-type(2n)::after{animation-duration:4.1s;animation-delay:-1.3s}
+html.glass.fx.glow .btn.primary:nth-of-type(3n)::after{animation-duration:3.8s;animation-delay:-2.2s}
+html.glass.fx.glow .fab::after{animation-duration:3s}
+/* Petit reflet qui passe sur les autres boutons */
+html.glass.fx.glow .btn:not(.fab):not(:disabled){position:relative}
+html.glass.fx.glow .btn:not(:disabled):not(.is-busy)::before,html.glass.fx.glow .pcat::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.38) 50%,transparent 62%) no-repeat;background-size:260% 100%;background-position:160% 0;animation:btnShine 7s ease-in-out infinite}
+html.glass.fx.glow[data-theme=dark] .btn:not(:disabled)::before,html.glass.fx.glow[data-theme=dark] .pcat::before{background-image:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.16) 50%,transparent 62%)}
+html.glass.fx.glow .btn:nth-of-type(2n)::before{animation-delay:1.6s}
+html.glass.fx.glow .btn:nth-of-type(3n)::before{animation-delay:3.1s}
+html.glass.fx.glow .btn:nth-of-type(5n)::before{animation-delay:4.7s}
+html.glass.fx.glow .pcat{position:relative;overflow:hidden}
+html.glass.fx.glow .pcat:nth-child(odd)::before{animation-delay:2.4s}
+@keyframes btnShine{0%,72%{background-position:160% 0}88%,100%{background-position:-60% 0}}
+/* Barre du bas : la bulle de l'onglet choisi brille aussi */
+html.lg.fx.glow #lgPill::after{content:'';position:absolute;inset:-1.5px;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:conic-gradient(from var(--qa),transparent 0 60%,rgba(var(--g2-rgb),.8) 75%,#fff 82%,transparent 95%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);animation:qaSpin 4.5s linear infinite}
+@media (prefers-reduced-motion: reduce){html.glow .btn::before,html.glow .btn::after,html.glow .fab::after,html.glow #lgPill::after,html.glow .pcat::before{animation:none!important}}
+@media print{html.glow .btn::before,html.glow .btn::after{display:none!important}}
+</style>`);
+  A.pglow = v => { try{ if(v === 'off') localStorage.setItem(K, 'off'); else localStorage.removeItem(K); }catch(_){ } apply(); render(); toast(v === 'off' ? 'Boutons lumineux coupés' : 'Boutons lumineux activés'); };
+  if(typeof CUSTOM !== 'undefined' && CUSTOM.perso){ const p0 = CUSTOM.perso;
+    CUSTOM.perso = function(){ const h = p0.apply(this, arguments), o = on();
+      const add = `<div class="f" style="margin-top:10px" id="glowSet"><span>Boutons lumineux</span><div class="seg"><button type="button" class="${o ? 'on' : ''}" data-a="pglow:on">Oui</button><button type="button" class="${o ? '' : 'on'}" data-a="pglow:off">Non</button></div><small class="note">La lumière tourne autour des boutons principaux et un reflet passe sur les autres.</small></div>`;
+      const k = '<div class="f" style="margin-top:10px"><span>Taille du texte</span>';
+      return h.includes(k) ? h.replace(k, add + k) : h + add; }; }
 })();
 
 </script>
