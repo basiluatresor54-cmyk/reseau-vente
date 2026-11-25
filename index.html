@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'd546277175';
+const APP_BUILD = 'de8911d1a6';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -10171,6 +10171,40 @@ html.fx.glass .daycard.halo-up,html.fx.glass .daycard.halo-dn{animation:haloP 3s
     try{ if(view === 'moi') document.querySelectorAll('#main .card[id^="mv-"] .feeRow:first-child, #main .card[id^="mv-"] .dl.feeRow').forEach(d => { if(d.dataset.zq) return; d.dataset.zq = 1; const c = d.closest('.card'), m = S.moves.find(x => x.id === c.id.slice(3)); if(!m) return; const M = window.__fee ? window.__fee.mainOf(m) : m;
       if(M.feeZone && /Frais de livraison/.test(d.textContent)){ const n = d.querySelector('.note'); if(n) n.insertAdjacentText('beforeend', ' · ' + M.feeZone); } }); }catch(_){ }
     return out; };
+})();
+
+/* =================================================================
+   « Coller le numéro » sur iPhone
+   - WhatsApp sur iPhone copie les numéros avec des espaces spéciaux et des signes invisibles
+     (‪+243 975 879 898‬) : on les enlève.
+   - Le presse-papier est lu tout de suite au toucher (Safari l'exige), sinon iPhone refuse.
+   - Coller à la main dans la case (appui long → Coller) nettoie aussi le numéro.
+   ================================================================= */
+(() => {
+  const INV = /[​-‏‪-‮⁠-⁩﻿]/g, SP = /[    　]/g;
+  const tidy = t => String(t || '').replace(INV, '').replace(SP, ' ');
+  if(typeof cleanPhone === 'function'){ const c0 = cleanPhone; cleanPhone = function(t){ return c0.call(this, tidy(t)); }; }
+  // La lecture du presse-papier commence pendant le toucher (obligatoire sur iPhone)
+  const nameFrom = t => tidy(t).replace(/(\+?\d[\d .\-()]{6,}\d)/, '').replace(/[~:,\-–]+/g, ' ').replace(/\s+/g, ' ').trim();
+  function fill(f, t){ const inp = f && f.elements.phone; if(!inp) return false; const p = cleanPhone(t); if(!p) return false;
+    inp.value = p; inp.dispatchEvent(new Event('input', {bubbles:true})); inp.dispatchEvent(new Event('change', {bubbles:true}));
+    const nm = nameFrom(t); if(nm && /[a-zà-ÿ]{2,}/i.test(nm) && f.elements.client && !f.elements.client.value) f.elements.client.value = nm.slice(0, 40);
+    return true; }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-a="pastephone"]'); if(!b) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const f = b.closest('form'), inp = f && f.elements.phone; if(!inp) return;
+    let pr; try{ pr = navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText() : null; }catch(_){ pr = null; }
+    if(!pr){ inp.focus(); toast('Appui long dans la case du numéro puis « Coller »'); return; }
+    pr.then(t => { if(fill(f, t)) toast('Numéro collé'); else toast('Aucun numéro copié. Dans WhatsApp, copiez d\'abord le numéro du client.'); })
+      .catch(() => { inp.focus(); try{ inp.select(); }catch(_){ } toast('Appui long dans la case du numéro puis « Coller »'); });
+  }, true);
+  // Coller à la main dans la case du numéro : on garde seulement le numéro
+  document.addEventListener('paste', e => { const inp = e.target; if(!inp || !inp.matches || !inp.matches('input[name="phone"]')) return;
+    const t = (e.clipboardData || window.clipboardData || {getData:() => ''}).getData('text') || ''; if(!t) return;
+    const p = cleanPhone(t); if(!p || p === t.trim()) return;
+    e.preventDefault(); fill(inp.form, t); toast('Numéro collé'); }, true);
+  // Le texte collé dans « Coller une commande WhatsApp » est aussi nettoyé
+  if(typeof parseOrder === 'function'){ const p0 = parseOrder; parseOrder = function(txt){ return p0.call(this, tidy(txt)); }; }
 })();
 
 </script>
