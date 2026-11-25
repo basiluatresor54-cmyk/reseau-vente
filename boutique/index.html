@@ -72,6 +72,22 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;bo
 .empty{text-align:center;padding:60px 20px;color:var(--muted)}
 .foot{text-align:center;font-size:12px;color:var(--muted);margin-top:26px}.foot a{color:inherit;font-weight:700}
 .load{display:grid;place-items:center;height:60vh;color:var(--muted)}
+
+/* Apparence choisie par la boutique (Ma boutique en ligne → Apparence) */
+:root{--g2:var(--brand)}
+html[data-th=clair]{--bg:#f4f5f7;--card:rgba(255,255,255,.72);--ink:#16181d;--muted:#6b7280;--line:#e7e9ee}
+html[data-th=sombre]{--bg:#0f1115;--card:rgba(32,35,43,.66);--ink:#e8eaed;--muted:#9aa1ac;--line:#2c313a}
+.hero{background-image:linear-gradient(130deg,var(--brand),var(--g2))}
+.add,.chip.on,.mmnum button{background:linear-gradient(120deg,var(--brand),var(--g2))}
+.bar{background:linear-gradient(120deg,rgba(var(--brand-rgb),.94),var(--g2))}
+.ban{margin:-14px -14px 12px;padding:9px 14px;text-align:center;font-weight:750;font-size:13.5px;color:#fff;background:linear-gradient(90deg,var(--brand),var(--g2))}
+.soc{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 6px}.soc a{font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;background:var(--card);border:1px solid rgba(255,255,255,.5);color:var(--ink);text-decoration:none}
+.vd{position:absolute;top:10px;right:10px;background:#f59e0b;color:#1f1300;font-weight:800;font-size:11.5px;padding:4px 9px;border-radius:999px;box-shadow:0 4px 12px rgba(245,158,11,.35)}
+.sect{font-weight:850;font-size:16px;margin:14px 2px 0}
+.grid.list{grid-template-columns:1fr!important}
+.grid.list .pc{flex-direction:row}
+.grid.list .pc .ph{width:120px;aspect-ratio:auto;min-height:120px;flex:none}
+.grid.list .pc .b{padding:12px}
 </style>
 </head>
 <body>
@@ -101,21 +117,30 @@ async function boot(){
   }catch(e){ $('#app').innerHTML = '<div class="empty"><b>Connexion impossible</b><br>Vérifiez votre internet puis rechargez la page.</div>'; return; }
   const c = SHOP.color || '#0F766E', [r,g,b] = hexRgb(c), ds = document.documentElement.style;
   ds.setProperty('--brand', c); ds.setProperty('--brand-rgb', `${r},${g},${b}`); document.querySelector('meta[name=theme-color]').content = c;
+  { const L = LOOK(), G = gradOf(L.grad); if(G){ const [r2,g2,b2] = hexRgb(G[0]); ds.setProperty('--brand', G[0]); ds.setProperty('--brand-rgb', `${r2},${g2},${b2}`); ds.setProperty('--g2', G[1]); document.querySelector('meta[name=theme-color]').content = G[0]; }
+    if(L.theme === 'clair' || L.theme === 'sombre') document.documentElement.dataset.th = L.theme; }
   document.title = (SHOP.shop || SHOP.name) + ' — Boutique en ligne';
   try{ CART = JSON.parse(localStorage.getItem('cart_' + shopId) || '{}'); }catch(_){}
   render();
   // Lien partagé d'un produit (…&p=identifiant) : on ouvre directement sa fiche, prête à ajouter au panier
   const pid = new URLSearchParams(location.search).get('p'); if(pid && PRODS.some(p => String(p.id) === pid)) openDetail(pid);
 }
+const LOOK = () => (SHOP && SHOP.look && typeof SHOP.look === 'object') ? SHOP.look : {};
+const GRADS = {soleil:['#EA580C', '#DB2777'], ocean:['#0369A1', '#0D9488'], foret:['#166534', '#65A30D'], nuit:['#6D28D9', '#2563EB'], or:['#A16207', '#D97706']};
+function gradOf(g){ g = String(g || ''); if(GRADS[g]) return GRADS[g]; const m = /^c:(#[0-9a-f]{6}),(#[0-9a-f]{6})$/i.exec(g); return m ? [m[1], m[2]] : null; }
+const safeUrl = u => /^https?:\/\/[^\s"'<>]+$/i.test(String(u || '')) ? String(u) : '';
 const saveCart = () => { try{ localStorage.setItem('cart_' + shopId, JSON.stringify(CART)); }catch(_){} };
 function render(){
   const name = SHOP.shop || SHOP.name, cats = [...new Set(PRODS.map(p => p.cat).filter(Boolean))];
-  const list = PRODS.filter(p => !CAT || p.cat === CAT);
-  $('#app').innerHTML = `<div class="hero" style="${SHOP.cover ? `background-image:url('${SHOP.cover}')` : ''}"><div class="in"><div class="logo">${SHOP.logo ? `<img src="${SHOP.logo}" alt="">` : esc(initials(name))}</div><div><h1>${esc(name)}</h1><p>${esc(SHOP.intro || 'Commandez en quelques secondes, livraison rapide.')}</p></div></div></div>
-    <div class="badges"><span class="badge">🛵 Livraison rapide${feeRange() ? ' · ' + esc(feeRange()) : ''}</span><span class="badge">💵 Paiement à la livraison${mmList().length ? ' ou Mobile Money' : ''}</span><span class="badge">✅ Vérifiez avant de payer</span></div>
+  const L = LOOK(), list = PRODS.filter(p => !CAT || p.cat === CAT).sort((a, b) => (b.top ? 1 : 0) - (a.top ? 1 : 0)), nTop = list.filter(p => p.top).length;
+  const soc = [['Facebook', safeUrl(L.fb)], ['TikTok', safeUrl(L.tt)], ['Instagram', safeUrl(L.ig)]].filter(x => x[1]);
+  $('#app').innerHTML = `${L.banner ? `<div class="ban">${esc(L.banner)}</div>` : ''}<div class="hero" style="${SHOP.cover ? `background-image:url('${SHOP.cover}')` : ''}"><div class="in"><div class="logo">${SHOP.logo ? `<img src="${SHOP.logo}" alt="">` : esc(initials(name))}</div><div><h1>${esc(name)}</h1><p>${esc(SHOP.intro || 'Commandez en quelques secondes, livraison rapide.')}</p></div></div></div>
+    <div class="badges"><span class="badge">🛵 Livraison rapide${feeRange() ? ' · ' + esc(feeRange()) : ''}</span><span class="badge">💵 Paiement à la livraison${mmList().length ? ' ou Mobile Money' : ''}</span><span class="badge">✅ Vérifiez avant de payer</span>${L.hours ? `<span class="badge">🕘 ${esc(L.hours)}</span>` : ''}</div>
+    ${soc.length ? `<div class="soc">${soc.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${n}</a>`).join('')}</div>` : ''}
+    ${nTop ? '<div class="sect">En vedette</div>' : ''}
     ${cats.length > 1 ? `<div class="chips"><button class="chip ${!CAT?'on':''}" data-cat="">Tout</button>${cats.map(c => `<button class="chip ${CAT===c?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}
-    <div class="grid">${list.map((p,i) => { const q = CART[p.id] || 0; return `<div class="pc" style="animation-delay:${Math.min(i,10)*.03}s">
-      <div class="ph" data-det="${p.id}" style="${p.photo ? `background-image:url('${p.photo}')` : ''}">${p.photo ? '' : esc(initials(p.name))}${promoPct(p) ? `<span class="promo">-${promoPct(p)} %</span>` : ''}</div>
+    <div class="grid ${L.layout === 'list' ? 'list' : ''}">${list.map((p,i) => { const q = CART[p.id] || 0; return `<div class="pc" style="animation-delay:${Math.min(i,10)*.03}s">
+      <div class="ph" data-det="${p.id}" style="${p.photo ? `background-image:url('${p.photo}')` : ''}">${p.photo ? '' : esc(initials(p.name))}${promoPct(p) ? `<span class="promo">-${promoPct(p)} %</span>` : ''}${p.top ? '<span class="vd">Vedette</span>' : ''}</div>
       <div class="b"><div class="n" data-det="${p.id}">${esc(p.name)}</div>${p.details ? `<div class="d">${esc(p.details)}</div>` : ''}
       <div class="p">${amt(num(p.price), p.cur)}${promoPct(p) ? `<s>${amt(num(p.old), p.cur)}</s>` : ''}${p.cur !== 'FC' && num(SHOP.rate) ? `<br><small>≈ ${fmt(Math.round(num(p.price)*num(SHOP.rate)/100)*100)} ${esc(LC())}</small>` : ''}</div>
       ${q ? `<div class="qty"><button data-dec="${p.id}">−</button><b>${q}</b><button data-inc="${p.id}">+</button></div>` : `<button class="add" data-inc="${p.id}">Ajouter</button>`}</div></div>`; }).join('') || '<div class="empty" style="grid-column:1/-1">Aucun produit pour le moment.</div>'}</div>
