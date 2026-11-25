@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'de8911d1a6';
+const APP_BUILD = '289011fd80';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -10205,6 +10205,73 @@ html.fx.glass .daycard.halo-up,html.fx.glass .daycard.halo-dn{animation:haloP 3s
     e.preventDefault(); fill(inp.form, t); toast('Numéro collé'); }, true);
   // Le texte collé dans « Coller une commande WhatsApp » est aussi nettoyé
   if(typeof parseOrder === 'function'){ const p0 = parseOrder; parseOrder = function(txt){ return p0.call(this, tidy(txt)); }; }
+})();
+
+/* =================================================================
+   Commande déjà enregistrée ? (même personne : même téléphone, ou même nom)
+   - Dans « Nouvelle vente », un encadré montre les commandes déjà enregistrées pour ce client
+     (en attente, ou des 3 derniers jours), avec la date et l'heure.
+   - Même client + même produit + (pas encore livrée ou même jour) = « Doublon probable » :
+     on demande avant d'enregistrer. Un client peut recommander : on ne bloque jamais.
+   ================================================================= */
+(() => {
+  if(typeof moveForm !== 'function') return;
+  const ph9 = t => String(t || '').replace(/\D/g, '').slice(-9);
+  const nzn = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const pend = m => m.status === 'attente' || m.status === 'encours';
+  function find(phone, name, skip){
+    const p = ph9(phone), n = nzn(name), lim = addDays(today(), -3);
+    if(p.length < 9 && n.length < 3) return [];
+    const byOrd = new Map();
+    for(let i = S.moves.length - 1, k = 0; i >= 0 && k < 6000; i--, k++){ const m = S.moves[i];
+      if(m.type !== 'vente' || m.status === 'annule' || (skip && skip.has(m.id))) continue;
+      if(!(pend(m) || (m.date || '') >= lim || (m.ddate || '') >= lim)) continue;
+      const mp = ph9(m.phone), same = p.length === 9 && mp.length === 9 ? mp === p : (n.length >= 3 && nzn(m.client) === n);
+      if(!same) continue; const key = m.ord || m.id; if(!byOrd.has(key)) byOrd.set(key, m); }
+    return [...byOrd.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 4); }
+  const linesOf = m => (typeof orderLines === 'function' ? orderLines(m) : [m]);
+  const when = m => { const d = m.date || today(), t = d === today() ? 'aujourd\'hui' : d === addDays(today(), -1) ? 'hier' : dAbs(d); return 'commandée ' + t + (m.ts ? ' à ' + hhmm(m.ts) : ''); };
+  const stat = m => m.status === 'attente' ? 'à livrer' : m.status === 'encours' ? 'en route' : m.status === 'livre' ? 'livrée' : '';
+  function strong(list, pid, ddate){ return list.find(m => linesOf(m).some(x => x.pid === pid) && (pend(m) || (m.date || '') === today() || (ddate && (m.ddate || m.date) === ddate))) || null; }
+  document.head.insertAdjacentHTML('beforeend', `<style id="dupcss">
+#dupW{border-radius:16px;padding:10px 12px;margin:0 0 12px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.45)}
+#dupW.hot{background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.5)}
+#dupW b.h{display:block;font-size:14px;margin-bottom:4px}
+#dupW .dr{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid rgba(0,0,0,.06);font-size:13px}
+#dupW .dr:first-of-type{border-top:0}
+#dupW .dr span{flex:1;min-width:0}
+#dupW .dr .btn{flex:none;padding:6px 10px}
+</style>`);
+  const mf0 = moveForm;
+  moveForm = function(type, opt){ const out = mf0.apply(this, arguments);
+    try{ const f = document.getElementById('mf'), E = f && f.elements, id = opt && opt.id, m0 = id ? S.moves.find(x => x.id === id) : null;
+      if(!f || !E || !E.phone || !E.client || (m0 ? m0.type : type) !== 'vente') return out;
+      const skip = new Set(m0 ? linesOf(m0).map(x => x.id).concat([m0.id]) : []);
+      const at = (E.client.closest('.f') || E.client.parentElement); at.insertAdjacentHTML('beforebegin', '<div id="dupW" hidden></div>');
+      const W = document.getElementById('dupW');
+      let list = [], hot = null;
+      const check = () => { list = find(E.phone.value, E.client.value, skip); hot = strong(list, E.pid && E.pid.value, E.ddate && E.ddate.value);
+        if(!list.length){ W.hidden = true; W.innerHTML = ''; return; }
+        W.hidden = false; W.classList.toggle('hot', !!hot);
+        W.innerHTML = `<b class="h">${hot ? 'Doublon probable : cette commande est peut-être déjà enregistrée' : 'Ce client a déjà ' + (list.length > 1 ? list.length + ' commandes' : 'une commande') + ' enregistrée' + (list.length > 1 ? 's' : '')}</b>`
+          + list.map(m => { const L = linesOf(m), lv = m.liv && liv(m.liv); return `<div class="dr"><span><b>${esc(L.map(x => pname(x.pid) + ' × ' + x.qty).join(', '))}</b><br>${esc(m.client || '')} · ${esc(when(m))} · ${stat(m)}${lv ? ' (' + esc(lv.name) + ')' : ''}</span><button type="button" class="btn sm" data-dupopen="${m.id}">Voir</button></div>`; }).join('')
+          + `<small class="note">${hot ? 'Si c\'est une nouvelle commande du même client, continuez : on vous demandera de confirmer.' : 'Un client peut recommander : vérifiez seulement que ce n\'est pas la même commande.'}</small>`; };
+      W.addEventListener('click', e => { const b = e.target.closest('[data-dupopen]'); if(!b) return; e.preventDefault(); saleSheet(b.dataset.dupopen); });
+      ['input', 'change'].forEach(ev => { E.phone.addEventListener(ev, check); E.client.addEventListener(ev, check); });
+      if(E.pid) E.pid.addEventListener('change', check); if(E.ddate) E.ddate.addEventListener('change', check);
+      const go = document.getElementById('pasteGo'); if(go) go.addEventListener('click', () => setTimeout(check, 30));
+      document.addEventListener('click', function pc(e){ if(!document.body.contains(f)){ document.removeEventListener('click', pc, true); return; } if(e.target.closest('[data-a="pastephone"],#pasteClip')) setTimeout(check, 400); }, true);
+      check();
+      // Avant d'enregistrer : demander si c'est vraiment une nouvelle commande
+      let pass = false;
+      f.addEventListener('submit', async e => { if(pass){ pass = false; return; } check(); if(!hot) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        const L = linesOf(hot), lv = hot.liv && liv(hot.liv);
+        const ok = await ask(`${esc(hot.client || 'Ce client')} a déjà une commande de ${esc(L.map(x => pname(x.pid) + ' × ' + x.qty).join(', '))} (${esc(when(hot))}, ${stat(hot)}${lv ? ', ' + esc(lv.name) : ''}).<br><br>Est-ce une <b>NOUVELLE</b> commande ?`, 'Oui, nouvelle commande', false);
+        if(!ok){ toast('Rien n\'a été enregistré : la commande existe déjà'); return; }
+        pass = true; if(f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit', {cancelable:true})); }, true);
+    }catch(e){ console.error(e); }
+    return out; };
 })();
 
 </script>
