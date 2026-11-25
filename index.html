@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'e9bcc85e48';
+const APP_BUILD = '03048187df';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -10601,6 +10601,243 @@ window.__qrcode = qrcode; })();
           const was = !!q.top; if(top && !q.hide) q.top = true; else delete q.top; if(was !== !!q.top){ q.ts = Date.now(); save(); } }); }, true);
     }catch(e){ console.error(e); }
     return out; };
+})();
+
+/* =================================================================
+   Outils WhatsApp et route (fin du développement)
+   1) Statuts WhatsApp du jour : images verticales prêtes (photo, prix, promo, QR de la boutique)
+   2) Réponses rapides : messages prêts à copier / envoyer (le patron les modifie)
+   3) Exporter mes clients en contacts (.vcf) : pour qu'ils voient vos statuts
+   4) Lire le SMS Mobile Money : montant, référence, date remplis tout seuls ; SMS déjà utilisé = alerte
+   5) Tournée du jour : livraisons rangées par quartier + Google Maps avec tous les arrêts
+   ================================================================= */
+(() => {
+  if(typeof ONLINE === 'undefined' || typeof CUSTOM === 'undefined') return;
+  const role = () => ONLINE.role, owner = () => !!(ONLINE.shop && (role() === 'proprietaire' || ONLINE.admin));
+  const staff = () => !!(ONLINE.shop && ['proprietaire', 'gerant', 'vendeur'].includes(role())) || !!ONLINE.admin;
+  const shopName = () => S.settings.shop || (ONLINE.shop && ONLINE.shop.name) || 'Ma boutique';
+  const bUrl = () => S.settings.catalog && ONLINE.shop ? BOUTIQUE_URL + '?s=' + ONLINE.shop.id : '';
+  const GR = {soleil:['#EA580C', '#DB2777'], ocean:['#0369A1', '#0D9488'], foret:['#166534', '#65A30D'], nuit:['#6D28D9', '#2563EB'], or:['#A16207', '#D97706']};
+  const colors = () => { const L = S.settings.look || {}, g = String(L.grad || ''); if(GR[g]) return GR[g]; const m = /^c:(#[0-9a-f]{6}),(#[0-9a-f]{6})$/i.exec(g); if(m) return [m[1], m[2]]; const c = S.settings.color || '#0F766E'; return [c, c]; };
+  CSUB.whatsapp = 'Outils WhatsApp';
+  document.head.insertAdjacentHTML('beforeend', `<style id="watcss">
+.waTool{display:flex;gap:12px;align-items:center;width:100%;text-align:left}
+.waTool .ic{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;background:#25D366;color:#fff}
+.waTool .ic svg{width:24px;height:24px}
+.stGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stGrid label{position:relative;cursor:pointer}.stGrid img{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:12px;box-shadow:var(--shadow);display:block}
+.stGrid input{position:absolute;top:6px;left:6px;width:22px;height:22px;min-height:0;z-index:1}
+.stGrid label.off img{opacity:.35}
+.rpl{border-top:1px solid var(--line);padding:10px 0}.rpl:first-child{border-top:0}
+.rpl b{display:block;margin-bottom:3px}.rpl p{font-size:13px;color:var(--muted);white-space:pre-wrap;max-height:3.9em;overflow:hidden;margin:0 0 8px}
+.rpl .btns{display:flex;gap:6px;flex-wrap:wrap}.rpl .btns .btn{flex:1;min-width:80px}
+.smsOk{background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.4);border-radius:12px;padding:8px 10px;font-size:13px;margin:6px 0}
+.smsBad{background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.45);border-radius:12px;padding:8px 10px;font-size:13px;margin:6px 0}
+.tour li{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}.tour li:first-child{border-top:0}
+.tour .n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--brand);color:var(--brand-ink);display:grid;place-items:center;font-weight:800}
+.tour .x{flex:1;min-width:0}.tour .x small{color:var(--muted);display:block}
+.tour .q{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:9px;background:var(--brand-soft);margin-bottom:3px}
+.tourBtn{display:flex;align-items:center;justify-content:center;gap:8px;font-size:16px;padding:14px!important}
+</style>`);
+  const WAI = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.3 14.2c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7-2.8-1.1-4.6-4-4.7-4.2-.1-.2-1.1-1.5-1.1-2.8s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 1.9c.1.2.1.3 0 .5l-.4.6-.3.4c-.1.1-.2.3-.1.5.2.3.7 1.2 1.6 1.9 1.1 1 2 1.3 2.3 1.4.2.1.4.1.5-.1l.7-.9c.2-.2.3-.2.6-.1l1.8.9c.3.1.4.2.5.3.1.2.1.7-.1 1.3z"/></svg>';
+  const shareFiles = async (files, text) => { try{ if(navigator.canShare && navigator.canShare({files})){ await navigator.share({files, text}); return true; } }catch(e){ if(e && e.name === 'AbortError') return true; } return false; };
+
+  // ---------- 1) Statuts WhatsApp du jour
+  function pickProducts(){ const P = S.products.filter(p => !p.hide && !p.archived); const pick = []; const add = p => { if(p && !pick.includes(p)) pick.push(p); };
+    P.filter(p => p.top).forEach(add); P.filter(p => num(p.old) > num(p.sell)).forEach(add);
+    if(pick.length < 4){ const lim = addDays(today(), -30), q = {}; S.moves.forEach(m => { if(m.type === 'vente' && m.status === 'livre' && (m.date || '') >= lim) q[m.pid] = (q[m.pid] || 0) + num(m.qty); });
+      P.slice().sort((a, b) => (q[b.id] || 0) - (q[a.id] || 0)).forEach(p => { if(pick.length < 4) add(p); }); }
+    return pick.slice(0, 6); }
+  async function statusImage(p){
+    const W = 1080, H = 1920, c = document.createElement('canvas'), x = c.getContext('2d'); c.width = W; c.height = H; const [c1, c2] = colors(), st = S.settings;
+    const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, c1); g.addColorStop(1, c2); x.fillStyle = g; x.fillRect(0, 0, W, H);
+    x.globalAlpha = .12; x.fillStyle = '#fff'; x.beginPath(); x.arc(W * .9, H * .12, 320, 0, 7); x.fill(); x.beginPath(); x.arc(W * .05, H * .8, 260, 0, 7); x.fill(); x.globalAlpha = 1;
+    const F = (w, s) => `${w} ${s}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+    const rr = (X, Y, w, h, r) => { x.beginPath(); if(x.roundRect) x.roundRect(X, Y, w, h, r); else x.rect(X, Y, w, h); };
+    const [logo, ph] = await Promise.all([loadImg(st.logo), loadImg(p.photo)]);
+    // en-tête : logo + nom
+    let hx = 80; if(logo){ x.save(); x.beginPath(); x.arc(140, 150, 60, 0, 7); x.fillStyle = '#fff'; x.fill(); x.clip(); const k = Math.max(120 / logo.width, 120 / logo.height); x.drawImage(logo, 140 - logo.width * k / 2, 150 - logo.height * k / 2, logo.width * k, logo.height * k); x.restore(); hx = 225; }
+    x.fillStyle = '#fff'; x.font = F(800, 52); x.textAlign = 'left'; x.fillText(String(shopName()).slice(0, 26), hx, 168);
+    // photo
+    const px = 80, py = 280, pw = W - 160, phh = 920; x.save(); rr(px, py, pw, phh, 56); x.fillStyle = '#fff'; x.fill(); x.clip();
+    if(ph){ const k = Math.max(pw / ph.width, phh / ph.height); x.drawImage(ph, px + pw / 2 - ph.width * k / 2, py + phh / 2 - ph.height * k / 2, ph.width * k, ph.height * k); }
+    else { x.fillStyle = c1; x.globalAlpha = .15; x.fillRect(px, py, pw, phh); x.globalAlpha = 1; x.fillStyle = c1; x.font = F(900, 260); x.textAlign = 'center'; x.fillText(initials(p.name), W / 2, py + phh / 2 + 90); }
+    x.restore();
+    const promo = num(p.old) > num(p.sell) ? Math.round((1 - num(p.sell) / num(p.old)) * 100) : 0;
+    if(promo || p.top){ const t = promo ? '-' + promo + ' %' : 'VEDETTE'; x.font = F(900, 56); const tw = x.measureText(t).width + 70; rr(W - 80 - tw - 30, py + 30, tw, 100, 50); x.fillStyle = promo ? '#DC2626' : '#F59E0B'; x.fill(); x.fillStyle = promo ? '#fff' : '#1f1300'; x.textAlign = 'center'; x.fillText(t, W - 80 - 30 - tw / 2, py + 100); }
+    // nom + prix
+    x.textAlign = 'left'; x.fillStyle = '#fff'; x.font = F(850, 74);
+    const words = String(p.name).split(/\s+/), lines = []; let cur = ''; words.forEach(w => { const t = cur ? cur + ' ' + w : w; if(x.measureText(t).width > W - 160 && cur){ lines.push(cur); cur = w; } else cur = t; }); if(cur) lines.push(cur);
+    let y = py + phh + 110; lines.slice(0, 2).forEach(l => { x.fillText(l, 80, y); y += 88; });
+    x.font = F(900, 130); const pr = amt(num(p.sell), p.cur); x.fillText(pr, 80, y + 70);
+    if(promo){ const pw2 = x.measureText(pr).width; x.font = F(600, 60); x.globalAlpha = .8; const ot = amt(num(p.old), p.cur); x.fillText(ot, 80 + pw2 + 36, y + 66); const ow = x.measureText(ot).width; x.fillRect(80 + pw2 + 30, y + 44, ow + 12, 6); x.globalAlpha = 1; }
+    // bas : QR + commander
+    const by = H - 330; rr(60, by, W - 120, 270, 48); x.fillStyle = '#fff'; x.fill();
+    const link = bUrl(); let tx = 110;
+    if(link){ try{ const q = window.__qrcode(0, 'M'); q.addData(link); q.make(); const n = q.getModuleCount(), qs = 210, cs = qs / n; x.fillStyle = '#111'; for(let r = 0; r < n; r++) for(let cc = 0; cc < n; cc++) if(q.isDark(r, cc)) x.fillRect(Math.floor(100 + cc * cs), Math.floor(by + 30 + r * cs), Math.ceil(cs), Math.ceil(cs)); tx = 350; }catch(_){ } }
+    x.fillStyle = '#111'; x.font = F(850, 50); x.textAlign = 'left'; x.fillText('Commandez maintenant', tx, by + 95);
+    x.font = F(600, 38); x.fillStyle = '#444'; x.fillText(link ? 'Scannez ou cliquez le lien' : 'Écrivez-nous sur WhatsApp', tx, by + 150);
+    if(st.wa){ x.fillStyle = '#16a34a'; x.font = F(800, 40); x.fillText('WhatsApp ' + st.wa, tx, by + 210); }
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', .9)); }
+  A.wastatus = async () => { if(!staff()) return; const P = pickProducts(); if(!P.length) return toast('Ajoutez des produits visibles dans la boutique d\'abord');
+    sheet('Statuts WhatsApp du jour', `<p class="note" style="margin-bottom:10px">Images prêtes pour votre statut : produits en vedette, promos, puis les plus vendus. Décochez ce que vous ne voulez pas.</p><div class="stGrid" id="stGrid">${P.map(p => `<label data-sp="${p.id}"><input type="checkbox" checked><img alt="${esc(p.name)}" style="background:var(--soft)"></label>`).join('')}</div>
+      <div class="stack" style="margin-top:12px"><button class="btn wa block" id="stShare">${ico('wa')} Partager dans mon statut</button><div id="stDl"></div><p class="note">Sur WhatsApp : choisissez « Mon statut ». Astuce : mettez 2 ou 3 statuts par jour, matin et soir.</p></div>`);
+    const blobs = {};
+    for(const p of P){ try{ const bl = await statusImage(p); blobs[p.id] = bl; const lab = document.querySelector(`#stGrid [data-sp="${p.id}"]`); if(lab) lab.querySelector('img').src = URL.createObjectURL(bl); }catch(e){ console.error(e); } }
+    document.querySelectorAll('#stGrid input').forEach(i => i.onchange = () => i.parentElement.classList.toggle('off', !i.checked));
+    const chosen = () => [...document.querySelectorAll('#stGrid label')].filter(l => l.querySelector('input').checked && blobs[l.dataset.sp]).map(l => ({p:prod(l.dataset.sp), b:blobs[l.dataset.sp]}));
+    const btn = document.getElementById('stShare'); if(btn) btn.onclick = async () => { const C = chosen(); if(!C.length) return toast('Cochez au moins une image');
+      const files = C.map((c, i) => new File([c.b], `statut-${i + 1}.jpg`, {type:'image/jpeg'})), text = C.map(c => `${c.p.name} : ${amt(num(c.p.sell), c.p.cur)}`).join('\n') + (bUrl() ? '\nCommandez : ' + bUrl() : '');
+      if(await shareFiles(files, text)) return; document.getElementById('stDl').innerHTML = C.map((c, i) => `<a class="btn block" style="margin-top:6px" href="${URL.createObjectURL(c.b)}" download="statut-${i + 1}.jpg">Enregistrer l'image ${i + 1} (${esc(c.p.name)})</a>`).join('') + '<p class="note">Enregistrez les images, puis ajoutez-les à votre statut depuis WhatsApp.</p>'; }; };
+  window.__wa = {pickProducts, statusImage};
+
+  // ---------- 2) Réponses rapides
+  const DEF = [
+    {t:'Nos prix', x:'Bonjour 👋 Merci pour votre message !\nVoici nos prix :\n{produits}\n\nLivraison : {frais}\n{lien}'},
+    {t:'Demander l\'adresse', x:'Merci pour votre commande 🙏\nEnvoyez-moi votre adresse complète : commune, quartier, avenue, numéro et un repère (église, école, arrêt…). Vous pouvez aussi envoyer votre position WhatsApp 📍'},
+    {t:'Frais de livraison', x:'Les frais de livraison : {frais}.\nLivraison aujourd\'hui ou demain. Vous payez à la livraison ✅'},
+    {t:'Paiement Mobile Money', x:'Vous pouvez payer par Mobile Money :\n{mm}\nAprès le paiement, envoyez-nous la capture du message 🙏'},
+    {t:'Commande en route', x:'Bonjour {client} 👋 Votre commande est en route 🛵\nLe livreur va vous appeler. Merci de rester joignable.'},
+    {t:'Merci après livraison', x:'Merci pour votre achat {client} 🙏\nSi vous êtes satisfait(e), dites-le-nous et partagez avec vos proches. À bientôt chez {boutique} !'},
+    {t:'Relance', x:'Bonjour {client} 👋 Ça fait un moment !\nNous avons de nouveaux produits et des promos.\n{lien}'}];
+  const replies = () => Array.isArray(S.settings.replies) && S.settings.replies.length ? S.settings.replies : DEF;
+  function fillVars(x, client){ const st = S.settings, P = S.products.filter(p => !p.hide && !p.archived);
+    const prods = P.slice().sort((a, b) => (b.top ? 1 : 0) - (a.top ? 1 : 0)).slice(0, 8).map(p => `• ${p.name} : *${amt(num(p.sell), p.cur)}*${num(p.old) > num(p.sell) ? ` (au lieu de ${amt(num(p.old), p.cur)})` : ''}`).join('\n');
+    const fc = st.feeCity && typeof st.feeCity === 'object' ? Object.entries(st.feeCity).filter(([, v]) => num(v) > 0).map(([c, v]) => `${c} ${amt(num(v), st.feeCur || '$')}`) : [];
+    const frais = fc.length ? fc.join(', ') : (num(st.fee) ? amt(num(st.fee), st.feeCur || '$') : 'selon votre quartier');
+    const mm = st.mm && Array.isArray(st.mm.nums) ? st.mm.nums.filter(n => n.op && n.num).map(n => `• ${n.op} : ${n.num}${n.name ? ' (' + n.name + ')' : ''}`).join('\n') : '';
+    const link = bUrl();
+    return String(x).replace(/\{produits\}/g, prods || '').replace(/\{frais\}/g, frais).replace(/\{mm\}/g, mm || '(demandez-nous le numéro)').replace(/\{boutique\}/g, shopName())
+      .replace(/\{lien\}/g, link ? 'Commandez ici : ' + link : '').replace(/\{client\}/g, client || '').replace(/ +\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/ {2,}/g, ' ').trim(); }
+  window.__replies = {replies, fillVars};
+  // ---------- 3) Clients → contacts
+  function vcf(list, suffix){ const esc2 = s => String(s || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, ' ');
+    return list.map(c => { const tel = '+' + phoneNorm(c.phone), nm = (c.name || 'Client').trim() + (suffix ? ' ' + suffix : '');
+      return ['BEGIN:VCARD', 'VERSION:3.0', 'FN:' + esc2(nm), 'N:' + esc2(nm) + ';;;;', 'TEL;TYPE=CELL:' + tel, 'NOTE:' + esc2('Client de ' + shopName()), 'END:VCARD'].join('\r\n'); }).join('\r\n') + '\r\n'; }
+  function clientsWithPhone(days){ const lim = days ? addDays(today(), -days) : ''; return clientsList().filter(c => { const d = phoneNorm(c.phone); return d.length >= 11 && (!lim || (c.last || '') >= lim); }).sort((a, b) => (b.last || '').localeCompare(a.last || '')); }
+  window.__vcf = {vcf, clientsWithPhone};
+  // ---------- Écran « Outils WhatsApp »
+  CUSTOM.whatsapp = () => { if(!staff()) return '<div class="card"><p class="note">Réservé au patron et aux vendeurs.</p></div>';
+    const R = replies();
+    return `<div class="card" style="margin-bottom:12px"><button class="waTool" data-a="wastatus"><span class="ic">${WAI}</span><span style="flex:1"><b>Statuts WhatsApp du jour</b><br><small class="note">Images prêtes : vedettes, promos, prix, QR code</small></span><span class="note">›</span></button></div>
+    ${owner() ? `<div class="card" style="margin-bottom:12px"><button class="waTool" data-a="wavcf"><span class="ic" style="background:#0ea5e9">${WAI}</span><span style="flex:1"><b>Mes clients dans mes contacts</b><br><small class="note">Pour qu'ils voient vos statuts : ${clientsWithPhone(0).length} clients avec numéro</small></span><span class="note">›</span></button></div>` : ''}
+    <div class="sec"><h2>Réponses rapides</h2>${owner() ? '<button class="btn sm" data-a="rpledit:new">+ Nouvelle</button>' : ''}</div>
+    <div class="card" style="margin-bottom:12px" id="rplList">${R.map((r, i) => `<div class="rpl"><b>${esc(r.t)}</b><p>${esc(fillVars(r.x, ''))}</p><div class="btns"><button class="btn sm" data-a="rplcopy:${i}">Copier</button><a class="btn sm wa" href="${waLink('', fillVars(r.x, ''))}" target="_blank" rel="noopener">${ico('wa')} Envoyer</a>${owner() ? `<button class="btn sm" data-a="rpledit:${i}">Modifier</button>` : ''}</div></div>`).join('')}</div>
+    <p class="note">Les mots entre accolades se remplacent tout seuls : {produits}, {frais}, {mm} (numéros Mobile Money), {lien} (boutique), {boutique}, {client}.</p>`; };
+  A.rplcopy = i => { const r = replies()[+i]; if(r) copyText(fillVars(r.x, '')); };
+  A.rpledit = k => { if(!owner()) return; const R = replies().map(r => ({...r})), i = k === 'new' ? -1 : +k, r = i >= 0 ? R[i] : {t:'', x:''};
+    sheet(i >= 0 ? 'Modifier la réponse' : 'Nouvelle réponse', `<form id="rplf"><label class="f"><span>Titre</span><input name="t" maxlength="40" required value="${esc(r.t)}" placeholder="Ex : Nos horaires"></label>
+      <label class="f"><span>Message</span><textarea name="x" rows="7" maxlength="1200" required placeholder="Ex : Nous livrons de 8 h à 20 h…">${esc(r.x)}</textarea></label>
+      <p class="note" style="margin:-4px 0 10px">Vous pouvez écrire : {produits} {frais} {mm} {lien} {boutique} {client}</p>
+      <button class="btn primary block" type="submit">Enregistrer</button>${i >= 0 ? '<button type="button" class="btn danger block" style="margin-top:8px" id="rplDel">Supprimer</button>' : ''}${i < 0 ? '' : '<button type="button" class="btn block" style="margin-top:8px" id="rplReset">Remettre les réponses de départ</button>'}</form>`);
+    const f = document.getElementById('rplf'); f.onsubmit = e => { e.preventDefault(); const v = {t:f.elements.t.value.trim().slice(0, 40), x:f.elements.x.value.trim().slice(0, 1200)}; if(!v.t || !v.x) return; if(i >= 0) R[i] = v; else R.push(v); S.settings.replies = R; save(); closeSheet(); render(); toast('Réponse enregistrée'); };
+    const d = document.getElementById('rplDel'); if(d) d.onclick = async () => { if(!await ask('Supprimer cette réponse ?', 'Supprimer')) return; R.splice(i, 1); S.settings.replies = R.length ? R : undefined; if(!R.length) delete S.settings.replies; save(); closeSheet(); render(); };
+    const rs = document.getElementById('rplReset'); if(rs) rs.onclick = async () => { if(!await ask('Remettre les 7 réponses de départ ? Vos changements seront perdus.', 'Remettre')) return; delete S.settings.replies; save(); closeSheet(); render(); }; };
+  A.wavcf = () => { if(!owner()) return; const all = clientsWithPhone(0), r90 = clientsWithPhone(90);
+    sheet('Mes clients dans mes contacts', `<p class="note" style="margin-bottom:10px">WhatsApp montre vos statuts seulement aux personnes <b>enregistrées dans votre téléphone</b>. Ce fichier ajoute vos clients d'un coup.</p>
+      <div class="seg" style="grid-template-columns:1fr 1fr;margin-bottom:10px"><button type="button" class="on" data-vc="0">Tous (${all.length})</button><button type="button" data-vc="90">3 derniers mois (${r90.length})</button></div>
+      <label class="f"><span>Ajouté après chaque nom</span><input id="vcSuf" maxlength="20" value="${esc(String(shopName()).split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 4))}" placeholder="Ex : WB"></label>
+      <p class="note" style="margin:-4px 0 10px">Exemple : « Jemima WB ». Vous reconnaîtrez vos clients dans vos contacts.</p>
+      <button class="btn primary block" id="vcGo">Créer le fichier de contacts</button><div id="vcOut" style="margin-top:10px"></div>
+      <p class="note" style="margin-top:8px">Ensuite, ouvrez le fichier : le téléphone propose d'importer les contacts. Ce fichier contient des numéros de clients : ne le partagez pas.</p>`);
+    let days = 0; document.querySelectorAll('[data-vc]').forEach(b => b.onclick = () => { days = +b.dataset.vc; document.querySelectorAll('[data-vc]').forEach(x => x.classList.toggle('on', x === b)); });
+    document.getElementById('vcGo').onclick = async () => { const L = clientsWithPhone(days); if(!L.length) return toast('Aucun client avec numéro');
+      const bl = new Blob([vcf(L, document.getElementById('vcSuf').value.trim())], {type:'text/vcard'}), name = 'clients-' + today() + '.vcf', file = new File([bl], name, {type:'text/vcard'});
+      if(await shareFiles([file], '')) { toast(L.length + ' contacts prêts'); return; }
+      document.getElementById('vcOut').innerHTML = `<a class="btn block" href="${URL.createObjectURL(bl)}" download="${name}">Enregistrer le fichier (${L.length} contacts)</a>`; }; };
+
+  // ---------- 4) SMS Mobile Money
+  function parseMM(t){ t = String(t || '').replace(/[​-‏‪-‮  ]/g, ' ');
+    const r = {}; const low = t.toLowerCase();
+    r.op = /m-?pesa|vodacom/.test(low) ? 'M-Pesa' : /orange/.test(low) ? 'Orange Money' : /airtel/.test(low) ? 'Airtel Money' : /afri ?money|africell/.test(low) ? 'Afrimoney' : '';
+    const nm = s => { s = String(s).replace(/\s/g, ''); if(/,\d{2}$/.test(s) && !/\.\d/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); else s = s.replace(/,/g, ''); return parseFloat(s); };
+    let m = t.match(/(\d[\d\s.,]*\d|\d)\s*(USD|US\$|\$|CDF|FC|Fc|francs?)\b/) || null, cur = '';
+    if(m){ r.amount = nm(m[1]); cur = m[2]; } else { m = t.match(/\b(USD|CDF|FC)\s*[:.]?\s*(\d[\d\s.,]*\d|\d)/); if(m){ r.amount = nm(m[2]); cur = m[1]; } }
+    if(cur) r.cur = /usd|\$/i.test(cur) ? '$' : 'FC';
+    const ref = t.match(/\b(?:r[ée]f(?:[ée]rence)?|trans(?:action)?\s*id|txn\s*id|id\s*trans(?:action)?|id)\s*[:.#]?\s*([A-Z0-9][A-Z0-9.\-]{5,})/i) || t.match(/\b([A-Z]{2}\d{6}\.\d{4}\.[A-Z0-9]{4,})\b/) || t.match(/\b(?=[A-Z0-9.]*[A-Z])([A-Z]{1,4}\d[A-Z0-9.]{6,})\b/);
+    if(ref) r.ref = ref[1].replace(/[.,]$/, '');
+    const ph = t.match(/(\+?243\s?\d{9}|\b0\d{9}\b)/); if(ph) r.phone = ph[1].replace(/\s/g, '');
+    const d = t.match(/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b/); if(d){ let y = +d[3]; if(y < 100) y += 2000; const mm2 = +d[2], dd = +d[1]; if(mm2 >= 1 && mm2 <= 12 && dd >= 1 && dd <= 31) r.date = `${y}-${String(mm2).padStart(2, '0')}-${String(dd).padStart(2, '0')}`; }
+    r.dir = /re[çc]u|received|cr[ée]dit/.test(low) ? 'recu' : /envoy|sent|transf[ée]r|d[ée]bit|pay[ée]/.test(low) ? 'envoye' : '';
+    r.ok = !!(r.amount > 0 && r.cur); return r; }
+  const refUsed = (ref, skip) => { if(!ref) return null; const k = String(ref).toUpperCase(); return S.moves.find(m => m.id !== skip && (m.type === 'versement' || m.type === 'decl') && m.status !== 'refuse' && String(m.ref || m.smsRef || '').toUpperCase() === k) || null; };
+  window.__mm = {parseMM, refUsed};
+  function smsBox(host, onFill){ host.insertAdjacentHTML('afterbegin', `<div class="f" id="smsW"><button type="button" class="btn block" id="smsBtn">Coller le SMS Mobile Money</button><textarea id="smsTx" rows="3" placeholder="Ou collez ici le message reçu de M-Pesa, Orange Money, Airtel Money…" style="margin-top:6px"></textarea><div id="smsRes"></div></div>`);
+    const tx = document.getElementById('smsTx'), res = document.getElementById('smsRes');
+    const run = t => { const r = parseMM(t); if(!t.trim()){ res.innerHTML = ''; return; } if(!r.ok){ res.innerHTML = '<div class="smsBad">Montant non trouvé dans ce message. Vérifiez que c\'est bien le SMS de Mobile Money.</div>'; return; }
+      const used = refUsed(r.ref); res.innerHTML = `<div class="${used ? 'smsBad' : 'smsOk'}">${used ? `<b>Attention : ce SMS a déjà été utilisé</b> (${used.type === 'decl' ? 'déclaration' : 'versement'} du ${esc(fmtDate(used.date))}${used.liv && liv(used.liv) ? ', ' + esc(liv(used.liv).name) : ''}). Peut-être un faux ou un doublon.<br>` : '<b>SMS lu</b> · '}${amt(r.amount, r.cur)}${r.op ? ' · ' + r.op : ''}${r.ref ? ' · réf ' + esc(r.ref) : ''}${r.date ? ' · ' + esc(fmtDate(r.date)) : ''}${r.phone ? ' · ' + esc(r.phone) : ''}</div>`;
+      onFill(r, used); };
+    tx.addEventListener('input', () => run(tx.value));
+    document.getElementById('smsBtn').onclick = () => { let pr; try{ pr = navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText() : null; }catch(_){ pr = null; }
+      if(!pr){ tx.focus(); return toast('Appui long dans la case puis « Coller »'); }
+      pr.then(t => { tx.value = t || ''; run(tx.value); if(!t) toast('Copiez d\'abord le SMS'); }).catch(() => { tx.focus(); toast('Appui long dans la case puis « Coller »'); }); };
+    return () => parseMM(tx.value); }
+  // Versement (patron)
+  if(typeof moneyForm === 'function'){ const mf0 = moneyForm;
+    moneyForm = function(type, opt){ const out = mf0.apply(this, arguments);
+      try{ const f = document.getElementById('nf'); if(!f) return out; const id = opt && opt.id, m0 = id ? S.moves.find(x => x.id === id) : null; if((m0 ? m0.type : type) !== 'versement') return out;
+        const E = f.elements; let last = null;
+        const get = smsBox(f, (r) => { last = r; E.amount.value = r.amount; if(E.cur && !E.cur.disabled){ E.cur.value = r.cur; E.cur.dispatchEvent(new Event('change')); } if(r.date && E.date) E.date.value = r.date; if(E.note) E.note.value = [r.op, r.ref ? 'réf ' + r.ref : ''].filter(Boolean).join(' · '); E.amount.dispatchEvent(new Event('input')); });
+        let pass = false;
+        f.addEventListener('submit', async e => { if(pass){ pass = false; return; } const r = last || get(); const used = r && r.ref ? refUsed(r.ref, m0 && m0.id) : null;
+          if(used){ e.preventDefault(); e.stopImmediatePropagation(); if(!await ask('Ce SMS (réf ' + esc(r.ref) + ') a déjà été utilisé pour un autre versement. Enregistrer quand même ?', 'Oui, enregistrer', false)) return; pass = true; f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event('submit', {cancelable:true})); return; }
+          if(r && r.ok && r.ref){ const before = new Set(S.moves.map(x => x.id)); queueMicrotask(() => { const v = (m0 && S.moves.find(x => x.id === m0.id)) || S.moves.find(x => x.type === 'versement' && !before.has(x.id)); if(v){ v.smsRef = r.ref; if(r.op) v.method = v.method || r.op; save(); } }); } }, true);
+      }catch(e){ console.error(e); }
+      return out; }; }
+  // Déclaration (livreur)
+  if(typeof A.decl === 'function'){ const d0 = A.decl;
+    A.decl = function(){ const out = d0.apply(this, arguments);
+      try{ const f = document.getElementById('declf'); if(!f) return out; const E = f.elements;
+        smsBox(f, (r) => { E.amount.value = r.amount; if(E.cur){ const v = E.amount.value; E.cur.value = r.cur; E.amount.value = v; } if(r.ref && E.ref) E.ref.value = r.ref; if(r.op && E.method){ const o = [...E.method.options].find(o => o.value === r.op || o.text === r.op); if(o) E.method.value = o.value; } });
+      }catch(e){ console.error(e); }
+      return out; }; }
+
+  // ---------- 5) Tournée du jour
+  const KORD = ['Maluku', 'Nsele', 'Kimbanseke', 'Masina', 'Ndjili', 'Kisenso', 'Matete', 'Limete', 'Lemba', 'Ngaba', 'Makala', 'Bumbu', 'Selembao', 'Ngiri-Ngiri', 'Kalamu', 'Kasa-Vubu', 'Bandalungwa', 'Kinshasa', 'Barumbu', 'Lingwala', 'Gombe', 'Kintambo', 'Ngaliema', 'Mont-Ngafula'];
+  // quartier → commune (pour ranger la tournée)
+  const QMAP = {Righini:'Lemba', Salongo:'Lemba', Binza:'Ngaliema', 'Ma Campagne':'Ngaliema', UPN:'Ngaliema', Delvaux:'Ngaliema', Pompage:'Ngaliema', Kinsuka:'Ngaliema', 'Camp Luka':'Ngaliema', Ozone:'Ngaliema', Lukunga:'Ngaliema',
+    Kingabwa:'Limete', Mombele:'Limete', Matonge:'Kalamu', Victoire:'Kalamu', Yolo:'Kalamu', Kauka:'Kalamu', Kimbangu:'Kalamu', Kingasani:'Kimbanseke', Mikondo:'Kimbanseke',
+    Kinkole:'Nsele', Kibomango:'Nsele', Mpasa:'Nsele', Bibwa:'Nsele', Mitendi:'Mont-Ngafula', Kimwenza:'Mont-Ngafula', Mbudi:'Mont-Ngafula', 'Bon Marché':'Barumbu', 'Petro-Congo':'Masina', Kasavubu:'Kasa-Vubu'};
+  const mainOf = m => (window.__fee && window.__fee.mainOf) ? window.__fee.mainOf(m) : m;
+  function stops(lid){ const t = today(), seen = new Set(), L = liv(lid), city = (L && L.city) || '';
+    const list = S.moves.filter(m => m.type === 'vente' && m.liv === lid && (m.status === 'attente' || m.status === 'encours') && (m.ddate || m.date || t) <= t).map(mainOf).filter(m => { if(seen.has(m.id)) return false; seen.add(m.id); return true; });
+    return list.map(m => { const cm = window.__paste ? window.__paste.communeOf((m.addr || '') + ' ' + (m.feeZone || '')) : null, q = cm ? cm.q : (m.feeZone || '');
+      const com = cm ? (QMAP[cm.q] || cm.q) : '', ki = com ? KORD.findIndex(k => k.toLowerCase() === com.toLowerCase()) : -1;
+      return {m, q, k:ki < 0 ? (cm ? 50 : 99) : ki, dest:m.geo && m.geo.lat != null ? m.geo.lat + ',' + m.geo.lng : String(m.addr || '').replace(/https?:\/\/\S+/g, '').trim() ? String(m.addr).replace(/https?:\/\/\S+/g, '').trim() + (city ? ', ' + city : '') : ''}; })
+      .sort((a, b) => a.k - b.k || String(a.q).localeCompare(String(b.q)) || String(a.m.dtime || '').localeCompare(String(b.m.dtime || ''))); }
+  const gUrl = pts => { const P = pts.filter(Boolean); if(!P.length) return ''; const dest = P[P.length - 1], way = P.slice(0, -1).slice(0, 9);
+    return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(dest) + (way.length ? '&waypoints=' + encodeURIComponent(way.join('|')) : ''); };
+  window.__tour = {stops, gUrl};
+  A.tournee = lid => { lid = lid || (ONLINE.shop && ONLINE.shop.livreur_id); const L = liv(lid); if(!L) return; const T = stops(lid);
+    if(!T.length) return toast('Aucune livraison à faire aujourd\'hui');
+    const parts = []; for(let i = 0; i < T.length; i += 10) parts.push(T.slice(i, i + 10));
+    sheet('Tournée du jour · ' + L.name, `<p class="note" style="margin-bottom:10px">${T.length} livraison(s), rangées par quartier pour faire moins de route. Google Maps s'ouvre avec tous les arrêts.</p>
+      ${parts.map((P, j) => { const u = gUrl(P.map(s => s.dest)); return u ? `<a class="btn primary block tourBtn" style="margin-bottom:8px" href="${esc(u)}" target="_blank" rel="noopener">Démarrer la tournée${parts.length > 1 ? ' (partie ' + (j + 1) + ' : ' + (j * 10 + 1) + ' à ' + (j * 10 + P.length) + ')' : ''}</a>` : ''; }).join('')}
+      <ol class="tour" style="list-style:none;padding:0;margin:6px 0 0">${T.map((s, i) => { const O = typeof orderLines === 'function' ? orderLines(s.m) : [s.m];
+        return `<li><span class="n">${i + 1}</span><div class="x">${s.q ? `<span class="q">${esc(s.q)}</span>` : ''}<b>${esc(s.m.client || 'Client')}</b><small>${esc(O.map(x => pname(x.pid) + ' × ' + x.qty).join(', '))}</small><small>${esc(String(s.m.addr || '').replace(/https?:\/\/\S+/g, '').slice(0, 90)) || (s.m.geo ? 'Position sur la carte' : 'Adresse manquante')}</small></div>${s.dest ? `<a class="btn sm" href="${esc(gUrl([s.dest]))}" target="_blank" rel="noopener">Y aller</a>` : ''}</li>`; }).join('')}</ol>`); };
+
+  // ---------- Entrées
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || !ONLINE.shop) return out;
+      if(view === 'plus' && staff() && !M.querySelector('#waTile')){ const t = M.querySelector('.bqTiles');
+        const h = `<button class="bqTile" id="waTile" data-a="nav:whatsapp" style="grid-column:1/-1;min-height:74px;background:linear-gradient(130deg,#128C7E,#25D366)"><b>Outils WhatsApp</b><small>Statuts du jour · réponses rapides${owner() ? ' · clients dans mes contacts' : ''}</small></button>`;
+        if(t) t.insertAdjacentHTML('beforeend', h); else M.insertAdjacentHTML('afterbegin', `<div class="bqTiles">${h}</div>`); }
+      if(view === 'moi' && role() === 'livreur' && !M.querySelector('#tourBtn')){ const lid = ONLINE.shop.livreur_id, n = lid ? stops(lid).length : 0;
+        if(n) M.insertAdjacentHTML('afterbegin', `<button class="btn primary block tourBtn" id="tourBtn" style="margin-bottom:12px" data-a="tournee">Ma tournée du jour · ${n} livraison(s) · carte</button>`); }
+    }catch(e){ console.error(e); }
+    return out; };
+  if(typeof livSheet === 'function'){ const ls0 = livSheet;
+    livSheet = function(id){ const out = ls0.apply(this, arguments);
+      try{ const n = stops(id).length, b = document.getElementById('shb'); if(n && b && !b.querySelector('#tourL')) b.insertAdjacentHTML('afterbegin', `<button class="btn block" id="tourL" style="margin-bottom:10px" data-a="tournee:${id}">Tournée du jour : ${n} livraison(s) · carte</button>`); }catch(_){ }
+      return out; }; }
+  // Fiche de vente : réponse rapide au client
+  if(typeof saleSheet === 'function'){ const ss0 = saleSheet;
+    saleSheet = function(id){ const out = ss0.apply(this, arguments);
+      try{ const m = S.moves.find(x => x.id === id); if(m && m.phone && staff()){ const card = document.querySelector('#shb .card'); if(card && !card.querySelector('#rplS')) card.insertAdjacentHTML('beforeend', `<button class="btn block" id="rplS" style="margin-top:8px" data-a="rplto:${m.id}">Réponse rapide à ${esc(m.client || 'ce client')}</button>`); } }catch(_){ }
+      return out; }; }
+  A.rplto = id => { const m = S.moves.find(x => x.id === id); if(!m) return; const R = replies();
+    sheet('Réponse rapide · ' + (m.client || 'client'), `<div class="list">${R.map(r => `<a class="it" href="${waLink(m.phone, fillVars(r.x, m.client || ''))}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><div class="m"><div class="t">${esc(r.t)}</div><div class="d">${esc(fillVars(r.x, m.client || '').slice(0, 80))}…</div></div><div class="r">${ico('wa')}</div></a>`).join('')}</div>`); };
 })();
 
 </script>
