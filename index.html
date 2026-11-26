@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '71b558e435';
+const APP_BUILD = 'b4e581250f';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11527,6 +11527,88 @@ body.livfab #main{padding-bottom:96px}
     }catch(e){ console.error(e); }
     return r; };
   window.__livfab = {paintFab, howTo};
+})();
+
+/* ---------- « Stock chez les livreurs » : tout le stock des livreurs d'un coup d'œil ----------
+   Par livreur (en main / commandé / libre) ou par produit (dépôt + chaque livreur). Vérifier sur WhatsApp ou corriger. */
+(function(){
+  if(typeof livSheet !== 'function') return;
+  document.head.insertAdjacentHTML('beforeend', `<style>
+#lsBig{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;border-radius:18px;border:0;font-weight:800;font-size:16px;margin-bottom:12px;
+  background:linear-gradient(120deg,var(--brand),color-mix(in srgb,var(--brand) 70%,#ff8a3d));color:var(--brand-ink,#fff);box-shadow:0 8px 20px rgba(0,0,0,.12);cursor:pointer}
+.lsT{width:100%;border-collapse:collapse;font-size:14px}.lsT th{font-size:12px;color:var(--muted);font-weight:650;text-align:right;padding:4px 4px 6px}.lsT th:first-child{text-align:left}
+.lsT td{padding:7px 4px;border-top:1px solid var(--line);text-align:right}.lsT td:first-child{text-align:left;font-weight:650}
+.lsCard{padding:12px;margin-bottom:10px}
+.lsP{border-top:1px solid var(--line);padding:8px 0}.lsN{font-weight:750;margin-bottom:4px}
+.lsF{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13.5px;color:var(--muted)}.lsF b{color:var(--ink,inherit)}
+.lsF2{margin-top:4px}.lsF2 span{padding:3px 9px;border-radius:999px;background:var(--soft,rgba(127,127,127,.12))}.lsF2 .lsHave{background:color-mix(in srgb,var(--brand) 14%,transparent);color:var(--brand-tx,var(--brand))}.lsCard h3{font-size:16px;margin:0 0 2px}.lsCity{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px}
+</style>`);
+  const staff = () => !!ONLINE.shop && ONLINE.role !== 'livreur' && (typeof canDo !== 'function' || canDo('livraisons') || canDo('stock'));
+  const prods = () => S.products.filter(p => !p.deleted && !isKit(p)).sort(byName);
+  function pendOf(lid, pid){ return S.moves.filter(x => x.type === 'vente' && (x.liv || '') === lid && x.pid === pid && (x.status === 'attente' || x.status === 'encours')).reduce((t, x) => t + num(x.qty), 0); }
+  // Mouvements du livreur pour un produit : reçu, rendu, livré, écarts (sorties / contrôles)
+  function flow(lid, pid){ let rec = 0, ret = 0, sold = 0, gap = 0;
+    for(const m of S.moves){ if(m.pid !== pid) continue; const q = num(m.qty);
+      if(m.type === 'envoi' && m.liv === lid) rec += q; else if(m.type === 'retour' && m.liv === lid) ret += q;
+      else if(m.type === 'vente' && (m.liv || '') === lid && m.status === 'livre') sold += q;
+      else if(m.type === 'perte' && (m.loc || '') === lid) gap -= q; else if(m.type === 'ajust' && (m.loc || '') === lid) gap += q; }
+    return {rec:r3(rec), ret:r3(ret), sold:r3(sold), gap:r3(gap)}; }
+  function livRows(lid, st){ return prods().map(p => { const have = avail(st, lid, p.id), pend = pendOf(lid, p.id), f = flow(lid, p.id);
+      return Object.assign({p, have, pend, free:Math.max(0, r3(have - pend))}, f); }).filter(r => r.have > 0 || r.pend > 0 || r.rec > 0); }
+  function verifyMsg(L, rows){ const n = (L.name || '').split(' ')[0];
+    return `Bonjour ${n} 👋\nSelon l'application, tu as en main :\n${rows.map(r => `• ${r.p.name} × ${r.have}${r.pend ? ` (dont ${r.pend} pour des commandes)` : ''}`).join('\n')}\n\nPeux-tu compter et me confirmer si c'est juste ? Merci 🙏`; }
+  function byLiv(st){ const out = []; for(const c of cities()){ const Ls = S.livreurs.filter(l => (l.city || 'Sans ville') === c).sort(byName); if(!Ls.length) continue;
+      out.push(`<div class="lsCity">${esc(c)}</div>`);
+      for(const L of Ls){ const rows = livRows(L.id, st), tot = r3(rows.reduce((t, r) => t + r.have, 0));
+        const S2 = k => r3(rows.reduce((t, r) => t + r[k], 0)), pend = S2('pend');
+        out.push(`<div class="card lsCard" data-lid="${esc(L.id)}"><h3>${esc(L.name)}</h3>
+          <p class="note" style="margin:0 0 8px">${rows.length ? `Reçu <b>${S2('rec')}</b> · Livré <b>${S2('sold')}</b>${S2('ret') ? ` · Rendu <b>${S2('ret')}</b>` : ''} · <b>En main ${tot}</b>${pend ? ` (dont <b>${pend}</b> à livrer)` : ''}` : 'Aucune pièce en main'}</p>
+          ${rows.map(r => `<div class="lsP"><div class="lsN">${esc(r.p.name)}</div>
+            <div class="lsF"><span>Reçu <b>${r.rec}</b></span><span>Livré <b>${r.sold}</b></span>${r.ret ? `<span>Rendu <b>${r.ret}</b></span>` : ''}${r.gap ? `<span>Écart <b>${r.gap > 0 ? '+' : ''}${r.gap}</b></span>` : ''}</div>
+            <div class="lsF lsF2"><span class="lsHave">En main <b>${r.have}</b></span><span>À livrer <b>${r.pend}</b></span><span class="${r.free ? 'green' : ''}">Libre <b>${r.free}</b></span></div></div>`).join('')}
+          <div class="btns" style="margin-top:10px">${rows.length && L.phone ? `<a class="btn wa sm" href="${waLink(L.phone, verifyMsg(L, rows))}" target="_blank" rel="noopener">${ico('wa')} Vérifier avec ${esc((L.name || '').split(' ')[0])}</a>` : ''}
+            ${typeof canDo !== 'function' || canDo('stock') ? `<button class="btn sm" data-a="invform:${esc(L.id)}">Corriger</button>` : ''}<button class="btn sm" data-a="lshist:${esc(L.id)}">Historique par jour</button><button class="btn sm" data-a="lsopen:${esc(L.id)}">Fiche</button></div></div>`); } }
+    return out.join('') || '<div class="card empty">Aucun livreur.</div>'; }
+  function byProd(st){ const Ls = S.livreurs.slice().sort(byName);
+    const rows = prods().map(p => ({p, dep:qAt(st, '', p.id), per:Ls.map(L => [L, avail(st, L.id, p.id)]).filter(([, q]) => q > 0)})).filter(r => r.dep > 0 || r.per.length);
+    return rows.length ? rows.map(r => `<div class="card lsCard"><h3>${esc(r.p.name)}</h3><p class="note" style="margin:0 0 6px">Total : <b>${r3(r.dep + r.per.reduce((t, [, q]) => t + q, 0))}</b></p>
+      <table class="lsT"><tr><td>Dépôt</td><td class="num">${r.dep}</td></tr>${r.per.map(([L, q]) => `<tr><td>${esc(L.name)} <span class="note">· ${esc(L.city || '')}</span></td><td class="num">${q}</td></tr>`).join('')}</table></div>`).join('') : '<div class="card empty">Aucun stock.</div>'; }
+  A.livstock = () => { if(!staff()) return; const st = stockAt();
+    const tot = r3(S.livreurs.reduce((t, L) => t + prods().reduce((u, p) => u + avail(st, L.id, p.id), 0), 0));
+    sheet('Stock chez les livreurs', `<p class="note" style="margin-bottom:10px"><b>${tot}</b> pièce(s) chez ${S.livreurs.length} livreur(s).<br><b>En main</b> = pièces qu'il a avec lui · <b>À livrer</b> = déjà commandées, pas encore livrées · <b>Libre</b> = ce qu'il peut encore vendre.</p>
+      <div class="seg" id="lsTabs" style="margin-bottom:12px"><button type="button" class="on" data-t="liv">Par livreur</button><button type="button" data-t="prod">Par produit</button></div>
+      <div id="lsBody">${byLiv(st)}</div>`);
+    document.getElementById('lsTabs').onclick = e => { const b = e.target.closest('button'); if(!b) return; [...b.parentElement.children].forEach(x => x.classList.toggle('on', x === b));
+      document.getElementById('lsBody').innerHTML = b.dataset.t === 'prod' ? byProd(stockAt()) : byLiv(stockAt()); }; };
+  A.lsopen = id => { closeSheet(); livSheet(id); };
+  // Historique jour par jour d'un livreur : reçu, livré, rendu, écart et ce qui lui reste le soir, par produit
+  const dayOf = m => m.type === 'vente' ? (m.ldate || m.date || '') : (m.date || '');
+  function livDays(lid, nDays = 21){
+    const mv = S.moves.filter(m => m.pid && ((['envoi', 'retour'].includes(m.type) && m.liv === lid) || (m.type === 'vente' && (m.liv || '') === lid && m.status === 'livre') || (['perte', 'ajust'].includes(m.type) && (m.loc || '') === lid)));
+    const days = [...new Set(mv.map(dayOf).filter(Boolean))].sort().reverse().slice(0, nDays);
+    return days.map(d => { const per = {};
+      for(const m of mv){ const dd = dayOf(m); if(!dd || dd > d) continue; const q = num(m.qty), x = per[m.pid] || (per[m.pid] = {rec:0, sold:0, ret:0, gap:0, end:0});
+        const sign = m.type === 'envoi' || m.type === 'ajust' ? 1 : -1; x.end += sign * q;
+        if(dd === d){ if(m.type === 'envoi') x.rec += q; else if(m.type === 'vente') x.sold += q; else if(m.type === 'retour') x.ret += q; else x.gap += m.type === 'ajust' ? q : -q; } }
+      const lines = Object.entries(per).map(([pid, x]) => Object.assign({pid, name:pname(pid)}, x, {end:r3(x.end)})).filter(x => x.rec || x.sold || x.ret || x.gap || x.end).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+      return {d, lines}; }); }
+  function dayMsg(L, D){ return `Bonjour ${(L.name || '').split(' ')[0]} 👋\nTon point du ${dAbs(D.d, 1)} :\n` + D.lines.map(x => `• ${x.name} : ${x.rec ? 'reçu ' + x.rec + ', ' : ''}livré ${x.sold}${x.ret ? ', rendu ' + x.ret : ''} → il te reste ${x.end}`).join('\n') + `\n\nMerci de vérifier 🙏`; }
+  A.lshist = lid => { const L = (S.livreurs || []).find(l => l.id === lid); if(!L) return; const D = livDays(lid);
+    sheet('Historique de ' + L.name, `<p class="note" style="margin-bottom:10px">Jour par jour : ce qu'il a reçu, livré, rendu, et ce qui lui <b>restait le soir</b>.</p>
+      ${D.length ? D.map((x, i) => `<div class="card lsCard lsDay"><h3 style="text-transform:capitalize">${esc(dAbs(x.d, 1))}</h3>
+        ${x.lines.map(y => `<div class="lsP"><div class="lsN">${esc(y.name)}</div><div class="lsF">${y.rec ? `<span>Reçu <b>${y.rec}</b></span>` : ''}<span>Livré <b>${y.sold}</b></span>${y.ret ? `<span>Rendu <b>${y.ret}</b></span>` : ''}${y.gap ? `<span>Écart <b>${y.gap > 0 ? '+' : ''}${r3(y.gap)}</b></span>` : ''}<span class="lsHave" style="padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--brand) 14%,transparent)">Reste le soir <b>${y.end}</b></span></div></div>`).join('')}
+        ${L.phone ? `<a class="btn wa sm" style="margin-top:8px" href="${waLink(L.phone, dayMsg(L, x))}" target="_blank" rel="noopener">${ico('wa')} Envoyer ce jour à ${esc((L.name || '').split(' ')[0])}</a>` : ''}</div>`).join('') : '<div class="card empty">Aucun mouvement pour ce livreur.</div>'}
+      <button class="btn block" style="margin-top:8px" data-a="livstock">Retour au stock des livreurs</button>`); };
+  // Gros bouton en haut de « Livreurs », et dans Stock
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || !staff() || !S.livreurs.length) return out;
+      if(view === 'livreurs' && !M.querySelector('#lsBig')) M.insertAdjacentHTML('afterbegin', `<button id="lsBig" data-a="livstock"><svg class="i" viewBox="0 0 24 24" style="width:22px;height:22px"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7"/></svg>Stock chez les livreurs</button>`);
+      if(view === 'stock' && !M.querySelector('#lsStock')){ const a = M.querySelector('#biBtn') || M.querySelector('.btns [data-a="new:entree"]');
+        if(a) a.parentElement.insertAdjacentHTML('afterend', `<button class="btn block" id="lsStock" style="margin-top:8px" data-a="livstock">Stock chez les livreurs</button>`); }
+    }catch(e){ console.error(e); }
+    return out; };
+  window.__livstock = {livRows, verifyMsg};
 })();
 
 </script>
