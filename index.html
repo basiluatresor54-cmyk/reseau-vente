@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'f1db692c3e';
+const APP_BUILD = '69a3a8e355';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11285,6 +11285,165 @@ window.__qrcode = qrcode; })();
     }catch(e){ console.error(e); }
     return out; };
   window.__adv = {advForm, advMsg, isAdv};
+})();
+
+/* ---------- Contrôle de stock : corriger un produit (nombre compté) sans refaire tout le contrôle ----------
+   On touche la ligne du produit, on tape le bon nombre : seul l'écart de ce produit est refait. */
+(function(){
+  if(typeof invSheet !== 'function') return;
+  try{ ACT_PERM.invfix = 'stock'; if(!WRITE_ACTIONS.includes('invfix')) WRITE_ACTIONS.push('invfix'); }catch(_){}
+  const invOf = id => { const m0 = S.moves.find(x => x.id === id); if(!m0) return null; return m0.type === 'inventaire' ? m0 : S.moves.find(x => x.id === m0.inv && x.type === 'inventaire') || null; };
+  function fixLine(inv, pid, real){
+    const ln = (inv.lines || []).find(x => x.pid === pid); if(!ln) return false;
+    const old = S.moves.filter(x => x.inv === inv.id && x.pid === pid && (x.type === 'perte' || x.type === 'ajust'));
+    const upd = old.some(x => /^Mise à jour du stock/.test(x.note || '')) || /mise à jour/i.test(inv.note || '');
+    const p = prod(pid), ex = ln.exp, ts = Date.now();
+    S.moves = S.moves.filter(x => !old.includes(x));
+    ln.real = real;
+    const note = upd ? 'Mise à jour du stock : attendu ' + ex + ', réel ' + real : 'Contrôle de stock : attendu ' + ex + ', compté ' + real;
+    if(real < ex) S.moves.push({id:uid(), ts, type:'perte', pid, qty:r3(ex - real), loc:inv.loc, motif:'Écart inventaire', costU:unitCostUSD(p), date:inv.date, note, inv:inv.id});
+    if(real > ex) S.moves.push({id:uid(), ts, type:'ajust', pid, qty:r3(real - ex), loc:inv.loc, date:inv.date, note, inv:inv.id});
+    inv.ts = ts; S.moves = S.moves.map(x => x.id === inv.id ? Object.assign({}, inv) : x);
+    save(); return true; }
+  A.invfix = arg => { const [id, i] = String(arg).split('~'); const inv = invOf(id); if(!inv) return; const ln = (inv.lines || [])[+i]; if(!ln) return;
+    const p = prod(ln.pid);
+    sheet('Corriger le nombre compté', `<div class="card" style="margin-bottom:12px"><b>${esc(pname(ln.pid))}</b><br><span class="note">${inv.loc ? esc(lname(inv.loc)) : 'Dépôt'} · ${esc(dAbs(inv.date, 1))} · attendu ${ln.exp}</span></div>
+      <form id="ixf" novalidate>${field('Nombre réellement compté', `<input name="real" type="number" min="0" step="${p && decUnit(p) ? 'any' : '1'}" inputmode="decimal" value="${ln.real}" style="font-size:20px;font-weight:700">`)}
+        <p class="note" id="ixMsg" style="margin:6px 0 12px"></p>
+        <button type="submit" class="btn primary block">Enregistrer la correction</button>
+        <button type="button" class="btn block" style="margin-top:8px" data-a="invback:${esc(inv.id)}">Annuler</button>
+        ${p && canDo('produits') ? `<button type="button" class="btn block" style="margin-top:8px" id="ixPrice" data-a="editprod:${esc(p.id)}">Modifier les prix de ce produit</button>` : ''}</form>`);
+    const f = document.getElementById('ixf'), E = f.elements, msg = document.getElementById('ixMsg');
+    const show = () => { const v = p ? qr(p, E.real.value) : num(E.real.value), d = r3(v - ln.exp);
+      msg.innerHTML = E.real.value === '' ? '' : d === 0 ? 'Aucun écart : le stock correspond.' : d > 0 ? `<b class="green">+${d}</b> pièce(s) en plus que prévu.` : `<b class="red">${d}</b> : pièce(s) manquante(s), comptée(s) dans les pertes.`; };
+    E.real.oninput = show; show(); setTimeout(() => { try{ E.real.focus(); E.real.select(); }catch(_){ } }, 250);
+    f.onsubmit = e => { e.preventDefault(); if(E.real.value === '' || !(num(E.real.value) >= 0)) return toast('Tapez le nombre compté');
+      const v = Math.max(0, p ? qr(p, E.real.value) : num(E.real.value));
+      if(fixLine(inv, ln.pid, v)){ render(); invSheet(inv.id); toast('Correction enregistrée : ' + pname(ln.pid) + ' = ' + v); } }; };
+  A.invback = id => invSheet(id);
+  const base = invSheet;
+  invSheet = function(id, fresh){ const r = base.apply(this, arguments);
+    try{ const inv = invOf(id), b = document.getElementById('shb'); if(!inv || !b || !canDo('stock') || !shopWritable()) return r;
+      const rows = [...b.querySelectorAll('table.tb tr')].slice(1);
+      rows.forEach((tr, i) => { if(!(inv.lines || [])[i]) return; tr.dataset.a = 'invfix:' + inv.id + '~' + i; tr.style.cursor = 'pointer'; tr.setAttribute('role', 'button');
+        const td = tr.querySelector('td'); if(td) td.insertAdjacentHTML('beforeend', ' <span class="note" style="font-size:12px;white-space:nowrap">· corriger</span>'); });
+      const tb = b.querySelector('.card.tbw'); if(tb && rows.length) tb.insertAdjacentHTML('beforebegin', '<p class="note" id="invFixHint" style="margin:0 0 8px">Une erreur ? Touchez le produit pour corriger son nombre compté.</p>');
+    }catch(e){ console.error(e); }
+    return r; };
+  window.__invfix = {fixLine};
+})();
+
+/* ---------- Envoyer plusieurs produits d'un coup à un livreur ----------
+   Une seule fiche : le livreur, puis un nombre par produit (− / +). Un envoi est enregistré par produit, tous ensemble. */
+(function(){
+  if(typeof moveForm !== 'function') return;
+  try{ ACT_PERM.bulksend = 'livraisons'; if(!WRITE_ACTIONS.includes('bulksend')) WRITE_ACTIONS.push('bulksend'); }catch(_){}
+  document.head.insertAdjacentHTML('beforeend', `<style>
+.bsRow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line)}.bsRow:last-child{border-bottom:0}
+.bsRow .m{flex:1;min-width:0}.bsRow .t{font-weight:700;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25}
+.bsQ{display:flex;align-items:center;gap:4px}.bsQ button{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--soft,#f1f5f9);font-size:20px;font-weight:800;line-height:1;color:inherit}
+.bsQ input{width:56px;height:38px;text-align:center;font-weight:800;font-size:16px;padding:0 4px}
+.bsRow.on{background:color-mix(in srgb,var(--brand) 8%,transparent)}
+</style>`);
+  const items = () => { const st = stockAt(); return S.products.filter(p => !isKit(p)).map(p => [p, qAt(st, '', p.id)]).filter(([, q]) => q > 0).sort((a, b) => byName(a[0], b[0])); };
+  function bulkForm(lid0){
+    if(!S.livreurs.length){ toast("Ajoutez d'abord un livreur"); return; }
+    const rows = items(); if(!rows.length){ toast('Aucun stock au dépôt à envoyer'); return; }
+    const opts = cities().map(c => `<optgroup label="${esc(c)}">${S.livreurs.filter(l => (l.city || 'Sans ville') === c).sort(byName).map(l => `<option value="${l.id}" ${l.id === lid0 ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</optgroup>`).join('');
+    sheet('Envoyer plusieurs produits', `<form id="bsf" novalidate>
+      ${field('Livreur *', `<select name="liv">${lid0 ? '' : '<option value="">Choisir un livreur…</option>'}${opts}</select>`)}
+      <p class="note" style="margin:0 0 8px">Tapez le nombre à envoyer pour chaque produit (0 = pas envoyé).</p>
+      <div class="card" style="padding:0;margin-bottom:10px">${rows.map(([p, q]) => `<div class="bsRow" data-pid="${p.id}"><div class="m"><div class="t">${esc(p.name)}</div><div class="note">au dépôt : ${q}</div></div>
+        <div class="bsQ"><button type="button" data-d="-1" aria-label="Moins">−</button><input name="q_${p.id}" type="number" min="0" max="${q}" step="${decUnit(p) ? 'any' : '1'}" inputmode="decimal" value="0" data-max="${q}"><button type="button" data-d="1" aria-label="Plus">+</button></div></div>`).join('')}</div>
+      <div class="row2">${field('Date', `<input name="date" type="date" value="${today()}" max="${today()}">`)}${field('Note', `<input name="note" placeholder="Optionnel">`)}</div>
+      <p class="note" id="bsSum" style="margin:4px 0 10px"></p>
+      <button type="submit" class="btn primary block" id="bsGo">Envoyer</button></form>`);
+    const f = document.getElementById('bsf'), E = f.elements;
+    const sel = () => rows.map(([p, q]) => [p, Math.max(0, qr(p, E['q_' + p.id].value)), q]).filter(([, n]) => n > 0);
+    const sum = () => { const s = sel(), tot = s.reduce((t, [, n]) => t + n, 0), over = s.filter(([, n, q]) => n > q);
+      f.querySelectorAll('.bsRow').forEach(r => r.classList.toggle('on', qr(prod(r.dataset.pid), E['q_' + r.dataset.pid].value) > 0));
+      document.getElementById('bsSum').innerHTML = over.length ? `<b class="red">Pas assez au dépôt : ${over.map(([p, , q]) => esc(p.name) + ' (' + q + ')').join(', ')}</b>` : s.length ? `<b>${s.length}</b> produit(s) · <b>${r3(tot)}</b> pièce(s)` : 'Aucun produit choisi.';
+      document.getElementById('bsGo').textContent = s.length ? `Envoyer ${r3(tot)} pièce(s)` : 'Envoyer'; };
+    f.addEventListener('click', e => { const b = e.target.closest('.bsQ button'); if(!b) return; e.preventDefault(); const r = b.closest('.bsRow'), inp = E['q_' + r.dataset.pid], p = prod(r.dataset.pid);
+      let v = qr(p, inp.value) + +b.dataset.d; v = Math.max(0, Math.min(+inp.dataset.max, v)); inp.value = v; sum(); });
+    f.oninput = sum; sum();
+    f.onsubmit = e => { e.preventDefault();
+      const lid = E.liv.value; if(!lid) return toast('Choisissez un livreur');
+      const s = sel(); if(!s.length) return toast('Tapez au moins un nombre');
+      const over = s.filter(([, n, q]) => n > q); if(over.length) return toast('Pas assez au dépôt : ' + over.map(([p]) => p.name).join(', '));
+      const date = E.date.value || today(), note = E.note.value.trim(), ts = Date.now(), grp = uid();
+      const add = s.map(([p, n], i) => ({id:uid(), ts:ts + i, type:'envoi', pid:p.id, qty:n, liv:lid, date, note, grp}));
+      const next = S.moves.concat(add), err = typeof checkStock === 'function' ? checkStock(next, add.map(x => x.pid)) : '';
+      if(err) return toast(err);
+      S.moves = next; S.settings.setup = true; save(); render();
+      const L = liv(lid) || {}, list = add.map(x => `• ${pname(x.pid)} × ${x.qty}`).join('\n'), tot = r3(add.reduce((t, x) => t + x.qty, 0));
+      const msg = `Bonjour ${(L.name || '').split(' ')[0]} 👋\nJe t'envoie aujourd'hui ${tot} pièce(s) de ${S.settings.shop} :\n${list}\n\nMerci de vérifier à la réception 🙏`;
+      sheet('Stock envoyé', `<p style="margin-bottom:8px"><b>${tot}</b> pièce(s) envoyée(s) à <b>${esc(L.name || '')}</b> :</p>
+        <div class="card" style="margin-bottom:12px;white-space:pre-line">${esc(list)}</div>
+        ${L.phone ? `<a class="btn wa block" id="bsWa" href="${waLink(L.phone, msg)}" target="_blank" rel="noopener">${ico('wa')} Prévenir ${esc((L.name || '').split(' ')[0])} sur WhatsApp</a>` : ''}
+        <button class="btn block" style="margin-top:8px" data-a="livsheetback:${esc(lid)}">Retour à la fiche du livreur</button>`);
+      toast(`Stock envoyé : ${add.length} produit(s)`); };
+  }
+  A.bulksend = (_, el) => bulkForm((el && el.dataset.liv) || '');
+  if(typeof A.livsheetback !== 'function') A.livsheetback = lid => { closeSheet(); livSheet(lid); };
+  // Fiche du livreur : bouton à côté de « Envoyer du stock »
+  const ls = livSheet;
+  livSheet = function(id){ const r = ls.apply(this, arguments);
+    try{ const sh = document.getElementById('shb'); if(!sh || sh.querySelector('#bsBtn') || !canDo('livraisons')) return r;
+      const a = sh.querySelector(`[data-a="new:envoi"][data-liv="${id}"]`); if(a) a.insertAdjacentHTML('afterend', `<button class="btn" id="bsBtn" data-a="bulksend" data-liv="${esc(id)}">Envoyer plusieurs produits</button>`);
+    }catch(e){ console.error(e); }
+    return r; };
+  window.__bulk = {bulkForm};
+})();
+
+/* ---------- Entrer plusieurs produits d'un coup au dépôt (et raccourcis dans Stock) ---------- */
+(function(){
+  if(typeof moveForm !== 'function') return;
+  try{ ACT_PERM.bulkin = 'stock'; if(!WRITE_ACTIONS.includes('bulkin')) WRITE_ACTIONS.push('bulkin'); }catch(_){}
+  document.head.insertAdjacentHTML('beforeend', `<style>.biCost{display:flex;align-items:center;gap:6px;margin-top:4px}.biCost input{width:84px;height:32px;padding:0 8px;font-size:14px}.biRow.hide{display:none}</style>`);
+  function bulkIn(){
+    const rows = S.products.filter(p => !isKit(p)).sort(byName); if(!rows.length){ toast("Ajoutez d'abord un produit"); return; }
+    const st = stockAt();
+    sheet('Entrer plusieurs produits', `<form id="bif" novalidate>
+      ${rows.length > 6 ? `<input id="biFind" type="search" placeholder="Chercher un produit…" style="margin-bottom:10px">` : ''}
+      <p class="note" style="margin:0 0 8px">Tapez le nombre reçu pour chaque produit (0 = rien). Le prix d'achat est déjà rempli : changez-le s'il a changé.</p>
+      <div class="card" style="padding:0;margin-bottom:10px">${rows.map(p => `<div class="bsRow biRow" data-pid="${p.id}" data-n="${esc(p.name.toLowerCase())}"><div class="m"><div class="t">${esc(p.name)}</div><div class="note">au dépôt : ${qAt(st, '', p.id)}</div>
+          <label class="biCost note">Prix d'achat <input name="c_${p.id}" type="number" min="0" step="any" inputmode="decimal" value="${num(p.buy) || ''}" placeholder="0"> ${esc(p.cur || '$')}</label></div>
+        <div class="bsQ"><button type="button" data-d="-1" aria-label="Moins">−</button><input name="q_${p.id}" type="number" min="0" step="${decUnit(p) ? 'any' : '1'}" inputmode="decimal" value="0"><button type="button" data-d="1" aria-label="Plus">+</button></div></div>`).join('')}</div>
+      <div class="row2">${field('Date', `<input name="date" type="date" value="${today()}" max="${today()}">`)}${field('Note', `<input name="note" placeholder="Ex : fournisseur">`)}</div>
+      <p class="note" id="biSum" style="margin:4px 0 10px"></p>
+      <button type="submit" class="btn primary block" id="biGo">Enregistrer l'entrée</button></form>`);
+    const f = document.getElementById('bif'), E = f.elements;
+    const sel = () => rows.map(p => [p, Math.max(0, qr(p, E['q_' + p.id].value)), num(E['c_' + p.id].value)]).filter(([, n]) => n > 0);
+    const sum = () => { const s = sel(), tot = s.reduce((t, [, n]) => t + n, 0);
+      f.querySelectorAll('.biRow').forEach(r => r.classList.toggle('on', qr(prod(r.dataset.pid), E['q_' + r.dataset.pid].value) > 0));
+      document.getElementById('biSum').innerHTML = s.length ? `<b>${s.length}</b> produit(s) · <b>${r3(tot)}</b> pièce(s)` : 'Aucun produit choisi.';
+      document.getElementById('biGo').textContent = s.length ? `Enregistrer ${r3(tot)} pièce(s)` : "Enregistrer l'entrée"; };
+    f.addEventListener('click', e => { const b = e.target.closest('.bsQ button'); if(!b) return; e.preventDefault(); const r = b.closest('.bsRow'), inp = E['q_' + r.dataset.pid], p = prod(r.dataset.pid);
+      inp.value = Math.max(0, qr(p, inp.value) + +b.dataset.d); sum(); });
+    const fd = document.getElementById('biFind'); if(fd) fd.oninput = () => { const q = fd.value.trim().toLowerCase(); f.querySelectorAll('.biRow').forEach(r => r.classList.toggle('hide', !!q && !r.dataset.n.includes(q))); };
+    f.oninput = e => { if(e.target && e.target.id === 'biFind') return; sum(); }; sum();
+    f.onsubmit = e => { e.preventDefault();
+      const s = sel(); if(!s.length) return toast('Tapez au moins un nombre');
+      const date = E.date.value || today(), note = E.note.value.trim(), ts = Date.now(), grp = uid();
+      const add = s.map(([p, n, c], i) => { const r = {id:uid(), ts:ts + i, type:'entree', pid:p.id, qty:n, date, note, grp}; if(c > 0) r.cost = c; return r; });
+      S.moves = S.moves.concat(add);
+      s.forEach(([p, , c]) => { if(c > 0 && num(p.buy) !== c){ p.buy = c; p.ts = Date.now(); } });
+      S.settings.setup = true; save(); closeSheet(); render();
+      toast(`Entrée enregistrée : ${add.length} produit(s), ${r3(add.reduce((t, x) => t + x.qty, 0))} pièce(s)`); };
+  }
+  A.bulkin = () => bulkIn();
+  // Stock : deux raccourcis sous « + Entrée de stock / Envoyer à un livreur »
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || view !== 'stock' || M.querySelector('#biBtn')) return out;
+      const a = M.querySelector('.btns [data-a="new:entree"]'); if(!a) return out;
+      const can = k => typeof canDo !== 'function' || canDo(k);
+      const h = (can('stock') ? '<button class="btn" id="biBtn" data-a="bulkin">Entrer plusieurs produits</button>' : '') + (can('livraisons') && S.livreurs.length ? '<button class="btn" id="bsStock" data-a="bulksend">Envoyer plusieurs produits</button>' : '');
+      if(h) a.parentElement.insertAdjacentHTML('afterend', `<div class="btns" style="margin-top:8px">${h}</div>`);
+    }catch(e){ console.error(e); }
+    return out; };
+  window.__bulkin = {bulkIn};
 })();
 
 </script>
