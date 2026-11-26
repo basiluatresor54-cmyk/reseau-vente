@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'd4f8bd3202';
+const APP_BUILD = '57e3b12666';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11626,28 +11626,46 @@ body.livfab #main{padding-bottom:96px}
    Un retrait n'est pas une dépense : le bénéfice ne change pas. L'accueil montre « Bénéfice − Retraits = reste dans la boutique ». */
 (function(){
   if(typeof stats !== 'function') return;
-  try{ ACT_PERM.retrait = 'benefice'; if(!WRITE_ACTIONS.includes('retrait')) WRITE_ACTIONS.push('retrait'); }catch(_){}
-  const MOT = ['Dépôt à la banque', 'Épargne / Mobile Money', 'Usage personnel / famille', 'Achat de stock', 'Paiement fournisseur', 'Loyer / charges', 'Autre'];
+  try{ ['retrait', 'bankdep', 'bankout'].forEach(k => { ACT_PERM[k] = 'benefice'; if(!WRITE_ACTIONS.includes(k)) WRITE_ACTIONS.push(k); }); ACT_PERM.banque = 'benefice'; ACT_PERM.bankphoto = 'benefice'; }catch(_){}
+  const MOT = ['Épargne (banque, Mobile Money…)', 'Usage personnel / famille', 'Achat de stock', 'Paiement fournisseur', 'Loyer / charges', 'Autre'];
+  const BANK = 'Épargne (banque, Mobile Money…)';
+  const OLD_SAV = ['Dépôt à la banque', 'Épargne / Mobile Money'];
+  const isSav = m => !!m && m.type === 'retrait' && (m.motif === BANK || OLD_SAV.includes(m.motif));
+  const wkLabel = w => { const e = addDays(w, 5); return 'du ' + dAbs(w, 0).replace(/\s\d{4}$/, '') + ' au ' + dAbs(e, 0).replace(/\s\d{4}$/, ''); };
   const can = () => !!ONLINE.shop && ONLINE.role !== 'livreur' && (typeof canDo !== 'function' || canDo('benefice'));
   const usd = m => toUSD(num(m.amount), m.cur, m.rate);
   const monthName = k => { try{ const t = new Date(k + '-15T12:00:00').toLocaleDateString('fr-FR', {month:'long', year:'numeric'}); return t.charAt(0).toUpperCase() + t.slice(1); }catch(_){ return k; } };
   const retraits = p => S.moves.filter(m => m.type === 'retrait' && (!p || inPer(m.date, p)));
-  function form(id){ if(!can()) return; const m = id ? S.moves.find(x => x.id === id && x.type === 'retrait') : null;
+  function form(id, preset){ if(!can()) return; const m = id ? S.moves.find(x => x.id === id && x.type === 'retrait') : null;
     sheet(m ? 'Modifier le retrait' : "J'ai retiré de l'argent", `<form id="rtf" novalidate>
       <p class="note" style="margin-bottom:10px">Notez l'argent que vous sortez de la boutique. Ce n'est pas une dépense : votre bénéfice ne change pas, mais vous voyez ce qui reste dans la boutique.</p>
       <div class="row2">${field('Montant *', `<input name="amount" type="number" min="0" step="any" inputmode="decimal" value="${m ? m.amount : ''}" placeholder="0">`)}${field('Devise', `<select name="cur"><option ${!m || m.cur === '$' ? 'selected' : ''}>$</option><option ${m && m.cur !== '$' ? 'selected' : ''}>${esc(LC())}</option></select>`)}</div>
-      ${field('Pour quoi ?', `<select name="motif">${MOT.map(x => `<option ${m && m.motif === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`)}
+      ${field('Pour quoi ?', `<select name="motif">${(m && m.motif && !MOT.includes(m.motif) ? [m.motif] : []).concat(MOT).map(x => `<option ${m && m.motif === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`)}
       <div class="row2">${field('Date', `<input name="date" type="date" value="${m ? m.date : today()}" max="${today()}">`)}${field('Note', `<input name="note" value="${esc(m && m.note || '')}" placeholder="Ex : banque Equity, réf…">`)}</div>
+      <div id="rtBank" hidden><div class="card" style="margin-bottom:10px;padding:10px 12px">
+        ${field('Semaine concernée', `<select name="wk">${[0, 1, 2, 3].map(k => { const w = addDays(weekStart(), -7 * k); return `<option value="${w}" ${(m && m.wk ? m.wk === w : k === 0) ? 'selected' : ''}>${esc(wkLabel(w))}${k === 0 ? ' (cette semaine)' : k === 1 ? ' (semaine passée)' : ''}</option>`; }).join('')}</select>`)}
+        <div class="f"><span>Photo du bordereau ou du reçu</span><label class="btn block" style="cursor:pointer" id="rtPhL">${m && m.photo ? 'Changer la photo' : 'Prendre / choisir la photo'}<input type="file" accept="image/*" id="rtPh" hidden></label><p class="note" id="rtPhMsg" style="margin-top:4px">${m && m.photo ? 'Photo déjà ajoutée.' : ''}</p></div></div></div>
+      <p class="note" id="rtMsg" style="margin:0 0 8px;color:var(--bad)"></p>
       <button type="submit" class="btn primary block">Enregistrer</button>
       ${m ? `<button type="button" class="btn block" style="margin-top:8px;color:var(--bad)" data-a="retraitdel:${esc(m.id)}">Supprimer ce retrait</button>` : ''}</form>`);
-    const f = document.getElementById('rtf'), E = f.elements;
-    f.onsubmit = e => { e.preventDefault(); const a = num(E.amount.value); if(!(a > 0)) return toast('Montant invalide');
-      const cur = E.cur.value === '$' ? '$' : LC();
+    const f = document.getElementById('rtf'), E = f.elements; let blob = null;
+    const bankOn = () => { document.getElementById('rtBank').hidden = !(E.motif.value === BANK || OLD_SAV.includes(E.motif.value)); }; E.motif.onchange = bankOn; if(preset) E.motif.value = preset; bankOn();
+    document.getElementById('rtPh').onchange = async ev => { const fl = ev.target.files && ev.target.files[0]; if(!fl) return; const msg = document.getElementById('rtPhMsg');
+      try{ blob = await shrinkImage(fl); msg.textContent = 'Photo prête ✓ (elle sera envoyée en enregistrant)'; }catch(_){ blob = null; msg.textContent = 'Photo illisible, réessayez.'; } };
+    f.onsubmit = async e => { e.preventDefault(); const a = num(E.amount.value); if(!(a > 0)) return toast('Montant invalide');
+      const cur = E.cur.value === '$' ? '$' : LC(), go = f.querySelector('button[type=submit]'), bank = E.motif.value === BANK || OLD_SAV.includes(E.motif.value);
       const rec = Object.assign({}, m || {id:uid(), ts:Date.now(), type:'retrait'}, {amount:a, cur, motif:E.motif.value, date:E.date.value || today(), note:E.note.value.trim()});
+      if(bank) rec.wk = E.wk.value; else { delete rec.wk; }
       if(!m || m.cur !== cur || num(m.amount) !== a) rec.rate = rate();
+      if(bank && blob){ if(navigator.onLine === false){ document.getElementById('rtMsg').textContent = "Pas d'internet : la photo ne peut pas être envoyée. Enregistrez sans photo et ajoutez-la plus tard."; blob = null; return; }
+        go.disabled = true; go.textContent = 'Envoi de la photo…';
+        const path = ONLINE.shop.id + '/banque_' + rec.id + '_' + Date.now().toString(36) + '.jpg';
+        try{ const up = await sb.storage.from('captures').upload(path, blob, {contentType:'image/jpeg', upsert:false}); if(up.error) throw up.error; rec.photo = path; }
+        catch(err){ go.disabled = false; go.textContent = 'Enregistrer'; document.getElementById('rtMsg').textContent = 'Photo non envoyée : ' + (typeof rpcErr === 'function' ? rpcErr(err) : err.message); return; } }
       S.moves = m ? S.moves.map(x => x.id === m.id ? rec : x) : S.moves.concat([rec]);
-      save(); closeSheet(); render(); toast('Retrait enregistré : ' + amt(a, cur)); }; }
+      save(); closeSheet(); render(); toast(bank ? 'Mis en épargne : ' + amt(a, cur) : 'Retrait enregistré : ' + amt(a, cur)); }; }
   A.retrait = id => form(id || '');
+  A.bankdep = () => form('', BANK);
   A.retraitdel = async id => { if(!await ask('Supprimer ce retrait ?', 'Supprimer', true)) return; S.moves = S.moves.filter(x => x.id !== id); save(); closeSheet(); render(); toast('Retrait supprimé'); };
   A.retraits = () => { if(!can()) return; const all = sortMoves(retraits()), byM = {};
     all.forEach(m => { const k = (m.date || '').slice(0, 7); (byM[k] = byM[k] || []).push(m); });
@@ -11656,23 +11674,62 @@ body.livfab #main{padding-bottom:96px}
       ${all.length ? Object.entries(byM).map(([k, L]) => `<div class="lsCity">${esc(monthName(k))} · ${money(L.reduce((t, m) => t + usd(m), 0))}</div>
         <div class="list">${L.map(m => `<button class="it" data-a="retrait:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">${esc(m.motif || 'Retrait')}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><div class="num" style="font-weight:800">${amt(num(m.amount), m.cur)}</div></button>`).join('')}</div>`).join('') : '<div class="card empty">Aucun retrait pour le moment.</div>'}
       <button class="btn primary block" style="margin-top:12px" data-a="retrait">J'ai retiré de l'argent</button>`); };
+  // ---- Banque : dépôts (retraits « Dépôt à la banque ») − retraits de la banque ----
+  const deposits = () => S.moves.filter(isSav);
+  const bankOuts = () => S.moves.filter(m => m.type === 'bankout');
+  function bankBal(){ const b = {}; deposits().forEach(m => { b[m.cur] = (b[m.cur] || 0) + num(m.amount); }); bankOuts().forEach(m => { b[m.cur] = (b[m.cur] || 0) - num(m.amount); });
+    const usdTot = deposits().reduce((t, m) => t + usd(m), 0) - bankOuts().reduce((t, m) => t + usd(m), 0); return {b, usdTot}; }
+  const balTxt = () => { const {b} = bankBal(), ks = Object.keys(b).filter(k => Math.abs(b[k]) > 0.0001); return ks.length ? ks.map(k => amt(r3(b[k]), k)).join(' + ') : money(0); };
+  A.banque = () => { if(!can()) return; const wk = weekStart(), r = stats('sem'), depW = deposits().filter(m => m.wk ? m.wk === wk : m.date >= wk).reduce((t, m) => t + usd(m), 0);
+    const ops = sortMoves(deposits().concat(bankOuts()));
+    sheet('Mon épargne', `<div class="card" style="margin-bottom:12px;text-align:center"><p class="note" style="margin:0">Total de mon épargne</p><div style="font-size:30px;font-weight:850;margin:4px 0" id="bkBal">${balTxt()}</div><p class="note" style="margin:0">Argent mis en épargne − argent repris de l'épargne</p></div>
+      <div class="card" style="margin-bottom:12px"><b>Cette semaine (${esc(wkLabel(wk))})</b>
+        <div class="dl"><span>Bénéfice net de la semaine</span><span class="num">${money(r.net)}</span></div>
+        <div class="dl"><span>Déjà mis en épargne pour cette semaine</span><span class="num">${money(depW)}</span></div>
+        <div class="dl strong"><span>${r.net - depW > 0.009 ? 'Pas encore mis en épargne' : 'Tout est mis en épargne'}</span><span class="num">${money(Math.max(0, r.net - depW))}</span></div></div>
+      <div class="btns" style="margin-bottom:12px"><button class="btn primary" id="bkDep" data-a="bankdep">Mettre en épargne</button><button class="btn" id="bkOut" data-a="bankout">Reprendre de l'épargne</button></div>
+      <div class="list">${ops.length ? ops.map(m => m.type === 'bankout'
+        ? `<button class="it" data-a="bankout:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">Repris de l'épargne${m.motif ? ' · ' + esc(m.motif) : ''}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><div class="num" style="font-weight:800">−${amt(num(m.amount), m.cur)}</div></button>`
+        : `<div class="it" style="align-items:center"><button class="it" style="flex:1;border:0;background:none;padding:0;display:flex;gap:12px;align-items:center;text-align:left;min-width:0" data-a="retrait:${esc(m.id)}"><div class="ic c-in">${ico('in')}</div><div class="m"><div class="t">Épargne${m.wk ? ' · semaine ' + esc(wkLabel(m.wk)) : ''}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}${m.photo ? '' : ' · <b>sans photo</b>'}</div></div><div class="num" style="font-weight:800">+${amt(num(m.amount), m.cur)}</div></button>${m.photo ? `<button class="btn sm" style="flex-shrink:0" data-a="bankphoto:${esc(m.id)}">Photo</button>` : ''}</div>`).join('') : '<div class="card empty">Rien en épargne pour le moment.</div>'}</div>`); };
+  A.bankout = id => { if(!can()) return; const m = id ? S.moves.find(x => x.id === id && x.type === 'bankout') : null;
+    sheet(m ? "Modifier l'argent repris" : "Reprendre de l'épargne", `<form id="bof" novalidate><p class="note" style="margin-bottom:10px">Argent que vous reprenez de votre épargne. Le total de l'épargne baisse.</p>
+      <div class="row2">${field('Montant *', `<input name="amount" type="number" min="0" step="any" inputmode="decimal" value="${m ? m.amount : ''}">`)}${field('Devise', `<select name="cur"><option ${!m || m.cur === '$' ? 'selected' : ''}>$</option><option ${m && m.cur !== '$' ? 'selected' : ''}>${esc(LC())}</option></select>`)}</div>
+      ${field('Pour quoi ?', `<select name="motif">${['Achat de stock', 'Paiement fournisseur', 'Usage personnel / famille', 'Loyer / charges', 'Autre'].map(x => `<option ${m && m.motif === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`)}
+      <div class="row2">${field('Date', `<input name="date" type="date" value="${m ? m.date : today()}" max="${today()}">`)}${field('Note', `<input name="note" value="${esc(m && m.note || '')}">`)}</div>
+      <button type="submit" class="btn primary block">Enregistrer</button>${m ? `<button type="button" class="btn block" style="margin-top:8px;color:var(--bad)" data-a="retraitdel:${esc(m.id)}">Supprimer</button>` : ''}</form>`);
+    const f = document.getElementById('bof'), E = f.elements;
+    f.onsubmit = e => { e.preventDefault(); const a = num(E.amount.value); if(!(a > 0)) return toast('Montant invalide'); const cur = E.cur.value === '$' ? '$' : LC();
+      const rec = Object.assign({}, m || {id:uid(), ts:Date.now(), type:'bankout'}, {amount:a, cur, motif:E.motif.value, date:E.date.value || today(), note:E.note.value.trim()});
+      if(!m || m.cur !== cur || num(m.amount) !== a) rec.rate = rate();
+      S.moves = m ? S.moves.map(x => x.id === m.id ? rec : x) : S.moves.concat([rec]); save(); render(); A.banque(); toast("Enregistré : repris de l'épargne"); }; };
+  A.bankphoto = async id => { const m = S.moves.find(x => x.id === id); if(!m || !m.photo) return;
+    const {data, error} = await sb.storage.from('captures').createSignedUrl(m.photo, 3600);
+    if(error || !data) return toast('Photo indisponible : ' + (typeof rpcErr === 'function' ? rpcErr(error) : ''));
+    sheet('Bordereau / reçu', `<p class="note" style="margin-bottom:8px">${amt(num(m.amount), m.cur)} · ${esc(dAbs(m.date, 1))}${m.wk ? ' · semaine ' + esc(wkLabel(m.wk)) : ''}</p><img src="${data.signedUrl}" alt="Bordereau" style="width:100%;border-radius:14px"><button class="btn block" style="margin-top:10px" data-a="banque">Retour à mon épargne</button>`); };
   // Historique : une ligne lisible
   const rm = rowMove;
-  rowMove = function(m){ if(m && m.type === 'retrait') return `<button class="it" data-a="retrait:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">Retrait d'argent · ${esc(m.motif || '')}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><div class="num" style="font-weight:800">−${amt(num(m.amount), m.cur)}</div></button>`; return rm.apply(this, arguments); };
+  rowMove = function(m){ if(m && m.type === 'bankout') return `<button class="it" data-a="bankout:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">Repris de l'épargne · ${esc(m.motif || '')}</div><div class="d">${esc(dAbs(m.date, 1))}</div></div><div class="num" style="font-weight:800">−${amt(num(m.amount), m.cur)}</div></button>`;
+    if(m && m.type === 'retrait') return `<button class="it" data-a="retrait:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">Retrait d'argent · ${esc(m.motif || '')}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><div class="num" style="font-weight:800">−${amt(num(m.amount), m.cur)}</div></button>`; return rm.apply(this, arguments); };
   // Accueil : carte sous le bénéfice
   const rr = render;
   render = function(){ const out = rr.apply(this, arguments);
-    try{ const M = document.getElementById('main'); if(!M || view !== 'home' || !can() || M.querySelector('#rtCard')) return out;
+    try{ const M = document.getElementById('main');
+      if(M && view === 'plus' && can() && !M.querySelector('#epTile')){ const t = M.querySelector('.bqTiles');
+        const h = `<button class="bqTile" id="epTile" data-a="banque" style="grid-column:1/-1;min-height:74px;background:linear-gradient(130deg,#1e6f5c,#2fa36b)"><b>Mon épargne</b><small>${(deposits().length || bankOuts().length) ? 'Total : ' + balTxt() + ' · ' : ''}mettre de côté, bordereaux</small></button><button class="bqTile" id="rtTile" data-a="retraits" style="grid-column:1/-1;min-height:64px;background:linear-gradient(130deg,#6d4c9f,#9b6fd1)"><b>Mes retraits d'argent</b><small>Ce que j'ai sorti de la boutique, par motif</small></button>`;
+        if(t) t.insertAdjacentHTML('beforeend', h); else M.insertAdjacentHTML('afterbegin', `<div class="bqTiles">${h}</div>`); }
+      if(!M || view !== 'home' || !can() || M.querySelector('#rtCard')) return out;
       const k = M.querySelector('.kpis'); if(!k) return out;
       const r = stats(period), out$ = retraits(period).reduce((t, m) => t + usd(m), 0), rest = r.net - out$;
       k.insertAdjacentHTML('afterend', `<div class="card" id="rtCard" style="margin-top:10px">
         <div class="dl"><span>Bénéfice net</span><span class="num">${money(r.net)}</span></div>
         <div class="dl"><span>Argent retiré</span><span class="num">${out$ ? '−' + money(out$) : money(0)}</span></div>
         <div class="dl strong"><span>Reste dans la boutique</span><span class="num ${rest < 0 ? 'red' : ''}">${money(rest)}</span></div>
-        <div class="btns" style="margin-top:10px"><button class="btn" id="rtBtn" data-a="retrait">J'ai retiré de l'argent</button><button class="btn" data-a="retraits">Mes retraits</button></div></div>`);
+        ${deposits().length || bankOuts().length ? `<div class="dl" style="margin-top:6px"><span>Mon épargne</span><span class="num">${balTxt()}</span></div>` : ''}
+        <div class="btns" style="margin-top:10px"><button class="btn" id="rtBtn" data-a="retrait">J'ai retiré de l'argent</button><button class="btn" data-a="retraits">Mes retraits</button></div>
+        <button class="btn block" id="bkBtn" style="margin-top:8px" data-a="banque">Mon épargne</button></div>`);
     }catch(e){ console.error(e); }
     return out; };
-  window.__retrait = {retraits, form};
+  window.__retrait = {retraits, form, bankBal};
 })();
 
 </script>
