@@ -1,5 +1,5 @@
 /* Stock & Livreurs — service worker : ouverture instantanée et hors connexion */
-const VERSION = '45aa3e5c45';
+const VERSION = 'eb691dad24';
 const CACHE = 'stock-livreurs-' + VERSION;
 const CORE = ['./', 'index.html', 'supabase.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'guide.html', 'conditions.html'];
 self.addEventListener('install', e => {
@@ -30,9 +30,13 @@ self.addEventListener('fetch', e => {
   if(url.pathname.endsWith('version.json')){ e.respondWith(fetch(req, {cache:'no-store'}).catch(() => new Response('{}', {headers:{'Content-Type':'application/json'}}))); return; }
   const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html');
   if(isPage){
-    // Page : réseau d'abord (mises à jour), sinon la copie gardée (hors connexion ou réseau trop lent)
-    e.respondWith(timeout(fetch(req.url, {cache:'no-store', credentials:'same-origin'}), 6000).then(r => { if(r && r.ok){ const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); } return r; })
-      .catch(() => caches.match('index.html').then(r => r || caches.match('./'))));
+    if(url.searchParams.has('fresh')) return; // téléchargement de la nouvelle version (réseau seulement)
+    // Page : la copie gardée s'ouvre tout de suite (même avec un réseau faible) ; la nouvelle version se télécharge derrière
+    e.respondWith(caches.match('index.html').then(hit => {
+      const net = fetch(req.url, {cache:'no-store', credentials:'same-origin'});
+      if(hit){ e.waitUntil(timeout(net, 120000).then(r => { if(r && r.ok) return caches.open(CACHE).then(x => x.put('index.html', r)); }).catch(() => {})); return hit; }
+      return timeout(net, 20000).then(r => { if(r && r.ok){ const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); } return r; }).catch(() => caches.match('./'));
+    }));
     return;
   }
   // Fichiers (images, supabase.js…) : copie gardée d'abord, mise à jour en arrière-plan

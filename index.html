@@ -5588,8 +5588,26 @@ const AUTH_DOMAIN = 'tel.stock-livreurs.app'; // identifiant interne : <numéro>
 const LAST_KEY = 'stock_online_last';
 const SUPPORT = '243851507510'; // WhatsApp BASILUA TECH (support, abonnements, mots de passe)
 const supportLink = msg => 'https://wa.me/' + SUPPORT + '?text=' + encodeURIComponent(typeof waSafe === 'function' ? waSafe(msg) : msg);
+/* Réseau faible : chaque appel a un délai maximum. Passé ce délai, l'appel est traité comme « pas de réseau »
+   (les opérations restent dans le téléphone et partent plus tard) au lieu de bloquer l'application. */
+const NETW = {slow:0};
+const NET_MSG = 'Failed to fetch (réseau trop lent)';
+function tfetch(input, init){
+  init = init || {};
+  const url = String(typeof input === 'string' ? input : (input && input.url) || '');
+  const method = String(init.method || (input && input.method) || 'GET').toUpperCase();
+  const b = init.body, big = !!b && typeof b !== 'string' && !(typeof URLSearchParams !== 'undefined' && b instanceof URLSearchParams);
+  const ms = /\/auth\/v1\//.test(url) ? 12000 : big ? 120000 : method === 'GET' ? 45000 : 30000;
+  const ctl = new AbortController(), outer = init.signal;
+  if(outer){ if(outer.aborted) ctl.abort(outer.reason); else outer.addEventListener('abort', () => ctl.abort(outer.reason), {once:true}); }
+  const slowT = setTimeout(() => { NETW.slow = Date.now(); }, 6000);
+  // le délai couvre aussi la lecture de la réponse (pas seulement le début)
+  setTimeout(() => { if(!ctl.signal.aborted){ NETW.slow = Date.now(); ctl.abort(new TypeError(NET_MSG)); } }, ms);
+  return fetch(input, Object.assign({}, init, {signal:ctl.signal})).then(r => { clearTimeout(slowT); return r; },
+    e => { clearTimeout(slowT); if(ctl.signal.aborted && !(outer && outer.aborted)) throw new TypeError(NET_MSG); throw e; });
+}
 const sb = (window.supabase && window.supabase.createClient)
-  ? window.supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:true, autoRefreshToken:true, storageKey:'stock_online_auth'}})
+  ? window.supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:true, autoRefreshToken:true, storageKey:'stock_online_auth'}, global:{fetch:tfetch}})
   : null;
 const ONLINE = {user:null, shop:null, role:null, shops:[], offline:false};
 
@@ -5819,10 +5837,26 @@ function showAuth(mode = 'login', msg = ''){
 }
 
 /* ---------- Après connexion : choisir / créer la boutique ---------- */
+// La session est lue dans le téléphone : on n'attend pas le réseau plus de 4 secondes pour l'ouvrir
+function storedSession(){ try{ const s = JSON.parse(localStorage.getItem('stock_online_auth') || 'null'); return s && s.user && s.user.id && s.refresh_token ? s : null; }catch(_){ return null; } }
+let GS_SLOW = 0;
+async function getSessionFast(ms = 4000){
+  if(Date.now() - GS_SLOW < 30000){ const st = storedSession(); if(st) return st; } // déjà lent il y a un instant : on n'attend pas une 2e fois
+  let timer; const slow = new Promise(res => { timer = setTimeout(() => res('slow'), ms); });
+  let r; try{ r = await Promise.race([sb.auth.getSession(), slow]); }catch(e){ r = {error:e}; }
+  clearTimeout(timer);
+  if(r !== 'slow' && r && r.data && r.data.session) return r.data.session;
+  if(r !== 'slow' && !(r && r.error && isNetErr(r.error))) return null;
+  GS_SLOW = Date.now(); return storedSession();
+}
+const localHas = id => { try{ return !!localStorage.getItem('stock_online_' + id); }catch(_){ return false; } };
 async function afterLogin(){
-  const {data:{session}} = await sb.auth.getSession();
+  const session = await getSessionFast();
   if(!session){ showAuth('login'); return; }
   ONLINE.user = session.user;
+  // Ouverture immédiate avec les données du téléphone ; la vérification en ligne se fait derrière
+  if(!ONLINE.choosing && !ONLINE.shop){ let last = null; try{ last = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); }catch(_){}
+    if(last && last.user === session.user.id && last.shop && last.shop.id && last.shop.role && localHas(last.shop.id)){ ONLINE.shops = [last.shop]; openShop(last.shop); bgLogin(); return; } }
   authShell(`<p class="note"><span class="spin-sm" aria-hidden="true"></span>Chargement de vos boutiques…</p>`);
   try{ const inv = await sb.rpc('accept_invites'); if(inv.data > 0) toast('Invitation acceptée ✅'); }catch(_){}
   try{ const ad = await sb.rpc('am_i_admin'); ONLINE.admin = !!ad.data; }catch(_){ }
@@ -5852,6 +5886,33 @@ async function afterLogin(){
   if(pick && !ONLINE.choosing) return openShop(pick);
   showShopChooser();
 }
+const BG = {pending:false, busy:false};
+async function bgLogin(){
+  if(BG.busy || !ONLINE.user || !sb) return; BG.busy = true; BG.pending = true;
+  try{
+    try{ const inv = await sb.rpc('accept_invites'); if(inv.data > 0) toast('Invitation acceptée ✅'); }catch(_){}
+    try{ const ad = await sb.rpc('am_i_admin'); if(ad && !ad.error){ const was = !!ONLINE.admin; ONLINE.admin = !!ad.data; if(was !== ONLINE.admin && ONLINE.shop) render(); } }catch(_){}
+    loadPrice(); loadPayInfo(); loadPlans();
+    const [shops, mem] = await Promise.all([
+      sb.from('shops').select('id,name,settings,status,paid_until,plan'),
+      sb.from('members').select('shop_id,role,livreur_id,display_name,perms').eq('user_id', ONLINE.user.id)
+    ]);
+    if(shops.error) throw shops.error; if(mem.error) throw mem.error;
+    const list = mem.data.map(x => Object.assign({}, shops.data.find(s => s.id === x.shop_id), {role:x.role, livreur_id:x.livreur_id, my_name:x.display_name || '', perms:x.perms || null})).filter(s => s.id);
+    ONLINE.shops = list; BG.pending = false; ONLINE.offline = false; joinSet('');
+    if(!ONLINE.shop) return;
+    const cur = list.find(s => s.id === ONLINE.shop.id);
+    const busy = () => !!(document.getElementById('ov') && !document.getElementById('ov').hidden);
+    if(!cur){ // retiré de cette boutique entre-temps
+      const go = () => { if(busy()) return setTimeout(go, 3000); ONLINE.shop = null; try{ localStorage.removeItem(LAST_KEY); }catch(_){} afterLogin(); }; return go(); }
+    if(cur.role !== ONLINE.role || cj(cur.perms || null) !== cj(ONLINE.perms || null)){
+      const go = () => { if(busy()) return setTimeout(go, 3000); if(ONLINE.shop && ONLINE.shop.id === cur.id) openShop(cur); }; return go(); }
+    Object.assign(ONLINE.shop, {name:cur.name, status:cur.status, paid_until:cur.paid_until, plan:cur.plan, my_name:cur.my_name, livreur_id:cur.livreur_id});
+    try{ localStorage.setItem(LAST_KEY, JSON.stringify({user:ONLINE.user.id, shop:ONLINE.shop})); }catch(_){}
+  }catch(e){ /* pas de réseau : nouvel essai au retour de la connexion */ }
+  finally{ BG.busy = false; }
+}
+window.addEventListener('online', () => { if(BG.pending) bgLogin(); });
 function showShopChooser(){
   ONLINE.choosing = false;
   const el = authShell(`<h2 style="font-size:17px;margin-bottom:12px">Choisissez une boutique</h2>
@@ -6121,8 +6182,20 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'acb3292d3d';
+const APP_BUILD = 'efc79520bb';
 let UPD_SHOWN = false;
+// La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
+async function primePage(v){
+  try{ if(!('caches' in window)) return false;
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 90000);
+    const r = await fetch('./?fresh=' + Date.now(), {cache:'no-store', signal:ctl.signal}); if(!r.ok){ clearTimeout(t); return false; }
+    const txt = await r.text(); clearTimeout(t);
+    if(v && !txt.includes(v)) return false;
+    const ks = (await caches.keys()).filter(k => k.startsWith('stock-livreurs-'));
+    for(const k of ks){ const c = await caches.open(k); await c.put('index.html', new Response(txt, {headers:{'Content-Type':'text/html; charset=utf-8'}})); }
+    return true;
+  }catch(_){ return false; }
+}
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
   try{ const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if(!r.ok) return; const j = await r.json();
@@ -6130,9 +6203,9 @@ async function checkUpdate(){
     // une seule tentative automatique par version, puis un bouton
     const k = 'stock_upd_' + j.v; let tried = false; try{ tried = sessionStorage.getItem(k) === '1'; }catch(_){}
     const busy = (document.getElementById('ov') && !document.getElementById('ov').hidden) || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
-    if(!tried && !busy){ try{ sessionStorage.setItem(k, '1'); }catch(_){} location.reload(); return; }
+    if(!tried && !busy){ try{ sessionStorage.setItem(k, '1'); }catch(_){} await primePage(j.v); location.reload(); return; }
     UPD_SHOWN = true;
-    document.body.insertAdjacentHTML('beforeend', `<div id="updbar" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;background:#111827;color:#fff;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3)"><span style="flex:1;font-size:14px;font-weight:650">🔄 Nouvelle version de l'application disponible</span><button class="btn sm primary" onclick="location.reload()">Mettre à jour</button></div>`);
+    document.body.insertAdjacentHTML('beforeend', `<div id="updbar" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;background:#111827;color:#fff;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.3)"><span style="flex:1;font-size:14px;font-weight:650">🔄 Nouvelle version de l'application disponible</span><button class="btn sm primary" onclick="this.disabled=true;this.textContent='Téléchargement…';primePage('${esc(j.v)}').then(() => location.reload())">Mettre à jour</button></div>`);
   }catch(_){}
 }
 setTimeout(checkUpdate, 4000);
@@ -6311,7 +6384,7 @@ async function syncNow(){
     SYNC.pending = shopWritable() ? computeDirty().length : 0;
     SYNC.state = SYNC.pending ? 'pending' : 'ok'; SYNC.err = ''; ONLINE.offline = false;
   }catch(e){
-    SYNC.state = /fetch|network|load failed/i.test(String(e && e.message)) ? 'offline' : 'error';
+    SYNC.state = /fetch|network|load failed|abort|timeout|lent/i.test(String(e && e.message)) ? 'offline' : 'error';
     SYNC.err = authErr(e); SYNC.pending = shopWritable() ? computeDirty().length : 0;
   }finally{
     SYNC.busy = false; paintSync();
@@ -6322,6 +6395,7 @@ function scheduleSync(ms = 1500){ clearTimeout(SYNC.t); SYNC.t = setTimeout(sync
 function paintSync(){
   const el = $('#syncpill'); if(!el) return;
   const T = {idle:['…',''], sync:['↻ Synchro…','s-sync'], ok:['✓ En ligne','s-ok'], pending:['⏳ ' + SYNC.pending + ' en attente','s-wait'], offline:['Hors ligne' + (SYNC.pending ? ' · ' + SYNC.pending : ''),'s-off'], error:['⚠ Erreur','s-err']}[SYNC.state] || ['…',''];
+  if(SYNC.state === 'sync' && NETW.slow && Date.now() - NETW.slow < 60000) T[0] = '↻ Réseau lent…';
   el.textContent = T[0]; el.className = 'syncpill ' + T[1];
 }
 A.syncnow = () => {
@@ -6885,12 +6959,15 @@ A.livextra = (_, el) => {
 const LQ_KEY = () => 'stock_livq_' + (ONLINE.shop ? ONLINE.shop.id : '');
 const lqGet = () => { try{ return JSON.parse(localStorage.getItem(LQ_KEY()) || '[]'); }catch(_){ return []; } };
 const lqSet = q => { try{ localStorage.setItem(LQ_KEY(), JSON.stringify(q)); }catch(_){} };
-const isNetErr = e => navigator.onLine === false || /fetch|network|load failed|timeout|offline/i.test(String(e && (e.message || e.error_description || e)));
+const isNetErr = e => navigator.onLine === false || /fetch|network|load failed|timeout|offline|abort|trop lent/i.test(String(e && (e.message || e.error_description || e)));
 let LQ_BUSY = false;
 async function livRpc(fn, params, note){
   const queue = () => { const q = lqGet(); q.push({fn, params, note, at:Date.now()}); lqSet(q); toast('📶 Pas de réseau : c\'est enregistré dans le téléphone, envoi automatique dès que la connexion revient'); return {ok:true, queued:true}; };
   if(navigator.onLine === false) return queue();
-  try{ const {data, error} = await sb.rpc(fn, params);
+  try{ const ctl = new AbortController(); let tt;
+    const q = sb.rpc(fn, params), req = (q && typeof q.abortSignal === 'function') ? q.abortSignal(ctl.signal) : q;
+    const late = new Promise(res => { tt = setTimeout(() => { NETW.slow = Date.now(); try{ ctl.abort(new TypeError(NET_MSG)); }catch(_){ } res({data:null, error:{message:NET_MSG}}); }, 12000); });
+    const {data, error} = await Promise.race([req, late]); clearTimeout(tt);
     if(error) return isNetErr(error) ? queue() : {ok:false, error};
     return data ? {ok:true} : {ok:false};
   }catch(e){ return isNetErr(e) ? queue() : {ok:false, error:e}; }
@@ -7338,7 +7415,7 @@ livSheet = function(id){
 (async function boot(){
   if(!sb){ authShell(`<p class="auth-msg">Impossible de charger le module de connexion. Vérifiez votre connexion internet puis rechargez la page.</p><button class="btn primary block" onclick="location.reload()">Recharger</button>`); return; }
   authShell(`<p class="note">Chargement…</p>`);
-  const {data:{session}} = await sb.auth.getSession();
+  const session = await getSessionFast();
   const jm = location.search.match(/[?&]rejoindre(?:=(\d*))?/);
   if(jm){ joinSet(jm[1] || '1'); try{ history.replaceState(null, '', location.pathname); }catch(_){} }
   if(session) afterLogin(); else showAuth(jm || /[?&](essai|inscription|signup)\b/.test(location.search) ? 'signup' : 'login');
