@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '57e3b12666';
+const APP_BUILD = '54c3faf2ee';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11626,7 +11626,7 @@ body.livfab #main{padding-bottom:96px}
    Un retrait n'est pas une dépense : le bénéfice ne change pas. L'accueil montre « Bénéfice − Retraits = reste dans la boutique ». */
 (function(){
   if(typeof stats !== 'function') return;
-  try{ ['retrait', 'bankdep', 'bankout'].forEach(k => { ACT_PERM[k] = 'benefice'; if(!WRITE_ACTIONS.includes(k)) WRITE_ACTIONS.push(k); }); ACT_PERM.banque = 'benefice'; ACT_PERM.bankphoto = 'benefice'; }catch(_){}
+  try{ ACT_PERM.epcal = 'benefice'; ACT_PERM.epday = 'benefice'; ['retrait', 'bankdep', 'bankout'].forEach(k => { ACT_PERM[k] = 'benefice'; if(!WRITE_ACTIONS.includes(k)) WRITE_ACTIONS.push(k); }); ACT_PERM.banque = 'benefice'; ACT_PERM.bankphoto = 'benefice'; }catch(_){}
   const MOT = ['Épargne (banque, Mobile Money…)', 'Usage personnel / famille', 'Achat de stock', 'Paiement fournisseur', 'Loyer / charges', 'Autre'];
   const BANK = 'Épargne (banque, Mobile Money…)';
   const OLD_SAV = ['Dépôt à la banque', 'Épargne / Mobile Money'];
@@ -11680,6 +11680,32 @@ body.livfab #main{padding-bottom:96px}
   function bankBal(){ const b = {}; deposits().forEach(m => { b[m.cur] = (b[m.cur] || 0) + num(m.amount); }); bankOuts().forEach(m => { b[m.cur] = (b[m.cur] || 0) - num(m.amount); });
     const usdTot = deposits().reduce((t, m) => t + usd(m), 0) - bankOuts().reduce((t, m) => t + usd(m), 0); return {b, usdTot}; }
   const balTxt = () => { const {b} = bankBal(), ks = Object.keys(b).filter(k => Math.abs(b[k]) > 0.0001); return ks.length ? ks.map(k => amt(r3(b[k]), k)).join(' + ') : money(0); };
+  let calM = today().slice(0, 7);
+  const monthAdd = (ym, k) => { const [y, m] = ym.split('-').map(Number), d = new Date(y, m - 1 + k, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  function calHTML(ym){
+    const [y, mo] = ym.split('-').map(Number), first = new Date(y, mo - 1, 1), nd = new Date(y, mo, 0).getDate(), lead = (first.getDay() + 6) % 7;
+    const ops = deposits().concat(bankOuts()).filter(m => (m.date || '').slice(0, 7) === ym), by = {};
+    ops.forEach(m => { const d = +m.date.slice(8, 10), x = by[d] || (by[d] = {in:0, out:0, n:0}); if(m.type === 'bankout') x.out += usd(m); else x.in += usd(m); x.n++; });
+    const totIn = ops.filter(m => m.type !== 'bankout').reduce((t, m) => t + usd(m), 0), totOut = ops.filter(m => m.type === 'bankout').reduce((t, m) => t + usd(m), 0), T = today();
+    let cells = ''; for(let k = 0; k < lead; k++) cells += '<div></div>';
+    for(let d = 1; d <= nd; d++){ const x = by[d], ds = ym + '-' + String(d).padStart(2, '0'), cls = x ? (x.in && !x.out ? 'in' : !x.in ? 'out' : 'mix') : '';
+      cells += x ? `<button class="epD ${cls}${ds === T ? ' td' : ''}" data-a="epday:${ds}"><b>${d}</b><small>${x.in ? '+' + money(r3(x.in)) : ''}${x.out ? (x.in ? '<br>' : '') + '−' + money(r3(x.out)) : ''}</small></button>` : `<div class="epD${ds === T ? ' td' : ''}"><b>${d}</b></div>`; }
+    const nm = (() => { try{ const t = first.toLocaleDateString('fr-FR', {month:'long', year:'numeric'}); return t.charAt(0).toUpperCase() + t.slice(1); }catch(_){ return ym; } })();
+    return `<div class="card" style="margin-bottom:12px;padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <button class="btn sm" data-a="epcal:${monthAdd(ym, -1)}" aria-label="Mois précédent">‹</button><b>${esc(nm)}</b><button class="btn sm" data-a="epcal:${monthAdd(ym, 1)}" aria-label="Mois suivant" ${ym >= T.slice(0, 7) ? 'disabled' : ''}>›</button></div>
+      <p class="note" style="margin:0 0 8px;text-align:center">Mis en épargne : <b>${money(r3(totIn))}</b>${totOut ? ` · repris : <b>${money(r3(totOut))}</b>` : ''}</p>
+      <div class="epG">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(x => `<div class="epH">${x}</div>`).join('')}${cells}</div></div>`; }
+  A.epcal = ym => { calM = ym; const el = document.getElementById('epCal'); if(el) el.innerHTML = calHTML(calM); else A.banque(); };
+  A.epday = ds => { const ops = sortMoves(deposits().concat(bankOuts()).filter(m => m.date === ds));
+    sheet(dAbs(ds, 1).replace(/^./, c => c.toUpperCase()), `<div class="list">${ops.map(m => m.type === 'bankout'
+      ? `<button class="it" data-a="bankout:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">Repris de l'épargne · ${esc(m.motif || '')}</div><div class="d">${esc(m.note || '')}</div></div><div class="num" style="font-weight:800">−${amt(num(m.amount), m.cur)}</div></button>`
+      : `<div class="it" style="align-items:center"><button class="it" style="flex:1;border:0;background:none;padding:0;display:flex;gap:12px;align-items:center;text-align:left;min-width:0" data-a="retrait:${esc(m.id)}"><div class="ic c-in">${ico('in')}</div><div class="m"><div class="t">Épargne${m.wk ? ' · semaine ' + esc(wkLabel(m.wk)) : ''}</div><div class="d">${esc(m.note || '')}${m.photo ? '' : ' <b>sans photo</b>'}</div></div><div class="num" style="font-weight:800">+${amt(num(m.amount), m.cur)}</div></button>${m.photo ? `<button class="btn sm" style="flex-shrink:0" data-a="bankphoto:${esc(m.id)}">Photo</button>` : ''}</div>`).join('') || '<div class="card empty">Rien ce jour-là.</div>'}</div>
+      <button class="btn block" style="margin-top:10px" data-a="banque">Retour à mon épargne</button>`); };
+  document.head.insertAdjacentHTML('beforeend', `<style>.epG{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.epH{text-align:center;font-size:11px;font-weight:800;color:var(--muted)}
+.epD{min-height:48px;border-radius:10px;border:1px solid var(--line);background:none;padding:3px 2px;display:flex;flex-direction:column;align-items:center;gap:1px;font:inherit;color:inherit}
+.epD b{font-size:13px}.epD small{font-size:9.5px;font-weight:800;line-height:1.15;text-align:center}.epD.td{outline:2px solid var(--brand);outline-offset:-2px}
+.epD.in{background:rgba(31,168,85,.16);border-color:rgba(31,168,85,.45);color:#13703a}.epD.out{background:rgba(234,120,30,.14);border-color:rgba(234,120,30,.45);color:#9a4b0c}.epD.mix{background:rgba(120,120,220,.14)}
+html.dark .epD.in{color:#7ee2a1}html.dark .epD.out{color:#ffb27a}</style>`);
   A.banque = () => { if(!can()) return; const wk = weekStart(), r = stats('sem'), depW = deposits().filter(m => m.wk ? m.wk === wk : m.date >= wk).reduce((t, m) => t + usd(m), 0);
     const ops = sortMoves(deposits().concat(bankOuts()));
     sheet('Mon épargne', `<div class="card" style="margin-bottom:12px;text-align:center"><p class="note" style="margin:0">Total de mon épargne</p><div style="font-size:30px;font-weight:850;margin:4px 0" id="bkBal">${balTxt()}</div><p class="note" style="margin:0">Argent mis en épargne − argent repris de l'épargne</p></div>
@@ -11687,6 +11713,7 @@ body.livfab #main{padding-bottom:96px}
         <div class="dl"><span>Bénéfice net de la semaine</span><span class="num">${money(r.net)}</span></div>
         <div class="dl"><span>Déjà mis en épargne pour cette semaine</span><span class="num">${money(depW)}</span></div>
         <div class="dl strong"><span>${r.net - depW > 0.009 ? 'Pas encore mis en épargne' : 'Tout est mis en épargne'}</span><span class="num">${money(Math.max(0, r.net - depW))}</span></div></div>
+      <div id="epCal">${calHTML(calM)}</div>
       <div class="btns" style="margin-bottom:12px"><button class="btn primary" id="bkDep" data-a="bankdep">Mettre en épargne</button><button class="btn" id="bkOut" data-a="bankout">Reprendre de l'épargne</button></div>
       <div class="list">${ops.length ? ops.map(m => m.type === 'bankout'
         ? `<button class="it" data-a="bankout:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">Repris de l'épargne${m.motif ? ' · ' + esc(m.motif) : ''}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><div class="num" style="font-weight:800">−${amt(num(m.amount), m.cur)}</div></button>`
