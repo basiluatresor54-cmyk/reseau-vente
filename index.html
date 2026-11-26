@@ -6121,7 +6121,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'e3420bf8b3';
+const APP_BUILD = 'acb3292d3d';
 let UPD_SHOWN = false;
 async function checkUpdate(){
   if(navigator.onLine === false || UPD_SHOWN) return;
@@ -10933,6 +10933,79 @@ window.__qrcode = qrcode; })();
           rm.insertAdjacentHTML('beforebegin', `<button class="btn sm" data-a="mpw:${m.user_id}" style="margin-right:6px">Mot de passe</button>`); }); }
     }catch(e){ console.error(e); }
     return out; };
+})();
+
+/* ---------- Site de la boutique : Qui sommes-nous, Où nous trouver, Questions, Vidéo et photos ----------
+   Seul le propriétaire remplit ces pages (Ma boutique en ligne → Pages du site). La boutique publique les affiche sous les produits, avec un menu. */
+(function(){
+  if(typeof CUSTOM === 'undefined' || typeof CUSTOM.boutique !== 'function') return;
+  const BK = 'vitrine', MAXG = 6, MAXF = 6;
+  const owner = () => !!(ONLINE.shop && ONLINE.role === 'proprietaire');
+  const site = () => (S.settings.site && typeof S.settings.site === 'object') ? S.settings.site : {};
+  const cleanUrl = v => { v = String(v || '').trim().slice(0, 300); if(!v || /^(javascript|data|vbscript|file):/i.test(v)) return ''; if(!/^https?:\/\//i.test(v)) v = 'https://' + v; v = v.replace(/^http:/i, 'https:'); return /^https:\/\/[^\/\s"'<>:]+\.[^\/\s"'<>:]+(:\d+)?(\/[^\s"'<>]*)?$/i.test(v) ? v : ''; };
+  const EX = [['Livrez-vous partout ?', 'Oui, nous livrons à Kinshasa et dans d\'autres villes. Les frais dépendent de votre commune.'],
+    ['Comment payer ?', 'Vous payez à la livraison, après avoir vérifié le produit. Le Mobile Money est aussi accepté.'],
+    ['En combien de temps je reçois ma commande ?', 'En général le jour même ou le lendemain.']];
+  document.head.insertAdjacentHTML('beforeend', `<style>
+.stPh{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.stPh .im{position:relative;width:74px;height:74px;border-radius:14px;background:var(--soft) center/cover no-repeat;border:1px solid var(--line)}
+.stPh .im button{position:absolute;top:-7px;right:-7px;width:26px;height:26px;border-radius:50%;border:0;background:var(--ink);color:var(--card);font-weight:800;line-height:1;cursor:pointer}
+.stAdd{width:74px;height:74px;border-radius:14px;border:1.5px dashed var(--line);display:grid;place-items:center;font-size:28px;color:var(--muted);cursor:pointer}
+.stFaq{border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:8px}.stFaq .f{margin:4px 0}
+.stFaq textarea{min-height:58px}
+</style>`);
+  // Lit le formulaire tel qu'il est (pour ne rien perdre quand on ajoute une photo avant d'enregistrer)
+  function harvest(){ const f = document.getElementById('sitef'); const W = Object.assign({}, site()); if(!f) return W; const E = f.elements;
+    W.about = E.about.value.trim().slice(0, 800); W.addr = E.addr.value.trim().slice(0, 160); W.maps = cleanUrl(E.maps.value); W.video = cleanUrl(E.video.value);
+    const faq = []; for(let i = 0; i < MAXF; i++){ const q = E['q' + i], a = E['a' + i]; if(!q) continue; const qq = q.value.trim().slice(0, 140); if(qq) faq.push({q:qq, a:(a ? a.value : '').trim().slice(0, 500)}); }
+    W.faq = faq; return W; }
+  function tidy(W){ const o = {}; for(const [k, v] of Object.entries(W)){ if(Array.isArray(v) ? v.length : (v !== '' && v != null)) o[k] = v; } return o; }
+  function store(W){ S.settings.site = tidy(W); save(); }
+  function card(){
+    const W = site(), gal = Array.isArray(W.gallery) ? W.gallery : [], faq = (Array.isArray(W.faq) ? W.faq : []).slice(0, MAXF);
+    const rows = faq.concat(faq.length < MAXF ? [{q:'', a:''}] : []);
+    return `<div class="sec"><h2>Pages du site</h2></div>
+    <div class="card" style="margin-bottom:12px" id="siteCard"><p class="note" style="margin-bottom:6px">Votre boutique devient un vrai site : un menu en haut et ces pages sous vos produits. Laissez vide ce que vous ne voulez pas afficher.</p>
+      <form id="sitef" novalidate>
+        <div class="f"><span>Qui sommes-nous</span><textarea name="about" maxlength="800" rows="4" placeholder="Ex : Winner Business vend des produits de qualité à Kinshasa depuis 2023. Livraison rapide, paiement à la livraison.">${esc(W.about || '')}</textarea></div>
+        <div class="f"><span>Photo de la boutique ou de l'équipe</span><div class="stPh">${W.aboutImg ? `<div class="im" style="background-image:url('${esc(W.aboutImg)}')"><button type="button" data-a="sitermabout" aria-label="Retirer">×</button></div>` : `<label class="stAdd" aria-label="Ajouter une photo">+<input type="file" accept="image/*" id="siteAboutIn" hidden></label>`}</div></div>
+        <label class="f"><span>Adresse (Où nous trouver)</span><input name="addr" maxlength="160" value="${esc(W.addr || '')}" placeholder="Ex : Av. du Commerce 12, Gombe, Kinshasa"></label>
+        <label class="f"><span>Lien Google Maps (facultatif)</span><input name="maps" maxlength="300" inputmode="url" value="${esc(W.maps || '')}" placeholder="Sinon, on cherche l'adresse sur la carte"></label>
+        <div class="f"><span>Questions fréquentes</span>${rows.map((x, i) => `<div class="stFaq"><label class="f"><input name="q${i}" maxlength="140" value="${esc(x.q || '')}" placeholder="Question ${i + 1} (ex : Livrez-vous partout ?)"></label><label class="f"><textarea name="a${i}" maxlength="500" rows="3" placeholder="Réponse">${esc(x.a || '')}</textarea></label></div>`).join('')}
+          ${faq.length < MAXF ? '<button type="button" class="btn sm" data-a="sitefaqex">Ajouter des exemples de questions</button>' : ''}</div>
+        <label class="f"><span>Vidéo de présentation (lien YouTube, TikTok ou Facebook)</span><input name="video" maxlength="300" inputmode="url" value="${esc(W.video || '')}" placeholder="Ex : https://youtu.be/…"></label>
+        <div class="f"><span>Photos de la boutique (${gal.length}/${MAXG})</span><div class="stPh">${gal.map((g, i) => `<div class="im" style="background-image:url('${esc(g)}')"><button type="button" data-a="sitermgal:${i}" aria-label="Retirer">×</button></div>`).join('')}${gal.length < MAXG ? `<label class="stAdd" aria-label="Ajouter des photos">+<input type="file" accept="image/*" multiple id="siteGalIn" hidden></label>` : ''}</div></div>
+        <p class="note" style="margin:4px 0 10px">Un bouton WhatsApp vert reste toujours visible en bas de votre boutique, pour que les clients vous écrivent à tout moment.</p>
+        <button type="submit" class="btn primary block" id="siteSave">Enregistrer les pages du site</button>
+      </form></div>`; }
+  const base = CUSTOM.boutique;
+  CUSTOM.boutique = function(){ const h = base.apply(this, arguments); if(!owner()) return h;
+    const mark = '<div class="card" style="margin-bottom:12px" id="bqProdNote">'; return h.includes(mark) ? h.replace(mark, card() + mark) : h + card(); };
+  const pathOf = u => { const i = String(u || '').indexOf('/' + BK + '/'); return i < 0 ? '' : decodeURIComponent(String(u).slice(i + BK.length + 2).split('?')[0]); };
+  function dropFile(u){ const p = pathOf(u); if(p && p.startsWith(ONLINE.shop.id + '/')) try{ sb.storage.from(BK).remove([p]).catch(() => {}); }catch(_){ } }
+  async function upOne(file){ const blob = await shrinkImage(file); if(blob.size > 800 * 1024) throw new Error('Photo trop lourde');
+    const p = ONLINE.shop.id + '/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.jpg';
+    const {error} = await sb.storage.from(BK).upload(p, blob, {contentType:'image/jpeg', upsert:false}); if(error) throw error;
+    return sb.storage.from(BK).getPublicUrl(p).data.publicUrl; }
+  async function addPhotos(files, about){ if(!owner()) return; files = [...(files || [])].filter(f => /^image\//.test(f.type || '') || /\.(jpe?g|png|webp|heic)$/i.test(f.name || '')); if(!files.length) return;
+    if(navigator.onLine === false) return toast('Il faut internet pour ajouter une photo');
+    const W = harvest(); W.gallery = Array.isArray(W.gallery) ? W.gallery.slice() : [];
+    if(!about) files = files.slice(0, MAXG - W.gallery.length);
+    toast(files.length > 1 ? 'Envoi des photos…' : 'Envoi de la photo…'); let ok = 0;
+    for(const f of files){ try{ const u = await upOne(f); if(about){ if(W.aboutImg) dropFile(W.aboutImg); W.aboutImg = u; } else W.gallery.push(u); ok++; }catch(e){ console.error(e); toast('Photo non envoyée : ' + (rpcErr ? rpcErr(e) : e.message)); } if(about) break; }
+    if(ok){ store(W); render(); toast(ok > 1 ? ok + ' photos ajoutées' : 'Photo ajoutée'); } }
+  const after = CUSTOM_AFTER.boutique;
+  CUSTOM_AFTER.boutique = function(){ try{ if(after) after.apply(this, arguments); }catch(e){ console.error(e); }
+    const f = document.getElementById('sitef'); if(!f || !owner()) return;
+    f.onsubmit = e => { e.preventDefault(); store(harvest()); render(); toast('Pages du site enregistrées'); };
+    const a = document.getElementById('siteAboutIn'); if(a) a.onchange = () => addPhotos(a.files, true);
+    const g = document.getElementById('siteGalIn'); if(g) g.onchange = () => addPhotos(g.files, false); };
+  A.sitefaqex = () => { if(!owner()) return; const W = harvest(), have = new Set(W.faq.map(x => x.q.toLowerCase()));
+    for(const [q, a] of EX){ if(W.faq.length >= MAXF) break; if(!have.has(q.toLowerCase())) W.faq.push({q, a}); }
+    store(W); render(); toast('Exemples ajoutés : modifiez-les si besoin'); };
+  A.sitermabout = () => { if(!owner()) return; const W = harvest(); if(W.aboutImg) dropFile(W.aboutImg); delete W.aboutImg; store(W); render(); toast('Photo retirée'); };
+  A.sitermgal = i => { if(!owner()) return; const W = harvest(), G = Array.isArray(W.gallery) ? W.gallery.slice() : []; const u = G.splice(+i, 1)[0]; if(u) dropFile(u); W.gallery = G; store(W); render(); toast('Photo retirée'); };
+  window.__site = {harvest, tidy, pathOf};
 })();
 
 </script>
