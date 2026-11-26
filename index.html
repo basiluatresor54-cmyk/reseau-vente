@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'de270629cc';
+const APP_BUILD = 'd4f8bd3202';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11620,6 +11620,59 @@ body.livfab #main{padding-bottom:96px}
     }catch(e){ console.error(e); }
     return out; };
   window.__livstock = {livRows, verifyMsg};
+})();
+
+/* ---------- « J'ai retiré de l'argent » : retraits du patron, avec motif ----------
+   Un retrait n'est pas une dépense : le bénéfice ne change pas. L'accueil montre « Bénéfice − Retraits = reste dans la boutique ». */
+(function(){
+  if(typeof stats !== 'function') return;
+  try{ ACT_PERM.retrait = 'benefice'; if(!WRITE_ACTIONS.includes('retrait')) WRITE_ACTIONS.push('retrait'); }catch(_){}
+  const MOT = ['Dépôt à la banque', 'Épargne / Mobile Money', 'Usage personnel / famille', 'Achat de stock', 'Paiement fournisseur', 'Loyer / charges', 'Autre'];
+  const can = () => !!ONLINE.shop && ONLINE.role !== 'livreur' && (typeof canDo !== 'function' || canDo('benefice'));
+  const usd = m => toUSD(num(m.amount), m.cur, m.rate);
+  const monthName = k => { try{ const t = new Date(k + '-15T12:00:00').toLocaleDateString('fr-FR', {month:'long', year:'numeric'}); return t.charAt(0).toUpperCase() + t.slice(1); }catch(_){ return k; } };
+  const retraits = p => S.moves.filter(m => m.type === 'retrait' && (!p || inPer(m.date, p)));
+  function form(id){ if(!can()) return; const m = id ? S.moves.find(x => x.id === id && x.type === 'retrait') : null;
+    sheet(m ? 'Modifier le retrait' : "J'ai retiré de l'argent", `<form id="rtf" novalidate>
+      <p class="note" style="margin-bottom:10px">Notez l'argent que vous sortez de la boutique. Ce n'est pas une dépense : votre bénéfice ne change pas, mais vous voyez ce qui reste dans la boutique.</p>
+      <div class="row2">${field('Montant *', `<input name="amount" type="number" min="0" step="any" inputmode="decimal" value="${m ? m.amount : ''}" placeholder="0">`)}${field('Devise', `<select name="cur"><option ${!m || m.cur === '$' ? 'selected' : ''}>$</option><option ${m && m.cur !== '$' ? 'selected' : ''}>${esc(LC())}</option></select>`)}</div>
+      ${field('Pour quoi ?', `<select name="motif">${MOT.map(x => `<option ${m && m.motif === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`)}
+      <div class="row2">${field('Date', `<input name="date" type="date" value="${m ? m.date : today()}" max="${today()}">`)}${field('Note', `<input name="note" value="${esc(m && m.note || '')}" placeholder="Ex : banque Equity, réf…">`)}</div>
+      <button type="submit" class="btn primary block">Enregistrer</button>
+      ${m ? `<button type="button" class="btn block" style="margin-top:8px;color:var(--bad)" data-a="retraitdel:${esc(m.id)}">Supprimer ce retrait</button>` : ''}</form>`);
+    const f = document.getElementById('rtf'), E = f.elements;
+    f.onsubmit = e => { e.preventDefault(); const a = num(E.amount.value); if(!(a > 0)) return toast('Montant invalide');
+      const cur = E.cur.value === '$' ? '$' : LC();
+      const rec = Object.assign({}, m || {id:uid(), ts:Date.now(), type:'retrait'}, {amount:a, cur, motif:E.motif.value, date:E.date.value || today(), note:E.note.value.trim()});
+      if(!m || m.cur !== cur || num(m.amount) !== a) rec.rate = rate();
+      S.moves = m ? S.moves.map(x => x.id === m.id ? rec : x) : S.moves.concat([rec]);
+      save(); closeSheet(); render(); toast('Retrait enregistré : ' + amt(a, cur)); }; }
+  A.retrait = id => form(id || '');
+  A.retraitdel = async id => { if(!await ask('Supprimer ce retrait ?', 'Supprimer', true)) return; S.moves = S.moves.filter(x => x.id !== id); save(); closeSheet(); render(); toast('Retrait supprimé'); };
+  A.retraits = () => { if(!can()) return; const all = sortMoves(retraits()), byM = {};
+    all.forEach(m => { const k = (m.date || '').slice(0, 7); (byM[k] = byM[k] || []).push(m); });
+    const byMot = {}; retraits(period).forEach(m => { byMot[m.motif || 'Autre'] = (byMot[m.motif || 'Autre'] || 0) + usd(m); });
+    sheet('Mes retraits d’argent', `${Object.keys(byMot).length ? `<div class="card" style="margin-bottom:12px"><b>Par motif (période choisie à l'accueil)</b>${Object.entries(byMot).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="dl"><span>${esc(k)}</span><span class="num">${money(v)}</span></div>`).join('')}</div>` : ''}
+      ${all.length ? Object.entries(byM).map(([k, L]) => `<div class="lsCity">${esc(monthName(k))} · ${money(L.reduce((t, m) => t + usd(m), 0))}</div>
+        <div class="list">${L.map(m => `<button class="it" data-a="retrait:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">${esc(m.motif || 'Retrait')}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><div class="num" style="font-weight:800">${amt(num(m.amount), m.cur)}</div></button>`).join('')}</div>`).join('') : '<div class="card empty">Aucun retrait pour le moment.</div>'}
+      <button class="btn primary block" style="margin-top:12px" data-a="retrait">J'ai retiré de l'argent</button>`); };
+  // Historique : une ligne lisible
+  const rm = rowMove;
+  rowMove = function(m){ if(m && m.type === 'retrait') return `<button class="it" data-a="retrait:${esc(m.id)}"><div class="ic c-loss">${ico('out')}</div><div class="m"><div class="t">Retrait d'argent · ${esc(m.motif || '')}</div><div class="d">${esc(dAbs(m.date, 1))}${m.note ? ' · ' + esc(m.note) : ''}</div></div><div class="num" style="font-weight:800">−${amt(num(m.amount), m.cur)}</div></button>`; return rm.apply(this, arguments); };
+  // Accueil : carte sous le bénéfice
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || view !== 'home' || !can() || M.querySelector('#rtCard')) return out;
+      const k = M.querySelector('.kpis'); if(!k) return out;
+      const r = stats(period), out$ = retraits(period).reduce((t, m) => t + usd(m), 0), rest = r.net - out$;
+      k.insertAdjacentHTML('afterend', `<div class="card" id="rtCard" style="margin-top:10px">
+        <div class="dl"><span>Bénéfice net</span><span class="num">${money(r.net)}</span></div>
+        <div class="dl"><span>Argent retiré</span><span class="num">${out$ ? '−' + money(out$) : money(0)}</span></div>
+        <div class="dl strong"><span>Reste dans la boutique</span><span class="num ${rest < 0 ? 'red' : ''}">${money(rest)}</span></div>
+        <div class="btns" style="margin-top:10px"><button class="btn" id="rtBtn" data-a="retrait">J'ai retiré de l'argent</button><button class="btn" data-a="retraits">Mes retraits</button></div></div>`);
+    }catch(e){ console.error(e); }
+    return out; };
+  window.__retrait = {retraits, form};
 })();
 
 </script>
