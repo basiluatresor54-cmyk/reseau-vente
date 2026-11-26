@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'a42bb4e7dd';
+const APP_BUILD = '71b558e435';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11497,6 +11497,36 @@ const ERR_MOTIF = 'Erreur de saisie (pas une perte)';
       out.parentElement.insertAdjacentHTML('afterend', `<button class="btn block" id="sfBtn" style="margin:8px 0" data-a="stockfix:${esc(id)}">Corriger le stock (nombre réel)</button>`);
     }catch(e){ console.error(e); }
     return r; };
+})();
+
+/* ---------- Livreur : gros bouton flottant « + J'ai vendu » (vente en plus), toujours visible ----------
+   + côté patron : mode d'emploi à envoyer au livreur sur WhatsApp. */
+(function(){
+  if(typeof A.livextra !== 'function') return;
+  document.head.insertAdjacentHTML('beforeend', `<style>
+#livFab{position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:31;display:flex;align-items:center;gap:8px;padding:0 20px 0 16px;height:56px;border-radius:999px;border:0;
+  background:linear-gradient(120deg,var(--brand),color-mix(in srgb,var(--brand) 70%,#ff8a3d));color:var(--brand-ink,#fff);font-weight:800;font-size:16px;box-shadow:0 10px 26px rgba(0,0,0,.22);cursor:pointer}
+#livFab svg{width:22px;height:22px;stroke:currentColor;stroke-width:2.6;fill:none;stroke-linecap:round}
+#livFab:active{transform:scale(.95)}
+body.livfab #main{padding-bottom:96px}
+</style>`);
+  function paintFab(){ const on = !!(ONLINE.shop && ONLINE.role === 'livreur' && view === 'moi' && ONLINE.shop.livreur_id);
+    let b = document.getElementById('livFab');
+    if(on && !b){ document.body.insertAdjacentHTML('beforeend', `<button id="livFab" data-a="livextra" aria-label="J'ai vendu à un client"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>J'ai vendu</button>`); b = document.getElementById('livFab'); }
+    if(b) b.hidden = !on; document.body.classList.toggle('livfab', on); }
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments); try{ paintFab(); }catch(e){ console.error(e); } return out; };
+  // Patron : envoyer le mode d'emploi au livreur
+  const howTo = L => `Bonjour ${(L.name || '').split(' ')[0]} 👋\nUn client t'appelle directement et tu lui livres un produit ? Enregistre-le toi-même dans l'application :\n\n1️⃣ Ouvre l'application ${APP_LINK}\n2️⃣ Touche le gros bouton « + J'ai vendu » en bas à droite\n3️⃣ Choisis le produit et la quantité, puis « Enregistrer la vente »\n\nLe prix est celui de la boutique et ta commission est calculée toute seule ✅ Je suis prévenu tout de suite.`;
+  A.livhowto = id => { const L = (S.livreurs || []).find(l => l.id === id); if(!L) return; if(!L.phone){ toast("Ajoutez d'abord le numéro du livreur"); return; } window.open(waLink(L.phone, howTo(L)), '_blank'); };
+  const ls = livSheet;
+  livSheet = function(id){ const r = ls.apply(this, arguments);
+    try{ const sh = document.getElementById('shb'), L = (S.livreurs || []).find(l => l.id === id); if(!sh || !L || !L.phone || sh.querySelector('#howBtn') || ONLINE.role === 'livreur') return r;
+      const last = sh.querySelector('#bsBtn') || sh.querySelector('#advBtn') || sh.querySelector(`[data-a="new:envoi"][data-liv="${id}"]`);
+      if(last) last.insertAdjacentHTML('afterend', `<button class="btn" id="howBtn" data-a="livhowto:${esc(id)}">Expliquer « J'ai vendu » (WhatsApp)</button>`);
+    }catch(e){ console.error(e); }
+    return r; };
+  window.__livfab = {paintFab, howTo};
 })();
 
 </script>
