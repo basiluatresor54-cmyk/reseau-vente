@@ -5855,7 +5855,7 @@ async function afterLogin(){
   if(!session){ showAuth('login'); return; }
   ONLINE.user = session.user;
   // Ouverture immédiate avec les données du téléphone ; la vérification en ligne se fait derrière
-  if(!ONLINE.choosing && !ONLINE.shop){ let last = null; try{ last = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); }catch(_){}
+  if(!ONLINE.choosing && !ONLINE.shop){ let last = null; try{ last = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); if(!last || last.user !== session.user.id) last = JSON.parse(localStorage.getItem(LAST_KEY + '_' + session.user.id) || 'null'); }catch(_){}
     if(last && last.user === session.user.id && last.shop && last.shop.id && last.shop.role && localHas(last.shop.id)){ ONLINE.shops = [last.shop]; openShop(last.shop); bgLogin(); return; } }
   authShell(`<p class="note"><span class="spin-sm" aria-hidden="true"></span>Chargement de vos boutiques…</p>`);
   try{ const inv = await sb.rpc('accept_invites'); if(inv.data > 0) toast('Invitation acceptée ✅'); }catch(_){}
@@ -5904,7 +5904,7 @@ async function bgLogin(){
     const cur = list.find(s => s.id === ONLINE.shop.id);
     const busy = () => !!(document.getElementById('ov') && !document.getElementById('ov').hidden);
     if(!cur){ // retiré de cette boutique entre-temps
-      const go = () => { if(busy()) return setTimeout(go, 3000); ONLINE.shop = null; try{ localStorage.removeItem(LAST_KEY); }catch(_){} afterLogin(); }; return go(); }
+      const go = () => { if(busy()) return setTimeout(go, 3000); const gone = ONLINE.shop && ONLINE.shop.id; ONLINE.shop = null; try{ localStorage.removeItem(LAST_KEY); if(ONLINE.user) localStorage.removeItem(LAST_KEY + '_' + ONLINE.user.id); }catch(_){} afterLogin(); }; return go(); }
     if(cur.role !== ONLINE.role || cj(cur.perms || null) !== cj(ONLINE.perms || null)){
       const go = () => { if(busy()) return setTimeout(go, 3000); if(ONLINE.shop && ONLINE.shop.id === cur.id) openShop(cur); }; return go(); }
     Object.assign(ONLINE.shop, {name:cur.name, status:cur.status, paid_until:cur.paid_until, plan:cur.plan, my_name:cur.my_name, livreur_id:cur.livreur_id});
@@ -5992,7 +5992,7 @@ function openShop(shop){
     META.last = null; META.role = ONLINE.role; META.full = 2; saveMeta();
   }
   rawSave();
-  try{ localStorage.setItem(LAST_KEY, JSON.stringify({user:ONLINE.user && ONLINE.user.id, shop})); }catch(_){}
+  try{ localStorage.setItem(LAST_KEY, JSON.stringify({user:ONLINE.user && ONLINE.user.id, shop})); if(ONLINE.user) localStorage.setItem(LAST_KEY + '_' + ONLINE.user.id, JSON.stringify({user:ONLINE.user.id, shop})); }catch(_){}
   hideAuth(); closeSheet(); view = ONLINE.role === 'livreur' ? 'moi' : 'home'; render();
   syncNow(); subWarnOnce(); setTimeout(() => { try{ if(!document.body.classList.contains('authon')) backupWarnOnce(); }catch(_){} }, 2500);
 }
@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '54c5bcc354';
+const APP_BUILD = '8194c7e1a1';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11089,6 +11089,100 @@ window.__qrcode = qrcode; })();
   A.sitermabout = () => { if(!owner()) return; const W = harvest(); if(W.aboutImg) dropFile(W.aboutImg); delete W.aboutImg; store(W); render(); toast('Photo retirée'); };
   A.sitermgal = i => { if(!owner()) return; const W = harvest(), G = Array.isArray(W.gallery) ? W.gallery.slice() : []; const u = G.splice(+i, 1)[0]; if(u) dropFile(u); W.gallery = G; store(W); render(); toast('Photo retirée'); };
   window.__site = {harvest, tidy, pathOf};
+})();
+
+/* ---------- Changer de compte (comme Facebook) : plusieurs comptes sur le même téléphone ----------
+   Chaque compte ajouté garde sa connexion dans ce téléphone : un toucher pour passer de l'un à l'autre.
+   Avant de changer, tout ce qui est en attente doit être envoyé (les données d'une même boutique sont partagées sur le téléphone). */
+(function(){
+  if(!sb) return;
+  const AK = 'stock_accounts', AUTH = 'stock_online_auth', MAXA = 6;
+  const ROLE = {proprietaire:'Patron', gerant:'Gérant', vendeur:'Vendeur', livreur:'Livreur'};
+  const list = () => { try{ const a = JSON.parse(localStorage.getItem(AK) || '[]'); return Array.isArray(a) ? a.filter(x => x && x.uid) : []; }catch(_){ return []; } };
+  const put = a => { try{ localStorage.setItem(AK, JSON.stringify(a.slice(0, MAXA))); }catch(_){} };
+  const raw = () => { try{ const s = JSON.parse(localStorage.getItem(AUTH) || 'null'); return s && s.user && s.user.id && s.refresh_token ? s : null; }catch(_){ return null; } };
+  // laisse au téléphone le temps d'enregistrer avant de recharger
+  const reloadSoon = () => setTimeout(() => location.reload(), 400);
+  const ss = (k, v) => { try{ if(v === undefined) return sessionStorage.getItem(k); if(v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); }catch(_){ return null; } };
+  function label(){ const md = (ONLINE.user && ONLINE.user.user_metadata) || {};
+    return {name:(ONLINE.shop && ONLINE.shop.my_name) || md.name || '', phone:md.phone || String((ONLINE.user && ONLINE.user.email) || '').split('@')[0], role:ONLINE.role || '', shop:ONLINE.shop ? (ONLINE.shop.name || '') : ''}; }
+  // Garde la connexion du compte ouvert (force : l'ajoute s'il n'est pas encore dans la liste)
+  function saveCurrent(force){ const s = raw(); if(!s || !ONLINE.user || s.user.id !== ONLINE.user.id) return false;
+    const a = list(), i = a.findIndex(x => x.uid === s.user.id); if(i < 0 && !force) return false;
+    const e = Object.assign(i >= 0 ? a[i] : {}, {uid:s.user.id, s, at:Date.now(), stale:false}, label());
+    if(i >= 0) a[i] = e; else a.unshift(e); put(a); return true; }
+  // Rien ne doit rester en attente avant de quitter le compte
+  async function pendingCount(){ if(!ONLINE.shop) return 0;
+    if(navigator.onLine !== false){ try{ if(ONLINE.role === 'livreur') await lqFlush(); }catch(_){} try{ await syncNow(); }catch(_){} }
+    return (shopWritable() ? computeDirty().length : 0) + (typeof lqGet === 'function' ? lqGet().length : 0); }
+  async function leaveOk(){ const n = await pendingCount(); if(!n) return true;
+    toast(`${n} opération(s) pas encore envoyée(s). Connectez-vous à internet pour les envoyer, puis changez de compte.`); return false; }
+  function stopAuto(){ try{ if(sb.auth.stopAutoRefresh) sb.auth.stopAutoRefresh(); }catch(_){} }
+  async function switchTo(uid){
+    if(ONLINE.user && uid === ONLINE.user.id) return closeSheet();
+    const t = list().find(x => x.uid === uid); if(!t) return;
+    if(!t.s || t.stale) return relogin(t);
+    if(!await leaveOk()) return;
+    if(ONLINE.user) saveCurrent(true);
+    stopAuto(); try{ localStorage.setItem(AUTH, JSON.stringify(t.s)); }catch(_){}
+    ss('acct_sw', uid); toast('Changement de compte…'); reloadSoon(); }
+  // Connexion perdue (mot de passe changé…) : on redemande le mot de passe de ce compte
+  function relogin(t){ ss('acct_sw', null); ss('acct_add', '1'); ss('acct_pre', t.phone || ''); stopAuto(); try{ localStorage.removeItem(AUTH); }catch(_){} reloadSoon(); }
+  A.acctadd = async () => { if(ONLINE.user){ if(!await leaveOk()) return; saveCurrent(true); }
+    ss('acct_sw', null); ss('acct_add', '1'); ss('acct_pre', ''); stopAuto(); try{ localStorage.removeItem(AUTH); }catch(_){} reloadSoon(); };
+  A.acctgo = uid => switchTo(uid);
+  A.acctrm = async uid => { const t = list().find(x => x.uid === uid); if(!t) return;
+    if(!await ask(`Retirer le compte « ${t.name || t.phone} » de ce téléphone ? (Le compte n'est pas supprimé : il faudra seulement remettre son mot de passe pour le rajouter.)`, 'Retirer', false)) return;
+    put(list().filter(x => x.uid !== uid)); if(ONLINE.user) A.accts(); else showAuth('login'); };
+  const row = (x, cur) => `<div class="it" style="align-items:center">
+      <button class="it" style="flex:1;min-width:0;overflow:hidden;border:0;background:none;padding:0;text-align:left;display:flex;gap:12px;align-items:center" data-a="acctgo:${esc(x.uid)}" ${cur ? 'disabled' : ''}>
+        <div class="ic c-brand">${esc(initials(x.name || x.shop || x.phone || '?'))}</div>
+        <div class="m"><div class="t">${esc(x.name || telPretty(x.phone || '') || 'Compte')}${cur ? ' <span class="note" style="font-weight:700;color:var(--brand)">· compte ouvert</span>' : ''}</div>
+          <div class="d">${esc([ROLE[x.role] || '', x.shop || '', x.phone ? telPretty(x.phone) : ''].filter(Boolean).join(' · '))}${x.stale ? ' · <b>mot de passe à remettre</b>' : ''}</div></div></button>
+      ${cur ? '' : `<button class="btn sm" style="flex-shrink:0" data-a="acctrm:${esc(x.uid)}" aria-label="Retirer de ce téléphone">Retirer</button>`}</div>`;
+  A.accts = () => { saveCurrent(true); const a = list(), me = ONLINE.user && ONLINE.user.id;
+    const sorted = a.filter(x => x.uid === me).concat(a.filter(x => x.uid !== me));
+    sheet('Changer de compte', `<p class="note" style="margin-bottom:10px">Les comptes enregistrés sur ce téléphone. Touchez un compte pour l'ouvrir, sans retaper le mot de passe.</p>
+      <div class="list" id="acctList">${sorted.map(x => row(x, x.uid === me)).join('')}</div>
+      ${a.length < MAXA ? '<button class="btn primary block" style="margin-top:12px" data-a="acctadd" id="acctAdd">+ Ajouter un compte</button>' : ''}
+      <p class="note" style="margin-top:12px">Attention : toute personne qui a ce téléphone en main peut ouvrir ces comptes. N'ajoutez pas votre compte de patron sur le téléphone d'un livreur.</p>`); };
+  // Mémoriser le compte à chaque ouverture (quand la liste est utilisée), et après un ajout
+  const os = openShop;
+  openShop = function(){ const r = os.apply(this, arguments);
+    try{ const adding = ss('acct_add') === '1'; ss('acct_sw', null); if(adding){ ss('acct_add', null); ss('acct_pre', null); saveCurrent(true); toast('Compte ajouté sur ce téléphone'); } else saveCurrent(false); }catch(e){ console.error(e); }
+    return r; };
+  // Se déconnecter : ce compte quitte aussi la liste (sa connexion est fermée)
+  const lo = logout;
+  logout = async function(force){ const me = ONLINE.user && ONLINE.user.id; const r = await lo.apply(this, arguments);
+    try{ if(me && !ONLINE.user){ put(list().filter(x => x.uid !== me)); localStorage.removeItem(LAST_KEY + '_' + me); showAuth('login'); } }catch(_){} return r; };
+  // Les connexions se renouvellent : on garde toujours la dernière
+  try{ sb.auth.onAuthStateChange((ev, s) => { if(s && (ev === 'TOKEN_REFRESHED' || ev === 'SIGNED_IN')) setTimeout(() => { try{ saveCurrent(false); }catch(_){} }, 60); }); }catch(_){}
+  // Écran de connexion : comptes du téléphone + message clair
+  const sa = showAuth;
+  showAuth = function(mode = 'login', msg = ''){
+    const sw = ss('acct_sw'); if(sw){ ss('acct_sw', null); const a = list(), t = a.find(x => x.uid === sw);
+      if(t){ t.stale = true; put(a); ss('acct_add', '1'); ss('acct_pre', t.phone || ''); if(!msg) msg = `La connexion de « ${t.name || telPretty(t.phone || '')} » a expiré : remettez son mot de passe.`; } }
+    const out = sa.call(this, mode, msg);
+    try{ const el = document.getElementById('auth'), f = document.getElementById('authf'); if(!el || !f) return out;
+      const pre = ss('acct_pre'); if(pre && mode === 'login' && f.elements.phone){ const v = String(pre).replace(/^243/, '0'); f.elements.phone.value = v; setTimeout(() => { try{ if(f.isConnected && !f.elements.phone.value) f.elements.phone.value = v; }catch(_){ } }, 400); }
+      const a = list().filter(x => x.s && !x.stale);
+      if(a.length && mode === 'login') f.insertAdjacentHTML('beforebegin', `<div id="acctPick" style="text-align:left;margin-bottom:14px"><p class="note" style="font-weight:700;margin-bottom:6px">Comptes de ce téléphone</p>
+        <div class="list">${a.map(x => `<button class="it" data-acct="${esc(x.uid)}"><div class="ic c-brand">${esc(initials(x.name || x.shop || '?'))}</div><div class="m"><div class="t">${esc(x.name || telPretty(x.phone || ''))}</div><div class="d">${esc([ROLE[x.role] || '', x.shop || ''].filter(Boolean).join(' · '))}</div></div></button>`).join('')}</div>
+        <p class="note" style="margin-top:10px">Ou connectez un autre compte :</p></div>`);
+      el.querySelectorAll('[data-acct]').forEach(b => b.onclick = () => { const t = list().find(x => x.uid === b.dataset.acct); if(!t) return; ss('acct_add', null); stopAuto(); try{ localStorage.setItem(AUTH, JSON.stringify(t.s)); }catch(_){} ss('acct_sw', t.uid); reloadSoon(); });
+    }catch(e){ console.error(e); }
+    return out; };
+  // Bouton dans Réglages et dans « Moi » (livreur)
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || !ONLINE.shop || M.querySelector('#acctBtn')) return out;
+      const n = list().filter(x => !ONLINE.user || x.uid !== ONLINE.user.id).length, txt = 'Changer de compte' + (n ? ` (${n} autre${n > 1 ? 's' : ''})` : '');
+      if(view === 'reglages'){ const pw = M.querySelector('#myPw'), lo2 = M.querySelector('[data-a="logout"]'); const at = pw || (lo2 && lo2.parentElement);
+        if(at) at.insertAdjacentHTML('beforebegin', `<button class="btn block" id="acctBtn" style="margin-bottom:8px" data-a="accts">${txt}</button>`); }
+      if(view === 'moi' && ONLINE.role === 'livreur'){ const pw = M.querySelector('#myPw'); if(pw) pw.insertAdjacentHTML('beforebegin', `<button class="btn sm" id="acctBtn" data-a="accts" style="margin-right:6px">${txt}</button>`); }
+    }catch(e){ console.error(e); }
+    return out; };
+  window.__acct = {list, saveCurrent, raw};
 })();
 
 </script>
