@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '8194c7e1a1';
+const APP_BUILD = 'f1db692c3e';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11183,6 +11183,108 @@ window.__qrcode = qrcode; })();
     }catch(e){ console.error(e); }
     return out; };
   window.__acct = {list, saveCurrent, raw};
+})();
+
+/* ---------- Avance ou aide à un livreur ----------
+   Avance : notée comme un paiement de commission en avance (adv). Si le livreur n'a pas encore de commission,
+   il « doit » le montant, qui est retiré tout seul de ses prochaines commissions (livreur payé au salaire : retiré du salaire).
+   Aide : notée comme une dépense « Salaire / aide », rien à rembourser. Le livreur voit ses avances dans « Moi ». */
+(function(){
+  if(typeof moneyForm !== 'function') return;
+  try{ ACT_PERM.advance = 'argent'; if(!WRITE_ACTIONS.includes('advance')) WRITE_ACTIONS.push('advance'); }catch(_){}
+  const isAdv = m => !!m && ((m.type === 'paiecomm' && m.adv) || (m.type === 'depense' && (m.adv || m.aide)));
+  const salaried = lid => { const l = liv(lid); return !!l && l.pay === 'salaire'; };
+  const fmtD = d => { try{ return dAbs(d, 1); }catch(_){ return d; } };
+  function advMsg(rec){ const l = liv(rec.liv) || {}, n = (l.name || '').split(' ')[0], a = money(num(rec.amount));
+    if(rec.aide) return `Bonjour ${n} 👋\nVoici une aide de ${a} (${fmtD(rec.date)}) de la part de ${S.settings.shop}. Tu n'as rien à rembourser 🙏`;
+    if(rec.type === 'depense') return `Bonjour ${n} 👋\nJ'ai noté ton avance de ${a} du ${fmtD(rec.date)}. Elle sera retirée de ton salaire.`;
+    const s = livStats(rec.liv);
+    return `Bonjour ${n} 👋\nJ'ai noté ton avance de ${a} du ${fmtD(rec.date)}. Elle sera retirée de ta commission.\n` + (s.toPay >= -0.009 ? `Commission restante pour toi : ${money(Math.max(0, s.toPay))}.` : `Pour l'instant tu dois ${money(-s.toPay)} : ce sera retiré de tes prochaines commissions.`); }
+  function advForm(opt){
+    const m = opt.id ? S.moves.find(x => x.id === opt.id) : null;
+    const lid0 = (m && m.liv) || opt.liv || '';
+    moneyForm('paiecomm', m ? {} : {liv:lid0});
+    const f = document.getElementById('nf'); if(!f) return; const E = f.elements;
+    const h = document.getElementById('sht'); if(h) h.textContent = 'Avance ou aide au livreur';
+    const due = document.getElementById('due'); if(due){ due.removeAttribute('id'); due.innerHTML = ''; due.id = 'advInfo'; }
+    if(m){ E.liv.value = m.liv || ''; E.amount.value = m.amount; E.date.value = m.date; E.note.value = m.note || ''; }
+    if(E.note) E.note.placeholder = 'Ex : transport, malade…';
+    const btn = f.querySelector('button.primary'); if(btn){ btn.type = 'submit'; btn.textContent = 'Enregistrer'; }
+    const amtF = E.amount.closest('.row2') || E.amount.closest('.f');
+    amtF.insertAdjacentHTML('afterend', `<label class="f" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="advGift" ${m && m.aide ? 'checked' : ''} style="width:22px;height:22px;min-height:0;flex:0 0 auto"><span style="margin:0"><b>C'est une aide</b> (pas à rembourser)</span></label>`);
+    const del = f.querySelector('[data-a^="delmove:"]');
+    const info = () => { const el = document.getElementById('advInfo'); if(!el) return; const lid = E.liv.value, gift = document.getElementById('advGift').checked;
+      if(!lid){ el.innerHTML = ''; return; }
+      if(gift){ el.innerHTML = `<p class="note" style="margin:0 0 10px">Notée comme une dépense « Salaire / aide ». Le livreur ne doit rien.</p>`; return; }
+      if(salaried(lid)){ el.innerHTML = `<p class="note" style="margin:0 0 10px">Livreur payé au salaire : l'avance sera retirée de son salaire.</p>`; return; }
+      const s = livStats(lid), back = m && m.type === 'paiecomm' ? num(m.amount) : 0, avail = s.toPay + back, after = avail - num(E.amount.value);
+      el.innerHTML = `<div class="card" style="margin:0 0 10px;padding:10px 12px"><div class="dl"><span>Commission disponible</span><span class="num">${money(Math.max(0, avail))}</span></div>
+        <div class="dl strong"><span>${after >= -0.009 ? 'Après l\'avance' : 'Il devra'}</span><span class="num ${after < -0.009 ? 'red' : ''}">${money(Math.abs(after))}</span></div>
+        ${after < -0.009 ? '<p class="note" style="margin:6px 0 0">Ce montant sera retiré tout seul de ses prochaines commissions.</p>' : ''}</div>`; };
+    E.liv.onchange = info; E.amount.oninput = info; document.getElementById('advGift').onchange = info; info();
+    f.onsubmit = e => { e.preventDefault();
+      const a = num(E.amount.value); if(!(a > 0)) return toast('Montant invalide');
+      const lid = E.liv.value; if(!lid) return toast('Choisissez un livreur');
+      const gift = document.getElementById('advGift').checked;
+      const rec = Object.assign({}, m || {id:uid(), ts:Date.now()}, {liv:lid, amount:a, cur:'$', date:E.date.value || today(), note:E.note.value.trim()});
+      if(!m || m.cur !== '$') rec.rate = rate();
+      delete rec.adv; delete rec.aide; delete rec.cat;
+      if(gift){ rec.type = 'depense'; rec.cat = 'Salaire / aide'; rec.aide = true; }
+      else if(salaried(lid)){ rec.type = 'depense'; rec.cat = 'Salaire / aide'; rec.adv = true; }
+      else { rec.type = 'paiecomm'; rec.adv = true; }
+      if(!rec.note) rec.note = gift ? 'Aide' : 'Avance';
+      S.moves = m ? S.moves.map(x => x.id === m.id ? rec : x) : S.moves.concat([rec]);
+      save(); render();
+      const l = liv(lid) || {};
+      sheet(gift ? 'Aide enregistrée' : 'Avance enregistrée', `<p style="margin-bottom:10px">${gift ? 'Aide' : 'Avance'} de <b>${money(a)}</b> pour <b>${esc(l.name || '')}</b>.</p>
+        <p class="note" style="margin-bottom:12px;white-space:pre-line">${esc(advMsg(rec))}</p>
+        ${l.phone ? `<a class="btn wa block" id="advWa" href="${waLink(l.phone, advMsg(rec))}" target="_blank" rel="noopener">${ico('wa')} Prévenir ${esc((l.name || '').split(' ')[0])} sur WhatsApp</a>` : ''}
+        <button class="btn block" style="margin-top:8px" data-a="livsheetback:${esc(lid)}">Retour à la fiche du livreur</button>`);
+      toast(gift ? 'Aide enregistrée ✅' : 'Avance enregistrée ✅'); };
+    if(del) del.textContent = 'Supprimer';
+  }
+  A.advance = (_, el) => advForm({liv:(el && el.dataset.liv) || ''});
+  A.livsheetback = lid => { closeSheet(); livSheet(lid); };
+  // Modifier une avance existante : même formulaire
+  const mf = moneyForm;
+  moneyForm = function(type, opt = {}){ const m = opt && opt.id ? S.moves.find(x => x.id === opt.id) : null;
+    if(isAdv(m) && !opt.__raw) return advForm({id:m.id}); return mf.apply(this, arguments); };
+  // dans advForm, l'original doit s'ouvrir normalement
+  const af = advForm;
+  // Libellé dans l'historique
+  const rm = rowMove;
+  rowMove = function(m){ let h = rm.apply(this, arguments);
+    try{ if(m && m.type === 'paiecomm' && m.adv) h = h.replace('Commission payée à ', 'Avance à ').replace('Paiement des commissions', 'Avance (retirée de la commission)');
+      else if(m && m.type === 'depense' && m.aide) h = h.replace(/Salaire \/ aide/, 'Aide (pas à rembourser)'); }catch(_){}
+    return h; };
+  // Fiche du livreur : bouton « Avance / aide » + avances dans le détail
+  const ls = livSheet;
+  livSheet = function(id){ const r = ls.apply(this, arguments);
+    try{ const sh = document.getElementById('shb'); if(!sh || sh.querySelector('#advBtn')) return r;
+      const anchor = sh.querySelector(`[data-a="money:paiecomm"][data-liv="${id}"]`) || sh.querySelector(`[data-a="money:depense"][data-liv="${id}"]`);
+      if(anchor && canDo('argent')) anchor.insertAdjacentHTML('afterend', `<button class="btn" id="advBtn" data-a="advance" data-liv="${esc(id)}">Avance / aide</button>`);
+      const advs = S.moves.filter(m => m.liv === id && m.type === 'paiecomm' && m.adv), tot = advs.reduce((t, m) => t + num(m.amount), 0);
+      const paid = [...sh.querySelectorAll('.dl')].find(d => /Déjà payées/.test(d.textContent));
+      if(paid && tot > 0) paid.insertAdjacentHTML('afterend', `<div class="dl" id="advLine"><span>dont avances</span><span class="num">${money(tot)}</span></div>`);
+      const s = livStats(id), topay = [...sh.querySelectorAll('.dl.strong')].find(d => /Commission à payer/.test(d.textContent));
+      if(topay && s.toPay < -0.009){ topay.innerHTML = `<span>${esc((liv(id) || {}).name || 'Le livreur')} doit (avance)</span><span class="num red">${money(-s.toPay)}</span>`; }
+    }catch(e){ console.error(e); }
+    return r; };
+  // Côté livreur (« Moi ») : ses avances et ce qu'il doit
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || !ONLINE.shop || view !== 'moi' || ONLINE.role !== 'livreur' || M.querySelector('#advCard')) return out;
+      const lid = ONLINE.shop.livreur_id; if(!lid) return out;
+      const lim = addDays(today(), -60), advs = sortMoves(S.moves.filter(m => m.liv === lid && isAdv(m) && m.date >= lim)).slice(0, 5);
+      const s = livStats(lid), owes = s.toPay < -0.009;
+      if(!advs.length && !owes) return out;
+      const first = M.querySelector(':scope > .card'); (first || M).insertAdjacentHTML(first ? 'afterend' : 'afterbegin', `<div class="card" id="advCard" style="margin-bottom:12px"><b>Avances et aides</b>
+        <div class="list" style="box-shadow:none;margin-top:6px">${advs.map(m => `<div class="dl"><span>${esc(fmtD(m.date))} · ${m.aide ? 'Aide' : 'Avance'}${m.note && !/^(Avance|Aide)$/.test(m.note) ? ' — ' + esc(m.note) : ''}</span><span class="num">${money(num(m.amount))}</span></div>`).join('')}</div>
+        ${salaried(lid) ? '' : owes ? `<div class="dl strong" style="margin-top:6px"><span>Vous devez</span><span class="num red">${money(-s.toPay)}</span></div><p class="note" style="margin:4px 0 0">Ce montant sera retiré de vos prochaines commissions.</p>` : `<div class="dl strong" style="margin-top:6px"><span>Commission restante pour vous</span><span class="num">${money(s.toPay)}</span></div>`}
+        <p class="note" style="margin:4px 0 0">Les aides ne sont pas à rembourser.</p></div>`);
+    }catch(e){ console.error(e); }
+    return out; };
+  window.__adv = {advForm, advMsg, isAdv};
 })();
 
 </script>
