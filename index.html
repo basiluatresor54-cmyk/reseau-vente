@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '69a3a8e355';
+const APP_BUILD = 'f84adeaa9e';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11444,6 +11444,40 @@ window.__qrcode = qrcode; })();
     }catch(e){ console.error(e); }
     return out; };
   window.__bulkin = {bulkIn};
+})();
+
+/* ---------- Fiche du produit : « Corriger le stock » (nombre réel au dépôt) ----------
+   Crée un petit contrôle de stock pour ce seul produit : l'écart est enregistré comme dans un contrôle normal. */
+(function(){
+  if(typeof prodSheet !== 'function') return;
+  try{ ACT_PERM.stockfix = 'stock'; if(!WRITE_ACTIONS.includes('stockfix')) WRITE_ACTIONS.push('stockfix'); }catch(_){}
+  A.stockfix = pid => { const p = prod(pid); if(!p || isKit(p)) return; const cur = qAt(stockAt(), '', pid);
+    sheet('Corriger le stock', `<div class="card" style="margin-bottom:12px"><b>${esc(p.name)}</b><br><span class="note">Au dépôt selon l'application : <b>${cur}</b></span></div>
+      <form id="sff" novalidate>${field('Nombre réel que vous avez au dépôt', `<input name="real" type="number" min="0" step="${decUnit(p) ? 'any' : '1'}" inputmode="decimal" value="${cur}" style="font-size:20px;font-weight:700">`)}
+        <p class="note" id="sfMsg" style="margin:6px 0 12px"></p>
+        ${field('Raison (facultatif)', `<input name="note" placeholder="Ex : erreur de saisie">`)}
+        <button type="submit" class="btn primary block">Corriger</button>
+        <button type="button" class="btn block" style="margin-top:8px" data-a="prod:${esc(pid)}">Annuler</button>
+        <p class="note" style="margin-top:10px">Pour le stock d'un livreur : fiche du livreur → Contrôle de stock.</p></form>`);
+    const f = document.getElementById('sff'), E = f.elements, msg = document.getElementById('sfMsg');
+    const show = () => { if(E.real.value === ''){ msg.innerHTML = ''; return; } const d = r3(qr(p, E.real.value) - cur);
+      msg.innerHTML = d === 0 ? 'Aucun changement.' : d > 0 ? `<b class="green">+${d}</b> pièce(s) ajoutée(s) au dépôt.` : `<b class="red">${d}</b> pièce(s) retirée(s) (comptées dans les pertes).`; };
+    E.real.oninput = show; show(); setTimeout(() => { try{ E.real.focus(); E.real.select(); }catch(_){ } }, 250);
+    f.onsubmit = e => { e.preventDefault(); if(E.real.value === '' || !(num(E.real.value) >= 0)) return toast('Tapez le nombre réel');
+      const real = Math.max(0, qr(p, E.real.value)), ex = qAt(stockAt(), '', pid);
+      if(real === ex){ toast('Aucun changement'); prodSheet(pid); return; }
+      const id = uid(), ts = Date.now(), date = today(), why = E.note.value.trim(), note = 'Correction du stock : attendu ' + ex + ', réel ' + real + (why ? ' · ' + why : '');
+      S.moves.push({id, ts, type:'inventaire', loc:'', date, lines:[{pid, exp:ex, real}], note:'Correction du stock' + (why ? ' · ' + why : '')});
+      if(real < ex) S.moves.push({id:uid(), ts:ts + 1, type:'perte', pid, qty:r3(ex - real), loc:'', motif:'Écart inventaire', costU:unitCostUSD(p), date, note, inv:id});
+      else S.moves.push({id:uid(), ts:ts + 1, type:'ajust', pid, qty:r3(real - ex), loc:'', date, note, inv:id});
+      save(); render(); prodSheet(pid); toast(`Stock corrigé : ${p.name} = ${real}`); }; };
+  const ps = prodSheet;
+  prodSheet = function(id){ const r = ps.apply(this, arguments);
+    try{ const b = document.getElementById('shb'), p = prod(id); if(!b || !p || isKit(p) || b.querySelector('#sfBtn') || !canDo('stock')) return r;
+      const out = b.querySelector(`[data-a="new:perte"][data-pid="${id}"]`); if(!out) return r;
+      out.parentElement.insertAdjacentHTML('afterend', `<button class="btn block" id="sfBtn" style="margin:8px 0" data-a="stockfix:${esc(id)}">Corriger le stock (nombre réel)</button>`);
+    }catch(e){ console.error(e); }
+    return r; };
 })();
 
 </script>
