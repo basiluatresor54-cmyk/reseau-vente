@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'b4e581250f';
+const APP_BUILD = 'de270629cc';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11581,6 +11581,14 @@ body.livfab #main{padding-bottom:96px}
     document.getElementById('lsTabs').onclick = e => { const b = e.target.closest('button'); if(!b) return; [...b.parentElement.children].forEach(x => x.classList.toggle('on', x === b));
       document.getElementById('lsBody').innerHTML = b.dataset.t === 'prod' ? byProd(stockAt()) : byLiv(stockAt()); }; };
   A.lsopen = id => { closeSheet(); livSheet(id); };
+  A.mystock = () => { const lid = ONLINE.role === 'livreur' && ONLINE.shop && ONLINE.shop.livreur_id; if(!lid) return; const st = stockAt(), rows = livRows(lid, st);
+    const S2 = k => r3(rows.reduce((t, r) => t + r[k], 0));
+    sheet('Mon stock', `<p class="note" style="margin-bottom:10px"><b>En main</b> = les pièces que vous avez avec vous · <b>À livrer</b> = déjà commandées par des clients · <b>Libre</b> = ce que vous pouvez encore vendre.</p>
+      ${rows.length ? `<div class="card lsCard"><p class="note" style="margin:0 0 4px">Reçu <b>${S2('rec')}</b> · Livré <b>${S2('sold')}</b>${S2('ret') ? ` · Rendu <b>${S2('ret')}</b>` : ''} · <b>En main ${S2('have')}</b>${S2('pend') ? ` (dont <b>${S2('pend')}</b> à livrer)` : ''}</p>
+        ${rows.map(r => `<div class="lsP"><div class="lsN">${esc(r.p.name)}</div>
+          <div class="lsF"><span>Reçu <b>${r.rec}</b></span><span>Livré <b>${r.sold}</b></span>${r.ret ? `<span>Rendu <b>${r.ret}</b></span>` : ''}${r.gap ? `<span>Écart <b>${r.gap > 0 ? '+' : ''}${r.gap}</b></span>` : ''}</div>
+          <div class="lsF lsF2"><span class="lsHave">En main <b>${r.have}</b></span><span>À livrer <b>${r.pend}</b></span><span class="${r.free ? 'green' : ''}">Libre <b>${r.free}</b></span></div></div>`).join('')}</div>` : '<div class="card empty">Vous n\'avez encore rien reçu.</div>'}
+      <button class="btn primary block" style="margin-top:8px" data-a="lshist:${esc(lid)}">Mon historique par jour</button>`); };
   // Historique jour par jour d'un livreur : reçu, livré, rendu, écart et ce qui lui reste le soir, par produit
   const dayOf = m => m.type === 'vente' ? (m.ldate || m.date || '') : (m.date || '');
   function livDays(lid, nDays = 21){
@@ -11593,16 +11601,19 @@ body.livfab #main{padding-bottom:96px}
       const lines = Object.entries(per).map(([pid, x]) => Object.assign({pid, name:pname(pid)}, x, {end:r3(x.end)})).filter(x => x.rec || x.sold || x.ret || x.gap || x.end).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
       return {d, lines}; }); }
   function dayMsg(L, D){ return `Bonjour ${(L.name || '').split(' ')[0]} 👋\nTon point du ${dAbs(D.d, 1)} :\n` + D.lines.map(x => `• ${x.name} : ${x.rec ? 'reçu ' + x.rec + ', ' : ''}livré ${x.sold}${x.ret ? ', rendu ' + x.ret : ''} → il te reste ${x.end}`).join('\n') + `\n\nMerci de vérifier 🙏`; }
-  A.lshist = lid => { const L = (S.livreurs || []).find(l => l.id === lid); if(!L) return; const D = livDays(lid);
-    sheet('Historique de ' + L.name, `<p class="note" style="margin-bottom:10px">Jour par jour : ce qu'il a reçu, livré, rendu, et ce qui lui <b>restait le soir</b>.</p>
+  A.lshist = lid => { const me = ONLINE.role === 'livreur'; if(me) lid = ONLINE.shop && ONLINE.shop.livreur_id; const L = (S.livreurs || []).find(l => l.id === lid); if(!L) return; const D = livDays(lid);
+    sheet(me ? 'Mon historique par jour' : 'Historique de ' + L.name, `<p class="note" style="margin-bottom:10px">Jour par jour : ce qu'il a reçu, livré, rendu, et ce qui lui <b>restait le soir</b>.</p>
       ${D.length ? D.map((x, i) => `<div class="card lsCard lsDay"><h3 style="text-transform:capitalize">${esc(dAbs(x.d, 1))}</h3>
         ${x.lines.map(y => `<div class="lsP"><div class="lsN">${esc(y.name)}</div><div class="lsF">${y.rec ? `<span>Reçu <b>${y.rec}</b></span>` : ''}<span>Livré <b>${y.sold}</b></span>${y.ret ? `<span>Rendu <b>${y.ret}</b></span>` : ''}${y.gap ? `<span>Écart <b>${y.gap > 0 ? '+' : ''}${r3(y.gap)}</b></span>` : ''}<span class="lsHave" style="padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--brand) 14%,transparent)">Reste le soir <b>${y.end}</b></span></div></div>`).join('')}
-        ${L.phone ? `<a class="btn wa sm" style="margin-top:8px" href="${waLink(L.phone, dayMsg(L, x))}" target="_blank" rel="noopener">${ico('wa')} Envoyer ce jour à ${esc((L.name || '').split(' ')[0])}</a>` : ''}</div>`).join('') : '<div class="card empty">Aucun mouvement pour ce livreur.</div>'}
-      <button class="btn block" style="margin-top:8px" data-a="livstock">Retour au stock des livreurs</button>`); };
+        ${L.phone && !me ? `<a class="btn wa sm" style="margin-top:8px" href="${waLink(L.phone, dayMsg(L, x))}" target="_blank" rel="noopener">${ico('wa')} Envoyer ce jour à ${esc((L.name || '').split(' ')[0])}</a>` : ''}</div>`).join('') : '<div class="card empty">Aucun mouvement pour le moment.</div>'}
+      <button class="btn block" style="margin-top:8px" data-a="${me ? 'mystock' : 'livstock'}">${me ? 'Retour à mon stock' : 'Retour au stock des livreurs'}</button>`); };
   // Gros bouton en haut de « Livreurs », et dans Stock
   const rr = render;
   render = function(){ const out = rr.apply(this, arguments);
-    try{ const M = document.getElementById('main'); if(!M || !staff() || !S.livreurs.length) return out;
+    try{ const M = document.getElementById('main');
+      if(M && view === 'moi' && ONLINE.role === 'livreur' && !M.querySelector('#myStockBtn')){ const x = M.querySelector('[data-a="livextra"]:not([data-id])');
+        if(x) x.insertAdjacentHTML('afterend', '<button class="btn block" id="myStockBtn" style="margin-top:8px" data-a="mystock">Mon stock : reçu, livré, ce qui me reste</button>'); }
+      if(!M || !staff() || !S.livreurs.length) return out;
       if(view === 'livreurs' && !M.querySelector('#lsBig')) M.insertAdjacentHTML('afterbegin', `<button id="lsBig" data-a="livstock"><svg class="i" viewBox="0 0 24 24" style="width:22px;height:22px"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7"/></svg>Stock chez les livreurs</button>`);
       if(view === 'stock' && !M.querySelector('#lsStock')){ const a = M.querySelector('#biBtn') || M.querySelector('.btns [data-a="new:entree"]');
         if(a) a.parentElement.insertAdjacentHTML('afterend', `<button class="btn block" id="lsStock" style="margin-top:8px" data-a="livstock">Stock chez les livreurs</button>`); }
