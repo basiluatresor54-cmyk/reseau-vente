@@ -5985,6 +5985,12 @@ function openShop(shop){
   Object.assign(S.settings, cloud, {shop: shop.name || S.settings.shop, setup:true});
   ONLINE.pushed = cj(settingsForCloud());
   META = loadMeta();
+  // Rôle changé sur ce téléphone (ex. livreur devenu gérant) : il ne voyait qu'une partie des données,
+  // donc on relit tout depuis le serveur (une fois aussi pour tous, avec cette version).
+  if(META.role !== ONLINE.role || META.full !== 2){
+    if(ONLINE.role === 'livreur' && META.role && META.role !== 'livreur'){ for(const [, arr] of KINDS) if(Array.isArray(S[arr])) S[arr] = []; META.h = {}; }
+    META.last = null; META.role = ONLINE.role; META.full = 2; saveMeta();
+  }
   rawSave();
   try{ localStorage.setItem(LAST_KEY, JSON.stringify({user:ONLINE.user && ONLINE.user.id, shop})); }catch(_){}
   hideAuth(); closeSheet(); view = ONLINE.role === 'livreur' ? 'moi' : 'home'; render();
@@ -6182,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'efc79520bb';
+const APP_BUILD = '54c5bcc354';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
