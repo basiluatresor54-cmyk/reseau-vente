@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = 'f84adeaa9e';
+const APP_BUILD = 'a42bb4e7dd';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11446,6 +11446,20 @@ window.__qrcode = qrcode; })();
   window.__bulkin = {bulkIn};
 })();
 
+/* ---------- Sortie « Erreur de saisie » : retire du stock sans compter de perte (coût 0) ---------- */
+const ERR_MOTIF = 'Erreur de saisie (pas une perte)';
+(function(){
+  try{ if(!MOTIFS.includes(ERR_MOTIF)) MOTIFS.splice(MOTIFS.indexOf('Autre') >= 0 ? MOTIFS.indexOf('Autre') : MOTIFS.length, 0, ERR_MOTIF); }catch(_){}
+  // Après l'enregistrement d'une sortie : coût 0 si « Erreur de saisie », coût normal sinon
+  document.addEventListener('submit', e => { const f = e.target; if(!f || f.id !== 'mf' || !f.elements || !f.elements.motif) return;
+    const before = new Set(S.moves.map(m => m.id + ':' + (m.motif || '') + ':' + (m.costU != null ? m.costU : '')));
+    setTimeout(() => { let ch = false;
+      S.moves.forEach(m => { if(m.type !== 'perte' || before.has(m.id + ':' + (m.motif || '') + ':' + (m.costU != null ? m.costU : ''))) return;
+        if(m.motif === ERR_MOTIF && num(m.costU) !== 0){ m.costU = 0; ch = true; }
+        else if(m.motif !== ERR_MOTIF && !num(m.costU)){ const p = prod(m.pid); if(p){ m.costU = unitCostUSD(p); ch = true; } } });
+      if(ch){ save(); render(); } }, 0); }, true);
+})();
+
 /* ---------- Fiche du produit : « Corriger le stock » (nombre réel au dépôt) ----------
    Crée un petit contrôle de stock pour ce seul produit : l'écart est enregistré comme dans un contrôle normal. */
 (function(){
@@ -11455,20 +11469,25 @@ window.__qrcode = qrcode; })();
     sheet('Corriger le stock', `<div class="card" style="margin-bottom:12px"><b>${esc(p.name)}</b><br><span class="note">Au dépôt selon l'application : <b>${cur}</b></span></div>
       <form id="sff" novalidate>${field('Nombre réel que vous avez au dépôt', `<input name="real" type="number" min="0" step="${decUnit(p) ? 'any' : '1'}" inputmode="decimal" value="${cur}" style="font-size:20px;font-weight:700">`)}
         <p class="note" id="sfMsg" style="margin:6px 0 12px"></p>
-        ${field('Raison (facultatif)', `<input name="note" placeholder="Ex : erreur de saisie">`)}
+        <div id="sfWhy" hidden style="margin-bottom:10px"><p class="note" style="font-weight:700;margin-bottom:6px">Pourquoi il y en a moins ?</p>
+          <label class="f" style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><input type="radio" name="why" value="err" checked style="width:22px;height:22px;min-height:0;flex:0 0 auto"><span style="margin:0"><b>Erreur de saisie</b> : ces pièces n'ont jamais existé (pas une perte, le bénéfice ne change pas)</span></label>
+          <label class="f" style="display:flex;gap:10px;align-items:center"><input type="radio" name="why" value="loss" style="width:22px;height:22px;min-height:0;flex:0 0 auto"><span style="margin:0"><b>Perdues, abîmées ou volées</b> : comptées dans les pertes (retirées du bénéfice)</span></label></div>
+        ${field('Note (facultatif)', `<input name="note" placeholder="Optionnel">`)}
         <button type="submit" class="btn primary block">Corriger</button>
         <button type="button" class="btn block" style="margin-top:8px" data-a="prod:${esc(pid)}">Annuler</button>
         <p class="note" style="margin-top:10px">Pour le stock d'un livreur : fiche du livreur → Contrôle de stock.</p></form>`);
     const f = document.getElementById('sff'), E = f.elements, msg = document.getElementById('sfMsg');
     const show = () => { if(E.real.value === ''){ msg.innerHTML = ''; return; } const d = r3(qr(p, E.real.value) - cur);
-      msg.innerHTML = d === 0 ? 'Aucun changement.' : d > 0 ? `<b class="green">+${d}</b> pièce(s) ajoutée(s) au dépôt.` : `<b class="red">${d}</b> pièce(s) retirée(s) (comptées dans les pertes).`; };
+      msg.innerHTML = d === 0 ? 'Aucun changement.' : d > 0 ? `<b class="green">+${d}</b> pièce(s) ajoutée(s) au dépôt.` : `<b class="red">${d}</b> pièce(s) retirée(s) du dépôt.`;
+      document.getElementById('sfWhy').hidden = !(d < 0); };
     E.real.oninput = show; show(); setTimeout(() => { try{ E.real.focus(); E.real.select(); }catch(_){ } }, 250);
     f.onsubmit = e => { e.preventDefault(); if(E.real.value === '' || !(num(E.real.value) >= 0)) return toast('Tapez le nombre réel');
       const real = Math.max(0, qr(p, E.real.value)), ex = qAt(stockAt(), '', pid);
       if(real === ex){ toast('Aucun changement'); prodSheet(pid); return; }
       const id = uid(), ts = Date.now(), date = today(), why = E.note.value.trim(), note = 'Correction du stock : attendu ' + ex + ', réel ' + real + (why ? ' · ' + why : '');
       S.moves.push({id, ts, type:'inventaire', loc:'', date, lines:[{pid, exp:ex, real}], note:'Correction du stock' + (why ? ' · ' + why : '')});
-      if(real < ex) S.moves.push({id:uid(), ts:ts + 1, type:'perte', pid, qty:r3(ex - real), loc:'', motif:'Écart inventaire', costU:unitCostUSD(p), date, note, inv:id});
+      const err = !E.why || E.why.value !== 'loss';
+      if(real < ex) S.moves.push({id:uid(), ts:ts + 1, type:'perte', pid, qty:r3(ex - real), loc:'', motif:err ? ERR_MOTIF : 'Écart inventaire', costU:err ? 0 : unitCostUSD(p), date, note, inv:id});
       else S.moves.push({id:uid(), ts:ts + 1, type:'ajust', pid, qty:r3(real - ex), loc:'', date, note, inv:id});
       save(); render(); prodSheet(pid); toast(`Stock corrigé : ${p.name} = ${real}`); }; };
   const ps = prodSheet;
