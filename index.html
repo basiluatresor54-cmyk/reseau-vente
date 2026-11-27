@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '014967b9d5';
+const APP_BUILD = '8f20a08998';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11877,9 +11877,39 @@ html.lite #wm .wmIn{filter:none}
 body.authon #wm{display:none}
 @media print{#wm{display:none}}
 </style>`);
-  const put = () => { if(document.getElementById('wm') || !document.body) return;
-    document.body.insertAdjacentHTML('afterbegin', '<div id="wm" aria-hidden="true"><div class="wmIn"><b>BASILUA TECH</b><span>RÉSEAU &amp; VENTE</span></div></div>'); };
-  if(document.body) put(); else document.addEventListener('DOMContentLoaded', put);
+  // Choix du propriétaire (Plus → Personnaliser → Fond de l'application) : BASILUA TECH, le nom de la boutique, ou rien
+  const st = () => { try{ return (typeof S !== 'undefined' && S && S.settings) || {}; }catch(_){ return {}; } };
+  const shopNm = () => { const x = st(); let n = x.shop || ''; try{ if(!n && typeof ONLINE !== 'undefined' && ONLINE.shop) n = ONLINE.shop.name || ''; }catch(_){} return String(n).trim().slice(0, 30); };
+  const mode = () => { const m = st().wm; return m === 'shop' || m === 'off' ? m : 'basilua'; };
+  const e2 = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+  let last = null;
+  function upd(){ if(!document.body) return; const m = mode(), n = shopNm(), key = m + '|' + n; if(key === last && document.getElementById('wm')) return; last = key;
+    let w = document.getElementById('wm'); if(!w){ document.body.insertAdjacentHTML('afterbegin', '<div id="wm" aria-hidden="true"></div>'); w = document.getElementById('wm'); }
+    if(m === 'off'){ w.innerHTML = ''; w.style.display = 'none'; return; }
+    w.style.display = '';
+    if(m === 'shop' && n){ const L = Math.max(n.length, 6), vw = Math.max(5, Math.min(11.5, 11.5 * 12 / L));
+      w.innerHTML = `<div class="wmIn"><b style="font-size:clamp(22px,${vw.toFixed(2)}vw,130px)">${e2(n.toUpperCase())}</b></div>`; }
+    else w.innerHTML = '<div class="wmIn"><b>BASILUA TECH</b><span>RÉSEAU &amp; VENTE</span></div>'; }
+  window.__wmUpd = upd;
+  if(document.body) upd(); else document.addEventListener('DOMContentLoaded', upd);
+  try{ const R = render; render = function(){ const r = R.apply(this, arguments); try{ upd(); }catch(_){} return r; }; }catch(_){}
+  // Réglage dans « Personnaliser » (seul le propriétaire choisit ; tout le monde voit le même fond)
+  try{
+    if(typeof CUSTOM !== 'undefined' && typeof CUSTOM.perso === 'function'){
+      const owner = () => !!(ONLINE.shop && ONLINE.role === 'proprietaire');
+      const base = CUSTOM.perso;
+      CUSTOM.perso = function(){ const h = base.apply(this, arguments); if(!owner()) return h;
+        const m = mode(), n = shopNm() || 'Ma boutique';
+        const opt = [['basilua', 'BASILUA TECH'], ['shop', e2(n)], ['off', 'Rien']];
+        const c = `<div class="sec"><h2>Fond de l'application</h2></div>
+    <div class="card" style="margin-bottom:12px" id="wmCard"><p class="note" style="margin-bottom:8px">Le nom écrit en verre flouté derrière les écrans de l'application. Vous, le gérant, les vendeurs et les livreurs voyez le même.</p>
+      <div class="seg" style="grid-template-columns:repeat(3,1fr)">${opt.map(([v, l]) => `<button type="button" class="${m === v ? 'on' : ''}" data-a="wmset:${v}">${l}</button>`).join('')}</div></div>`;
+        const mark = '<div class="sec"><h2>Mode sombre et style</h2></div>'; return h.includes(mark) ? h.replace(mark, c + mark) : h + c; };
+      A.wmset = v => { if(!owner() || !['basilua', 'shop', 'off'].includes(v)) return;
+        if(v === 'basilua') delete S.settings.wm; else S.settings.wm = v; save(); render();
+        toast(v === 'off' ? 'Fond sans nom' : v === 'shop' ? 'Le nom de votre boutique est dans le fond' : 'BASILUA TECH est dans le fond'); };
+    }
+  }catch(e){ console.error(e); }
 })();
 
 </script>
