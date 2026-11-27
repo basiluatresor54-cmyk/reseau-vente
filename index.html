@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '54c3faf2ee';
+const APP_BUILD = '60abc70f2a';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11757,6 +11757,27 @@ html.dark .epD.in{color:#7ee2a1}html.dark .epD.out{color:#ffb27a}</style>`);
     }catch(e){ console.error(e); }
     return out; };
   window.__retrait = {retraits, form, bankBal};
+})();
+
+/* ---------- Ventes : choisir un jour = par défaut le jour de LIVRAISON (prévu ou fait) ----------
+   Une commande enregistrée mardi pour samedi apparaît en touchant samedi. Le choix est retenu sur le téléphone. */
+(function(){
+  if(typeof saleDayBy === 'undefined') return;
+  const K = 'stock_saleDayBy', pref = () => { try{ return localStorage.getItem(K) || 'liv'; }catch(_){ return 'liv'; } };
+  saleDayBy = pref();
+  document.addEventListener('change', e => { if(e.target && e.target.id === 'saleDayBy'){ try{ localStorage.setItem(K, e.target.value); }catch(_){} } }, true);
+  A.sdayby = v => { saleDayBy = v === 'cmd' ? 'cmd' : 'liv'; try{ localStorage.setItem(K, saleDayBy); }catch(_){} render(); };
+  if(typeof A.calgo === 'function'){ const cg = A.calgo; A.calgo = function(a, el){ cg.apply(this, arguments); if(el && el.dataset.to !== 'stock' && saleDayBy !== pref()){ saleDayBy = pref(); render(); } }; }
+  const dayLiv = m => m.status === 'livre' ? (typeof mday === 'function' ? mday(m) : (m.ldate || m.date)) : (m.ddate || m.date);
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ if(view !== 'ventes') return out; const sel = document.getElementById('saleDayBy'); if(!sel || sel.dataset.fx) return out; sel.dataset.fx = '1';
+      sel.innerHTML = `<option value="liv" ${saleDayBy === 'liv' ? 'selected' : ''}>Jour de livraison (prévu ou fait)</option><option value="cmd" ${saleDayBy === 'cmd' ? 'selected' : ''}>Jour où la commande a été enregistrée</option>`;
+      if(saleDay){ const other = saleDayBy === 'liv' ? 'cmd' : 'liv', n = S.moves.filter(m => m.type === 'vente' && (other === 'liv' ? dayLiv(m) : m.date) === saleDay).length;
+        const p = sel.closest('.card') && sel.closest('.card').querySelector('p.note');
+        if(n && p) p.insertAdjacentHTML('beforeend', `<br><button class="link" id="sdOther" data-a="sdayby:${other}">${other === 'liv' ? `Voir les ${n} commande(s) à livrer ce jour-là` : `Voir les ${n} commande(s) enregistrée(s) ce jour-là`}</button>`); }
+    }catch(e){ console.error(e); }
+    return out; };
 })();
 
 </script>
