@@ -6188,7 +6188,7 @@ async function pull(){
   return changed;
 }
 /* ---------- Mise à jour automatique de l'application ---------- */
-const APP_BUILD = '60abc70f2a';
+const APP_BUILD = '0eecf0996c';
 let UPD_SHOWN = false;
 // La page est gardée dans le téléphone (ouverture instantanée) : avant de recharger, on y met la nouvelle version
 async function primePage(v){
@@ -11778,6 +11778,87 @@ html.dark .epD.in{color:#7ee2a1}html.dark .epD.out{color:#ffb27a}</style>`);
         if(n && p) p.insertAdjacentHTML('beforeend', `<br><button class="link" id="sdOther" data-a="sdayby:${other}">${other === 'liv' ? `Voir les ${n} commande(s) à livrer ce jour-là` : `Voir les ${n} commande(s) enregistrée(s) ce jour-là`}</button>`); }
     }catch(e){ console.error(e); }
     return out; };
+})();
+
+/* ---------- Commandes en retard : relancer les clients sur WhatsApp (message gentil, prêt à envoyer) ----------
+   Commandes pas livrées dont le jour de livraison est passé. Un bouton par client ; le message se choisit et se modifie. */
+(function(){
+  if(typeof upcomingCard !== 'function') return;
+  try{ ACT_PERM.lateopen = 'livraisons'; ACT_PERM.latewa = 'livraisons'; ACT_PERM.saletoday = 'livraisons'; }catch(_){}
+  const T = {
+    doux:"Bonjour {client} 😊\nC'est {boutique}. Nous n'avons pas encore pu vous remettre votre {produit} et nous en sommes désolés 🙏\nVotre commande est toujours réservée pour vous ✅\nPouvons-nous vous la livrer aujourd'hui ? Dites-nous l'heure et l'endroit qui vous arrangent 📍\nMerci pour votre confiance, vous avez fait un excellent choix 💯",
+    motiv:"Bonjour {client} 🌟\nVotre {produit} est prêt et n'attend plus que vous ! Nos clients l'adorent et vous allez l'apprécier aussi 😍\nNous n'avons pas pu vous joindre pour la livraison : est-ce que tout va bien ? 🙏\nDites-nous simplement l'heure qui vous convient aujourd'hui et notre livreur arrive 🛵\n{boutique} — merci de nous faire confiance ❤️",
+    court:"Bonjour {client} 👋 C'est {boutique}. Votre {produit} vous attend toujours 😊 Pouvons-nous vous livrer aujourd'hui ? À quelle heure ? 🛵"
+  };
+  const LAB = {doux:'Gentil', motiv:'Motivant', court:'Court'};
+  const late = () => S.moves.filter(m => m.type === 'vente' && (m.status === 'attente' || m.status === 'encours') && (m.ddate || m.date) < today());
+  const tpl = k => (S.settings.lateTpl && S.settings.lateTpl[k]) || T[k];
+  const fill = (txt, m) => txt.replace(/\{client\}/g, (m.client || '').trim() || 'cher client').replace(/\{produit\}/g, pname(m.pid) + (m.qty > 1 ? ' (× ' + m.qty + ')' : '')).replace(/\{boutique\}/g, S.settings.shop || 'notre boutique');
+  let cur = 'doux';
+  function body(){ const L = sortMoves(late()), t = today();
+    return `<div class="seg" id="ltTabs" style="margin-bottom:10px">${Object.keys(T).map(k => `<button type="button" data-k="${k}" class="${k === cur ? 'on' : ''}">${LAB[k]}</button>`).join('')}</div>
+      <label class="f"><span>Message (modifiable)</span><textarea id="ltTxt" rows="7">${esc(tpl(cur))}</textarea></label>
+      <p class="note" style="margin:-4px 0 10px">{client}, {produit} et {boutique} sont remplacés pour chaque client.</p>
+      <div class="list">${L.map(m => { const d = m.ddate || m.date, n = Math.round((Date.parse(t) - Date.parse(d)) / 864e5), sent = m.relance === t;
+        return `<div class="it" style="align-items:center"><div class="m" style="min-width:0"><div class="t">${esc(m.client || 'Client')} · ${esc(pname(m.pid))} × ${m.qty}</div><div class="d">Prévue ${n === 1 ? 'hier' : 'il y a ' + n + ' jours'}${m.liv ? ' · ' + esc(lname(m.liv)) : ''}${m.phone ? '' : ' · <b>pas de numéro</b>'}${sent ? ' · <b class="green">relancé aujourd’hui</b>' : ''}</div></div>
+          ${m.phone ? `<button class="btn wa sm" style="flex-shrink:0" data-a="latewa:${esc(m.id)}">${ico('wa')} ${sent ? 'Renvoyer' : 'Envoyer'}</button>` : ''}</div>`; }).join('') || '<div class="card empty">Aucune commande en retard. Bravo !</div>'}</div>
+      <p class="note" style="margin-top:10px">Après la réponse du client, ouvrez la commande pour changer la date de livraison ou l'annuler.</p>`; }
+  function wire(){ const tabs = document.getElementById('ltTabs'), ta = document.getElementById('ltTxt'); if(!tabs || !ta) return;
+    tabs.onclick = e => { const b = e.target.closest('button'); if(!b) return; cur = b.dataset.k; [...tabs.children].forEach(x => x.classList.toggle('on', x === b)); ta.value = tpl(cur); };
+    ta.onchange = () => { S.settings.lateTpl = Object.assign({}, S.settings.lateTpl || {}, {[cur]:ta.value}); save(); }; }
+  A.lateopen = () => { sheet('Clients à relancer', body()); wire(); };
+  A.latewa = id => { const m = S.moves.find(x => x.id === id); if(!m || !m.phone) return; const ta = document.getElementById('ltTxt'), txt = fill(ta ? ta.value : tpl(cur), m);
+    window.open(waLink(m.phone, txt), '_blank');
+    m.relance = today(); m.ts = m.ts || Date.now(); S.moves = S.moves.map(x => x.id === m.id ? Object.assign({}, m) : x); save();
+    const keep = ta ? ta.value : ''; const b = document.getElementById('shb'); if(b && ta){ b.innerHTML = body(); wire(); const t2 = document.getElementById('ltTxt'); if(t2 && keep) t2.value = keep; } else render(); };
+  // Messages du jour : « livraison aujourd'hui » (boutique) et messages du livreur
+  const TODAY_SHOP = "Bonjour {client} 😊\nC'est {boutique}. Votre {produit} est prévu pour aujourd'hui 🛵\nÀ quelle heure êtes-vous disponible ? Notre livreur vous l'apporte avec plaisir.\nMerci pour votre confiance 🙏";
+  const LIV_LATE = "Bonjour {client} 👋\nJe suis {livreur}, le livreur de {boutique}. Je n'ai pas pu vous livrer votre {produit} comme prévu, désolé(e) 🙏\nVotre commande vous attend toujours ✅\nEst-ce que je peux passer aujourd'hui ? Dites-moi l'heure et l'endroit qui vous arrangent 📍";
+  const fillL = (txt, m, L) => fill(txt, m).replace(/\{livreur\}/g, (L && L.name) || 'votre livreur');
+  const isLate = m => m && m.type === 'vente' && (m.status === 'attente' || m.status === 'encours') && (m.ddate || m.date) < today();
+  const isToday = m => m && m.type === 'vente' && (m.status === 'attente' || m.status === 'encours') && (m.ddate || m.date) === today();
+  const daysLate = m => Math.round((Date.parse(today()) - Date.parse(m.ddate || m.date)) / 864e5);
+  const lateTxt = m => { const n = daysLate(m); return n === 1 ? 'hier' : 'il y a ' + n + ' jours'; };
+  // Livreur : relance notée sur son téléphone (il ne modifie pas les commandes)
+  const lkey = id => 'stock_lrel_' + id;
+  const livSent = m => { try{ return localStorage.getItem(lkey(m.id)) === today(); }catch(_){ return false; } };
+  A.livrelance = id => { const m = S.moves.find(x => x.id === id); if(!m || !m.phone) return; const L = liv(m.liv);
+    window.open(waLink(m.phone, fillL(LIV_LATE, m, L)), '_blank'); try{ localStorage.setItem(lkey(id), today()); }catch(_){} render(); };
+  A.saletoday = id => { const m = S.moves.find(x => x.id === id); if(!m || !m.phone) return; window.open(waLink(m.phone, fill(TODAY_SHOP, m)), '_blank'); };
+  const rr = render;
+  render = function(){ const out = rr.apply(this, arguments);
+    try{ const M = document.getElementById('main'); if(!M || !ONLINE.shop) return out;
+      // Accueil : même carte, au-dessus des chiffres
+      if(view === 'home' && ONLINE.role !== 'livreur' && !M.querySelector('#lateCard')){
+        const L = late(); if(L.length){ const todo = L.filter(m => m.relance !== today()).length, at = M.querySelector('.kpis');
+          const h = `<button class="card" id="lateCard" data-a="lateopen" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:10px 0;border:1.5px solid var(--warn,#d97706)"><div class="ic c-out" style="flex-shrink:0">${L.length}</div><div style="flex:1;min-width:0"><b>${L.length} commande(s) pas livrée(s) à la date prévue</b><div class="note">${todo ? 'Relancer les clients sur WhatsApp' : 'Tous relancés aujourd\u2019hui ✓ — on continue demain s\u2019ils ne sont pas livrés'}</div></div><span class="note">›</span></button>`;
+          if(at) at.insertAdjacentHTML('beforebegin', h); else M.insertAdjacentHTML('afterbegin', h); } }
+      // Ventes → À livrer : bouton « Clients à relancer »
+      if(view === 'ventes' && ONLINE.role !== 'livreur' && (saleTab === 'attente' || saleTab === 'encours' || saleTab === 'tous') && !M.querySelector('#lateBtn')){
+        const L = late(); if(L.length){ const todo = L.filter(m => m.relance !== today()).length, at = M.querySelector('.search');
+          const h = `<button class="card" id="lateBtn" data-a="lateopen" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:0 0 10px;border:1.5px solid var(--warn,#d97706)"><div class="ic c-out" style="flex-shrink:0">${L.length}</div><div style="flex:1;min-width:0"><b>${L.length} commande(s) pas livrée(s) à la date prévue</b><div class="note">${todo ? 'Relancer les clients sur WhatsApp' : 'Tous relancés aujourd’hui ✓ — on continue demain s’ils ne sont pas livrés'}</div></div><span class="note">›</span></button>`;
+          if(at) at.insertAdjacentHTML('beforebegin', h); else M.insertAdjacentHTML('afterbegin', h); } }
+      // Livreur : ses livraisons ratées, avec un message de relance pour chaque client
+      if(view === 'moi' && ONLINE.role === 'livreur' && ONLINE.shop.livreur_id){
+        const lid = ONLINE.shop.livreur_id, mine = S.moves.filter(m => m.liv === lid && isLate(m));
+        mine.forEach(m => { const c = document.getElementById('mv-' + m.id); if(!c || c.querySelector('.lrel')) return; const a = c.querySelector('a.btn.wa'); if(!a || !m.phone) return;
+          a.insertAdjacentHTML('beforebegin', `<button class="btn wa lrel" data-a="livrelance:${esc(m.id)}">${ico('wa')} Relancer le client${livSent(m) ? ' (déjà fait aujourd’hui)' : ''}</button>`); });
+        if(mine.length && !M.querySelector('#livLate')){ const todo = mine.filter(m => !livSent(m)).length;
+          const first = M.querySelector(':scope > .card');
+          const h = `<div class="card" id="livLate" style="margin-bottom:12px;border:1.5px solid var(--warn,#d97706)"><b>${mine.length} livraison(s) pas faite(s) à la date prévue</b>
+            <p class="note" style="margin:4px 0 8px">${todo ? 'Écris à ces clients pour passer aujourd’hui. On ne laisse aucun client sans son produit.' : 'Tous relancés aujourd’hui ✓'}</p>
+            <div class="list">${sortMoves(mine).map(m => `<div class="it" style="align-items:center"><div class="m" style="min-width:0"><div class="t">${esc(m.client || 'Client')} · ${esc(pname(m.pid))} × ${m.qty}</div><div class="d">Prévue ${lateTxt(m)}${livSent(m) ? ' · <b class="green">relancé</b>' : ''}</div></div>${m.phone ? `<button class="btn wa sm" style="flex-shrink:0" data-a="livrelance:${esc(m.id)}">${ico('wa')} Relancer</button>` : ''}</div>`).join('')}</div></div>`;
+          (first || M).insertAdjacentHTML(first ? 'afterend' : 'afterbegin', h); } }
+    }catch(e){ console.error(e); }
+    return out; };
+  // Fiche d'une commande (boutique) : relancer si en retard, prévenir si c'est aujourd'hui
+  if(typeof saleSheet === 'function'){ const ss = saleSheet;
+    saleSheet = function(id){ const r = ss.apply(this, arguments);
+      try{ const m = S.moves.find(x => x.id === id), b = document.getElementById('shb'); if(!m || !b || !m.phone || ONLINE.role === 'livreur' || b.querySelector('#ssLate')) return r;
+        if(isLate(m)) b.insertAdjacentHTML('afterbegin', `<div class="card" id="ssLate" style="margin-bottom:10px;border:1.5px solid var(--warn,#d97706)"><b>Pas livrée à la date prévue (${lateTxt(m)})</b><p class="note" style="margin:4px 0 8px">${m.relance === today() ? 'Client déjà relancé aujourd’hui.' : 'Relancez le client : on ne l’abandonne pas.'}</p><button class="btn wa block" id="ssRel" data-a="latewa:${esc(m.id)}">${ico('wa')} Relancer ${esc((m.client || 'le client').split(' ')[0])} sur WhatsApp</button></div>`);
+        else if(isToday(m)) b.insertAdjacentHTML('afterbegin', `<div class="card" id="ssLate" style="margin-bottom:10px"><b>Livraison prévue aujourd'hui</b><button class="btn wa block" style="margin-top:8px" id="ssToday" data-a="saletoday:${esc(m.id)}">${ico('wa')} Prévenir ${esc((m.client || 'le client').split(' ')[0])} : « on vous livre aujourd'hui »</button></div>`);
+      }catch(e){ console.error(e); }
+      return r; }; }
 })();
 
 </script>
